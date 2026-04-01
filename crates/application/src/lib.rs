@@ -1,6 +1,6 @@
 use domain::HealthStatus;
 
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
 pub struct HealthService;
 
 impl HealthService {

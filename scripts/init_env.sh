@@ -2,11 +2,12 @@
 set -euo pipefail
 
 # One-shot environment bootstrap for Codeband.
-# Supports: Linux (apt), macOS (Homebrew), Windows (Chocolatey in Git Bash).
+# Rust is managed only via rustup (no Homebrew-based Rust install).
 
 AUTO_YES=0
 DRY_RUN=0
 WITH_MOBILE=0
+RUST_TOOLCHAIN="${RUST_TOOLCHAIN:-stable}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -22,9 +23,17 @@ while [[ $# -gt 0 ]]; do
       WITH_MOBILE=1
       shift
       ;;
+    --rust-toolchain)
+      if [[ $# -lt 2 ]]; then
+        echo "Missing value for --rust-toolchain"
+        exit 1
+      fi
+      RUST_TOOLCHAIN="$2"
+      shift 2
+      ;;
     *)
       echo "Unknown argument: $1"
-      echo "Usage: bash ./scripts/init_env.sh [--yes] [--dry-run] [--with-mobile]"
+      echo "Usage: bash ./scripts/init_env.sh [--yes] [--dry-run] [--with-mobile] [--rust-toolchain <version|channel>]"
       exit 1
       ;;
   esac
@@ -54,11 +63,37 @@ has_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
 
+can_use_sudo_noninteractive() {
+  has_cmd sudo && sudo -n true >/dev/null 2>&1
+}
+
 OS="$(uname -s)"
 
+ensure_node_with_nvm_unix() {
+  if has_cmd node && has_cmd npm; then
+    log "Node.js already installed"
+    return
+  fi
+
+  if [[ "$OS" != "Linux" && "$OS" != "Darwin" ]]; then
+    return
+  fi
+
+  run_cmd "export PROFILE=/dev/null && curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash"
+
+  if [[ "$DRY_RUN" -eq 0 ]]; then
+    export NVM_DIR="$HOME/.nvm"
+    # shellcheck disable=SC1091
+    source "$NVM_DIR/nvm.sh"
+  fi
+
+  run_cmd "export NVM_DIR=\"$HOME/.nvm\" && [ -s \"$HOME/.nvm/nvm.sh\" ] && . \"$HOME/.nvm/nvm.sh\" && nvm install --lts && nvm use --lts"
+}
+
 install_linux_apt() {
-  if ! has_cmd sudo; then
-    warn "sudo not found; cannot auto-install apt dependencies."
+  if ! can_use_sudo_noninteractive; then
+    warn "sudo non-interactive access unavailable; skipping apt dependency auto-install."
+    warn "Run manually (interactive shell): sudo apt-get update && sudo apt-get install -y curl git build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf"
     return 1
   fi
 
@@ -75,19 +110,21 @@ install_linux_apt() {
   fi
 }
 
-install_macos_brew() {
-  if ! has_cmd brew; then
-    warn "Homebrew is missing. Install from https://brew.sh first."
+install_macos_base() {
+  if ! has_cmd xcode-select; then
+    warn "xcode-select is missing; install Xcode Command Line Tools manually."
     return 1
   fi
 
-  run_cmd "brew update"
-  run_cmd "brew install curl git node rustup-init"
+  run_cmd "xcode-select --install || true"
+
+  if ! has_cmd node || ! has_cmd npm; then
+    ensure_node_with_nvm_unix
+  fi
 
   if [[ "$WITH_MOBILE" -eq 1 ]]; then
-    run_cmd "brew install --cask android-studio"
-    warn "Open Android Studio once to install SDK/NDK and accept licenses."
-    warn "For iOS builds, install Xcode from App Store and run: xcode-select --install"
+    warn "Install Android Studio manually for Android SDK/NDK setup."
+    warn "Install full Xcode from App Store for iOS packaging and signing."
   fi
 }
 
@@ -97,7 +134,7 @@ install_windows_choco() {
     return 1
   fi
 
-  run_cmd "choco install -y git curl nodejs rustup.install"
+  run_cmd "choco install -y git curl nodejs"
 
   if [[ "$WITH_MOBILE" -eq 1 ]]; then
     run_cmd "choco install -y openjdk17 androidstudio"
@@ -105,28 +142,71 @@ install_windows_choco() {
   fi
 }
 
-ensure_rust() {
-  if has_cmd rustup && has_cmd cargo; then
-    log "Rust toolchain already installed"
+ensure_nodejs() {
+  if has_cmd node && has_cmd npm; then
+    log "Node.js already installed"
     return
   fi
 
-  if [[ "$OS" == "Linux" || "$OS" == "Darwin" ]]; then
-    run_cmd "curl https://sh.rustup.rs -sSf | sh -s -- -y"
-    if [[ "$DRY_RUN" -eq 0 ]]; then
-      # shellcheck disable=SC1091
-      source "$HOME/.cargo/env"
-    fi
-  else
-    warn "Please install rustup/cargo manually for this OS."
+  case "$OS" in
+    Linux)
+      install_linux_apt || true
+      ;;
+    Darwin)
+      ensure_node_with_nvm_unix
+      ;;
+    MINGW*|MSYS*|CYGWIN*|Windows_NT)
+      install_windows_choco || true
+      ;;
+    *)
+      warn "Unable to auto-install Node.js for OS: $OS"
+      ;;
+  esac
+}
+
+ensure_rustup() {
+  if has_cmd rustup; then
+    log "rustup already installed"
+    return
   fi
+
+  case "$OS" in
+    Linux|Darwin)
+      run_cmd "curl https://sh.rustup.rs -sSf | sh -s -- -y"
+      ;;
+    MINGW*|MSYS*|CYGWIN*|Windows_NT)
+      if has_cmd choco; then
+        run_cmd "choco install -y rustup.install"
+      else
+        warn "Install rustup manually from https://rustup.rs"
+      fi
+      ;;
+    *)
+      warn "Unsupported OS for rustup auto-install: $OS"
+      ;;
+  esac
+}
+
+load_cargo_env() {
+  if [[ "$DRY_RUN" -eq 0 && -f "$HOME/.cargo/env" ]]; then
+    # shellcheck disable=SC1091
+    source "$HOME/.cargo/env"
+  fi
+}
+
+ensure_rust_toolchain() {
+  run_cmd "rustup toolchain install $RUST_TOOLCHAIN"
+  run_cmd "rustup update $RUST_TOOLCHAIN"
+  run_cmd "rustup default $RUST_TOOLCHAIN"
+  run_cmd "rustup component add rustfmt clippy --toolchain $RUST_TOOLCHAIN"
+  log "Rust toolchain set to: $RUST_TOOLCHAIN"
 }
 
 ensure_tauri_cli() {
   if has_cmd cargo-tauri; then
     log "cargo-tauri already installed"
   else
-    run_cmd "cargo install tauri-cli"
+    run_cmd "cargo install tauri-cli --locked"
   fi
 }
 
@@ -135,22 +215,23 @@ ensure_node_modules() {
 }
 
 ensure_rust_targets() {
-  run_cmd "rustup target add x86_64-unknown-linux-gnu || true"
-  run_cmd "rustup target add x86_64-apple-darwin aarch64-apple-darwin || true"
-  run_cmd "rustup target add x86_64-pc-windows-msvc || true"
+  run_cmd "rustup target add x86_64-unknown-linux-gnu --toolchain $RUST_TOOLCHAIN || true"
+  run_cmd "rustup target add x86_64-apple-darwin aarch64-apple-darwin --toolchain $RUST_TOOLCHAIN || true"
+  run_cmd "rustup target add x86_64-pc-windows-msvc --toolchain $RUST_TOOLCHAIN || true"
 
   if [[ "$WITH_MOBILE" -eq 1 ]]; then
-    run_cmd "rustup target add aarch64-apple-ios aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android || true"
+    run_cmd "rustup target add aarch64-apple-ios aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android --toolchain $RUST_TOOLCHAIN || true"
   fi
 }
 
 verify_project() {
   run_cmd "npm run check:web"
-  run_cmd "cargo check -p domain -p application -p server"
+  run_cmd "cargo +$RUST_TOOLCHAIN check -p domain -p application -p server"
 }
 
 main() {
   log "Detected OS: $OS"
+  log "Target Rust toolchain: $RUST_TOOLCHAIN"
 
   if ask "Proceed with environment bootstrap?"; then
     case "$OS" in
@@ -158,7 +239,7 @@ main() {
         install_linux_apt || true
         ;;
       Darwin)
-        install_macos_brew || true
+        install_macos_base || true
         ;;
       MINGW*|MSYS*|CYGWIN*|Windows_NT)
         install_windows_choco || true
@@ -168,13 +249,10 @@ main() {
         ;;
     esac
 
-    ensure_rust
-
-    if [[ "$DRY_RUN" -eq 0 && -f "$HOME/.cargo/env" ]]; then
-      # shellcheck disable=SC1091
-      source "$HOME/.cargo/env"
-    fi
-
+    ensure_rustup
+    load_cargo_env
+    ensure_rust_toolchain
+    ensure_nodejs
     ensure_tauri_cli
     ensure_node_modules
     ensure_rust_targets

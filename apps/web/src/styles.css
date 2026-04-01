@@ -1,0 +1,152 @@
+:root {
+  color-scheme: dark;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #0f1117;
+  color: #e6e9ef;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  width: 100%;
+  height: 100%;
+}
+
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 18px 14px;
+  background: #171b24;
+  border-right: 1px solid #262b37;
+}
+
+.side-panel__brand {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.side-panel__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.nav-item {
+  appearance: none;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #cad3e2;
+  text-align: left;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.nav-item:hover,
+.nav-item--active {
+  background: #242b38;
+  color: #f2f4f8;
+}
+
+.side-panel__footer {
+  margin-top: auto;
+  border-top: 1px solid #2a3040;
+  padding: 12px 10px 2px;
+  display: flex;
+  justify-content: space-between;
+  color: #a8b0c0;
+  font-size: 13px;
+}
+
+.status {
+  text-transform: capitalize;
+}
+
+.status--offline {
+  color: #ff8f8f;
+}
+
+.status--ok,
+.status--healthy {
+  color: #88e7a7;
+}
+
+.work-area {
+  display: grid;
+  grid-template-rows: 56px 1fr;
+  min-width: 0;
+}
+
+.work-area__topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  background: #171b24;
+  border-bottom: 1px solid #262b37;
+}
+
+.topbar__title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.topbar__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.action-btn {
+  appearance: none;
+  border: 1px solid #334055;
+  border-radius: 8px;
+  padding: 7px 12px;
+  background: #202837;
+  color: #dbe3f0;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.action-btn:hover {
+  background: #293448;
+}
+
+.work-area__content {
+  padding: 18px;
+  min-height: 0;
+}
+
+.content-placeholder {
+  height: 100%;
+  border: 1px dashed #364158;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  color: #97a2b7;
+}
