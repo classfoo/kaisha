@@ -1,6 +1,9 @@
+mod i18n;
+
 use application::HealthService;
 use axum::{
     extract::{Path as AxumPath, State},
+    http::HeaderMap,
     routing::get,
     Json, Router,
 };
@@ -186,6 +189,7 @@ async fn get_workspace(State(state): State<AppState>) -> Json<WorkspaceStatus> {
 }
 
 async fn set_workspace(
+    headers: HeaderMap,
     State(state): State<AppState>,
     Json(payload): Json<SetWorkspaceRequest>,
 ) -> Result<Json<WorkspaceStatus>, (axum::http::StatusCode, String)> {
@@ -194,7 +198,7 @@ async fn set_workspace(
     if matches!(workspace.source, WorkspaceSource::Env) {
         return Err((
             axum::http::StatusCode::CONFLICT,
-            "workspace is controlled by KAISHA_WORKDIR environment variable".to_string(),
+            i18n::msg(&headers, "workspace_env_controlled"),
         ));
     }
 
@@ -266,21 +270,21 @@ fn load_settings_state(workspace: Option<PathBuf>) -> anyhow::Result<SettingsSta
 
 fn validate_address(address: &str) -> anyhow::Result<()> {
     if address.trim().is_empty() {
-        anyhow::bail!("address cannot be empty");
+        anyhow::bail!("address_empty");
     }
     if !address.contains('.') {
-        anyhow::bail!("address must be in a.b.c style");
+        anyhow::bail!("address_format");
     }
 
     for part in address.split('.') {
         if part.is_empty() {
-            anyhow::bail!("address contains empty segment");
+            anyhow::bail!("address_empty_segment");
         }
         if !part
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
         {
-            anyhow::bail!("address segments can only contain letters, numbers, _ or -");
+            anyhow::bail!("address_segment_invalid");
         }
     }
     Ok(())
@@ -299,14 +303,20 @@ fn persist_menu(memory: &MenuMemory) -> anyhow::Result<()> {
 }
 
 async fn get_settings_menu(
+    headers: HeaderMap,
     State(state): State<AppState>,
     AxumPath(menu): AxumPath<String>,
 ) -> Result<Json<SettingsMenuResponse>, (axum::http::StatusCode, String)> {
     let parsed = SettingsMenu::from_str(&menu)
-        .map_err(|err| (axum::http::StatusCode::BAD_REQUEST, err.to_string()))?;
+        .map_err(|_| {
+            (
+                axum::http::StatusCode::BAD_REQUEST,
+                i18n::msg(&headers, "unsupported_menu"),
+            )
+        })?;
     let settings = state.settings.read().expect("settings lock poisoned");
     let Some(memory) = settings.menus.get(parsed.as_str()) else {
-        return Err((axum::http::StatusCode::NOT_FOUND, "menu not found".to_string()));
+        return Err((axum::http::StatusCode::NOT_FOUND, i18n::msg(&headers, "menu_not_found")));
     };
 
     Ok(Json(SettingsMenuResponse {
@@ -317,20 +327,31 @@ async fn get_settings_menu(
 }
 
 async fn get_settings_item(
+    headers: HeaderMap,
     State(state): State<AppState>,
     AxumPath((menu, address)): AxumPath<(String, String)>,
 ) -> Result<Json<SettingsItemResponse>, (axum::http::StatusCode, String)> {
     let parsed = SettingsMenu::from_str(&menu)
-        .map_err(|err| (axum::http::StatusCode::BAD_REQUEST, err.to_string()))?;
+        .map_err(|_| {
+            (
+                axum::http::StatusCode::BAD_REQUEST,
+                i18n::msg(&headers, "unsupported_menu"),
+            )
+        })?;
     validate_address(&address)
-        .map_err(|err| (axum::http::StatusCode::BAD_REQUEST, err.to_string()))?;
+        .map_err(|err| {
+            (
+                axum::http::StatusCode::BAD_REQUEST,
+                i18n::msg(&headers, &err.to_string()),
+            )
+        })?;
 
     let settings = state.settings.read().expect("settings lock poisoned");
     let Some(memory) = settings.menus.get(parsed.as_str()) else {
-        return Err((axum::http::StatusCode::NOT_FOUND, "menu not found".to_string()));
+        return Err((axum::http::StatusCode::NOT_FOUND, i18n::msg(&headers, "menu_not_found")));
     };
     let Some(value) = memory.items.get(&address) else {
-        return Err((axum::http::StatusCode::NOT_FOUND, "address not found".to_string()));
+        return Err((axum::http::StatusCode::NOT_FOUND, i18n::msg(&headers, "address_not_found")));
     };
     Ok(Json(SettingsItemResponse {
         menu,
@@ -340,24 +361,35 @@ async fn get_settings_item(
 }
 
 async fn upsert_settings_item(
+    headers: HeaderMap,
     State(state): State<AppState>,
     AxumPath((menu, address)): AxumPath<(String, String)>,
     Json(payload): Json<UpsertSettingsItemRequest>,
 ) -> Result<Json<SettingsItemResponse>, (axum::http::StatusCode, String)> {
     let parsed = SettingsMenu::from_str(&menu)
-        .map_err(|err| (axum::http::StatusCode::BAD_REQUEST, err.to_string()))?;
+        .map_err(|_| {
+            (
+                axum::http::StatusCode::BAD_REQUEST,
+                i18n::msg(&headers, "unsupported_menu"),
+            )
+        })?;
     validate_address(&address)
-        .map_err(|err| (axum::http::StatusCode::BAD_REQUEST, err.to_string()))?;
+        .map_err(|err| {
+            (
+                axum::http::StatusCode::BAD_REQUEST,
+                i18n::msg(&headers, &err.to_string()),
+            )
+        })?;
 
     let mut settings = state.settings.write().expect("settings lock poisoned");
     let Some(memory) = settings.menus.get_mut(parsed.as_str()) else {
-        return Err((axum::http::StatusCode::NOT_FOUND, "menu not found".to_string()));
+        return Err((axum::http::StatusCode::NOT_FOUND, i18n::msg(&headers, "menu_not_found")));
     };
 
     if memory.file_path.is_none() {
         return Err((
             axum::http::StatusCode::CONFLICT,
-            "workspace is not configured".to_string(),
+            i18n::msg(&headers, "workspace_not_configured"),
         ));
     }
 

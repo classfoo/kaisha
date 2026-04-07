@@ -1,0 +1,88 @@
+{
+  "ui": {
+    "brand": "Kaisha",
+    "nav": {
+      "workspace": "Workspace",
+      "explorer": "Explorer",
+      "search": "Search",
+      "settings": "Settings"
+    },
+    "backend": "Backend",
+    "actions": {
+      "run": "Run",
+      "share": "Share",
+      "settings": "Settings",
+      "done": "Done",
+      "saveWorkspace": "Save Workspace",
+      "saving": "Saving..."
+    },
+    "workspace": {
+      "setupTitle": "Workspace Setup",
+      "currentProject": "Current Project",
+      "configureTitle": "Configure your work directory",
+      "configureHint": "Set KAISHA_WORKDIR to force a path, or configure it below for first-time initialization.",
+      "pathLabel": "Workspace path",
+      "placeholder": "/path/to/kaisha-workspace",
+      "emptyError": "Workspace path cannot be empty",
+      "loadError": "Failed to load workspace status",
+      "saveError": "Failed to save workspace path",
+      "panelTitle": "Workspace",
+      "notConfigured": "Not configured",
+      "contentPlaceholder": "Right workspace area"
+    },
+    "settings": {
+      "title": "Configuration",
+      "menus": {
+        "tools": "Tools",
+        "departments": "Departments",
+        "roles": "Roles",
+        "employees": "Employees"
+      },
+      "tools": {
+        "registration": "Tool registration",
+        "list": "Tool list",
+        "name": "Tool name",
+        "command": "Launch command",
+        "enabled": "Enabled",
+        "add": "Add Tool",
+        "empty": "No tools configured.",
+        "on": "On",
+        "off": "Off"
+      },
+      "departments": {
+        "setup": "Department setup",
+        "list": "Department list",
+        "name": "Department name",
+        "lead": "Department lead",
+        "add": "Add Department",
+        "empty": "No departments configured.",
+        "leadPrefix": "Lead"
+      },
+      "roles": {
+        "setup": "Role setup",
+        "list": "Role list",
+        "name": "Role name",
+        "add": "Add Role",
+        "empty": "No roles configured.",
+        "junior": "Junior",
+        "mid": "Mid",
+        "senior": "Senior"
+      },
+      "employees": {
+        "setup": "Employee setup",
+        "list": "Employee list",
+        "name": "Employee name",
+        "selectDepartment": "Select department",
+        "selectRole": "Select role",
+        "add": "Add Employee",
+        "empty": "No employees configured."
+      }
+    },
+    "language": {
+      "label": "Language",
+      "en": "English",
+      "zh": "Chinese",
+      "ja": "Japanese"
+    }
+  }
+}

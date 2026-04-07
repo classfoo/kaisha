@@ -1,0 +1,88 @@
+{
+  "ui": {
+    "brand": "Kaisha",
+    "nav": {
+      "workspace": "工作区",
+      "explorer": "资源管理",
+      "search": "搜索",
+      "settings": "设置"
+    },
+    "backend": "后端",
+    "actions": {
+      "run": "运行",
+      "share": "分享",
+      "settings": "配置",
+      "done": "完成",
+      "saveWorkspace": "保存工作目录",
+      "saving": "保存中..."
+    },
+    "workspace": {
+      "setupTitle": "工作目录初始化",
+      "currentProject": "当前项目",
+      "configureTitle": "配置工作目录",
+      "configureHint": "可通过 KAISHA_WORKDIR 强制指定目录，或在首次初始化时在此配置。",
+      "pathLabel": "工作目录路径",
+      "placeholder": "/path/to/kaisha-workspace",
+      "emptyError": "工作目录不能为空",
+      "loadError": "加载工作目录状态失败",
+      "saveError": "保存工作目录失败",
+      "panelTitle": "工作目录",
+      "notConfigured": "未配置",
+      "contentPlaceholder": "右侧工作区"
+    },
+    "settings": {
+      "title": "配置中心",
+      "menus": {
+        "tools": "工具",
+        "departments": "部门",
+        "roles": "岗位",
+        "employees": "员工"
+      },
+      "tools": {
+        "registration": "工具注册",
+        "list": "工具列表",
+        "name": "工具名称",
+        "command": "启动命令",
+        "enabled": "启用",
+        "add": "添加工具",
+        "empty": "暂无工具配置",
+        "on": "开",
+        "off": "关"
+      },
+      "departments": {
+        "setup": "部门配置",
+        "list": "部门列表",
+        "name": "部门名称",
+        "lead": "部门负责人",
+        "add": "添加部门",
+        "empty": "暂无部门配置",
+        "leadPrefix": "负责人"
+      },
+      "roles": {
+        "setup": "岗位配置",
+        "list": "岗位列表",
+        "name": "岗位名称",
+        "add": "添加岗位",
+        "empty": "暂无岗位配置",
+        "junior": "初级",
+        "mid": "中级",
+        "senior": "高级"
+      },
+      "employees": {
+        "setup": "员工配置",
+        "list": "员工列表",
+        "name": "员工姓名",
+        "selectDepartment": "选择部门",
+        "selectRole": "选择岗位",
+        "add": "添加员工",
+        "empty": "暂无员工配置"
+      }
+    },
+    "language": {
+      "label": "语言",
+      "en": "English",
+      "zh": "中文",
+      "ja": "日本語"
+    }
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "ui": {
+    "brand": "Kaisha",
+    "nav": {
+      "workspace": "ワークスペース",
+      "explorer": "エクスプローラー",
+      "search": "検索",
+      "settings": "設定"
+    },
+    "backend": "バックエンド",
+    "actions": {
+      "run": "実行",
+      "share": "共有",
+      "settings": "設定",
+      "done": "完了",
+      "saveWorkspace": "ワークディレクトリを保存",
+      "saving": "保存中..."
+    },
+    "workspace": {
+      "setupTitle": "ワークディレクトリ設定",
+      "currentProject": "現在のプロジェクト",
+      "configureTitle": "ワークディレクトリを設定",
+      "configureHint": "KAISHA_WORKDIR で固定するか、初回起動時にここで設定してください。",
+      "pathLabel": "ワークディレクトリ",
+      "placeholder": "/path/to/kaisha-workspace",
+      "emptyError": "ワークディレクトリは必須です",
+      "loadError": "ワークディレクトリ状態の取得に失敗しました",
+      "saveError": "ワークディレクトリの保存に失敗しました",
+      "panelTitle": "ワークディレクトリ",
+      "notConfigured": "未設定",
+      "contentPlaceholder": "右側ワークスペース"
+    },
+    "settings": {
+      "title": "設定センター",
+      "menus": {
+        "tools": "ツール",
+        "departments": "部門",
+        "roles": "職位",
+        "employees": "従業員"
+      },
+      "tools": {
+        "registration": "ツール登録",
+        "list": "ツール一覧",
+        "name": "ツール名",
+        "command": "起動コマンド",
+        "enabled": "有効",
+        "add": "ツールを追加",
+        "empty": "ツール設定はありません。",
+        "on": "オン",
+        "off": "オフ"
+      },
+      "departments": {
+        "setup": "部門設定",
+        "list": "部門一覧",
+        "name": "部門名",
+        "lead": "部門責任者",
+        "add": "部門を追加",
+        "empty": "部門設定はありません。",
+        "leadPrefix": "責任者"
+      },
+      "roles": {
+        "setup": "職位設定",
+        "list": "職位一覧",
+        "name": "職位名",
+        "add": "職位を追加",
+        "empty": "職位設定はありません。",
+        "junior": "ジュニア",
+        "mid": "ミドル",
+        "senior": "シニア"
+      },
+      "employees": {
+        "setup": "従業員設定",
+        "list": "従業員一覧",
+        "name": "従業員名",
+        "selectDepartment": "部門を選択",
+        "selectRole": "職位を選択",
+        "add": "従業員を追加",
+        "empty": "従業員設定はありません。"
+      }
+    },
+    "language": {
+      "label": "言語",
+      "en": "English",
+      "zh": "中文",
+      "ja": "日本語"
+    }
+  }
+}

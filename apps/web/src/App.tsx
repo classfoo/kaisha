@@ -1,4 +1,5 @@
 import React from 'react'
+import { Locale, resolveLocale, t } from './i18n'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8080'
 type WorkspaceStatus = {
@@ -13,6 +14,9 @@ type RoleItem = { id: number; name: string; level: 'junior' | 'mid' | 'senior' }
 type EmployeeItem = { id: number; name: string; department: string; role: string }
 
 export default function App() {
+  const [locale, setLocale] = React.useState<Locale>(() =>
+    resolveLocale(window.localStorage.getItem('kaisha.locale') ?? navigator.language),
+  )
   const [status, setStatus] = React.useState('checking...')
   const [workspace, setWorkspace] = React.useState<WorkspaceStatus | null>(null)
   const [workspaceInput, setWorkspaceInput] = React.useState('')
@@ -33,6 +37,7 @@ export default function App() {
   const [departments, setDepartments] = React.useState<DepartmentItem[]>([])
   const [roles, setRoles] = React.useState<RoleItem[]>([])
   const [employees, setEmployees] = React.useState<EmployeeItem[]>([])
+  const tt = React.useCallback((key: string) => t(locale, key), [locale])
 
   React.useEffect(() => {
     fetch(`${API_BASE}/api/health`)
@@ -48,12 +53,16 @@ export default function App() {
           setWorkspaceInput(json.path)
         }
       })
-      .catch(() => setWorkspaceError('Failed to load workspace status'))
+      .catch(() => setWorkspaceError(tt('ui.workspace.loadError')))
   }, [])
+
+  React.useEffect(() => {
+    window.localStorage.setItem('kaisha.locale', locale)
+  }, [locale])
 
   const saveWorkspace = React.useCallback(async () => {
     if (!workspaceInput.trim()) {
-      setWorkspaceError('Workspace path cannot be empty')
+      setWorkspaceError(tt('ui.workspace.emptyError'))
       return
     }
 
@@ -76,7 +85,7 @@ export default function App() {
       setWorkspace(data)
     } catch (err) {
       setWorkspaceError(
-        err instanceof Error ? err.message : 'Failed to save workspace path',
+        err instanceof Error ? err.message : tt('ui.workspace.saveError'),
       )
     } finally {
       setSavingWorkspace(false)
@@ -146,17 +155,17 @@ export default function App() {
       return (
         <>
           <section className="settings-card">
-            <h3 className="settings-card__title">Tool registration</h3>
+            <h3 className="settings-card__title">{tt('ui.settings.tools.registration')}</h3>
             <div className="settings-grid">
               <input
                 className="settings-input"
-                placeholder="Tool name"
+                placeholder={tt('ui.settings.tools.name')}
                 value={toolForm.name}
                 onChange={(event) => setToolForm((prev) => ({ ...prev, name: event.target.value }))}
               />
               <input
                 className="settings-input"
-                placeholder="Launch command"
+                placeholder={tt('ui.settings.tools.command')}
                 value={toolForm.command}
                 onChange={(event) => setToolForm((prev) => ({ ...prev, command: event.target.value }))}
               />
@@ -166,14 +175,14 @@ export default function App() {
                   checked={toolForm.enabled}
                   onChange={(event) => setToolForm((prev) => ({ ...prev, enabled: event.target.checked }))}
                 />
-                Enabled
+                {tt('ui.settings.tools.enabled')}
               </label>
-              <button className="action-btn" onClick={addTool}>Add Tool</button>
+              <button className="action-btn" onClick={addTool}>{tt('ui.settings.tools.add')}</button>
             </div>
           </section>
           <section className="settings-card">
-            <h3 className="settings-card__title">Tool list</h3>
-            {tools.length === 0 ? <p className="settings-empty">No tools configured.</p> : (
+            <h3 className="settings-card__title">{tt('ui.settings.tools.list')}</h3>
+            {tools.length === 0 ? <p className="settings-empty">{tt('ui.settings.tools.empty')}</p> : (
               <div className="settings-list">
                 {tools.map((item) => (
                   <div key={item.id} className="settings-list__row">
@@ -193,7 +202,7 @@ export default function App() {
                           )
                         }
                       />
-                      <span>{item.enabled ? 'On' : 'Off'}</span>
+                      <span>{item.enabled ? tt('ui.settings.tools.on') : tt('ui.settings.tools.off')}</span>
                     </label>
                   </div>
                 ))}
@@ -208,31 +217,31 @@ export default function App() {
       return (
         <>
           <section className="settings-card">
-            <h3 className="settings-card__title">Department setup</h3>
+            <h3 className="settings-card__title">{tt('ui.settings.departments.setup')}</h3>
             <div className="settings-grid">
               <input
                 className="settings-input"
-                placeholder="Department name"
+                placeholder={tt('ui.settings.departments.name')}
                 value={departmentForm.name}
                 onChange={(event) => setDepartmentForm((prev) => ({ ...prev, name: event.target.value }))}
               />
               <input
                 className="settings-input"
-                placeholder="Department lead"
+                placeholder={tt('ui.settings.departments.lead')}
                 value={departmentForm.lead}
                 onChange={(event) => setDepartmentForm((prev) => ({ ...prev, lead: event.target.value }))}
               />
-              <button className="action-btn" onClick={addDepartment}>Add Department</button>
+              <button className="action-btn" onClick={addDepartment}>{tt('ui.settings.departments.add')}</button>
             </div>
           </section>
           <section className="settings-card">
-            <h3 className="settings-card__title">Department list</h3>
-            {departments.length === 0 ? <p className="settings-empty">No departments configured.</p> : (
+            <h3 className="settings-card__title">{tt('ui.settings.departments.list')}</h3>
+            {departments.length === 0 ? <p className="settings-empty">{tt('ui.settings.departments.empty')}</p> : (
               <div className="settings-list">
                 {departments.map((item) => (
                   <div key={item.id} className="settings-list__row">
                     <div>{item.name}</div>
-                    <div className="settings-subtext">Lead: {item.lead}</div>
+                    <div className="settings-subtext">{tt('ui.settings.departments.leadPrefix')}: {item.lead}</div>
                   </div>
                 ))}
               </div>
@@ -246,11 +255,11 @@ export default function App() {
       return (
         <>
           <section className="settings-card">
-            <h3 className="settings-card__title">Role setup</h3>
+            <h3 className="settings-card__title">{tt('ui.settings.roles.setup')}</h3>
             <div className="settings-grid">
               <input
                 className="settings-input"
-                placeholder="Role name"
+                placeholder={tt('ui.settings.roles.name')}
                 value={roleName}
                 onChange={(event) => setRoleName(event.target.value)}
               />
@@ -259,16 +268,16 @@ export default function App() {
                 value={roleForm}
                 onChange={(event) => setRoleForm(event.target.value as RoleItem['level'])}
               >
-                <option value="junior">Junior</option>
-                <option value="mid">Mid</option>
-                <option value="senior">Senior</option>
+                <option value="junior">{tt('ui.settings.roles.junior')}</option>
+                <option value="mid">{tt('ui.settings.roles.mid')}</option>
+                <option value="senior">{tt('ui.settings.roles.senior')}</option>
               </select>
-              <button className="action-btn" onClick={addRole}>Add Role</button>
+              <button className="action-btn" onClick={addRole}>{tt('ui.settings.roles.add')}</button>
             </div>
           </section>
           <section className="settings-card">
-            <h3 className="settings-card__title">Role list</h3>
-            {roles.length === 0 ? <p className="settings-empty">No roles configured.</p> : (
+            <h3 className="settings-card__title">{tt('ui.settings.roles.list')}</h3>
+            {roles.length === 0 ? <p className="settings-empty">{tt('ui.settings.roles.empty')}</p> : (
               <div className="settings-list">
                 {roles.map((item) => (
                   <div key={item.id} className="settings-list__row">
@@ -286,11 +295,11 @@ export default function App() {
     return (
       <>
         <section className="settings-card">
-          <h3 className="settings-card__title">Employee setup</h3>
+          <h3 className="settings-card__title">{tt('ui.settings.employees.setup')}</h3>
           <div className="settings-grid">
             <input
               className="settings-input"
-              placeholder="Employee name"
+              placeholder={tt('ui.settings.employees.name')}
               value={employeeForm.name}
               onChange={(event) => setEmployeeForm((prev) => ({ ...prev, name: event.target.value }))}
             />
@@ -299,7 +308,7 @@ export default function App() {
               value={employeeForm.department}
               onChange={(event) => setEmployeeForm((prev) => ({ ...prev, department: event.target.value }))}
             >
-              <option value="">Select department</option>
+              <option value="">{tt('ui.settings.employees.selectDepartment')}</option>
               {departments.map((item) => (
                 <option key={item.id} value={item.name}>{item.name}</option>
               ))}
@@ -309,17 +318,17 @@ export default function App() {
               value={employeeForm.role}
               onChange={(event) => setEmployeeForm((prev) => ({ ...prev, role: event.target.value }))}
             >
-              <option value="">Select role</option>
+              <option value="">{tt('ui.settings.employees.selectRole')}</option>
               {roles.map((item) => (
                 <option key={item.id} value={item.name}>{item.name}</option>
               ))}
             </select>
-            <button className="action-btn" onClick={addEmployee}>Add Employee</button>
+            <button className="action-btn" onClick={addEmployee}>{tt('ui.settings.employees.add')}</button>
           </div>
         </section>
         <section className="settings-card">
-          <h3 className="settings-card__title">Employee list</h3>
-          {employees.length === 0 ? <p className="settings-empty">No employees configured.</p> : (
+          <h3 className="settings-card__title">{tt('ui.settings.employees.list')}</h3>
+          {employees.length === 0 ? <p className="settings-empty">{tt('ui.settings.employees.empty')}</p> : (
             <div className="settings-list">
               {employees.map((item) => (
                 <div key={item.id} className="settings-list__row">
@@ -337,15 +346,15 @@ export default function App() {
   return (
     <div className="app-shell">
       <aside className="side-panel">
-        <div className="side-panel__brand">Kaisha</div>
+        <div className="side-panel__brand">{tt('ui.brand')}</div>
         <nav className="side-panel__nav">
-          <button className="nav-item nav-item--active">Workspace</button>
-          <button className="nav-item">Explorer</button>
-          <button className="nav-item">Search</button>
-          <button className="nav-item">Settings</button>
+          <button className="nav-item nav-item--active">{tt('ui.nav.workspace')}</button>
+          <button className="nav-item">{tt('ui.nav.explorer')}</button>
+          <button className="nav-item">{tt('ui.nav.search')}</button>
+          <button className="nav-item">{tt('ui.nav.settings')}</button>
         </nav>
         <div className="side-panel__footer">
-          <span>Backend</span>
+          <span>{tt('ui.backend')}</span>
           <span className={`status status--${status}`}>{status}</span>
         </div>
       </aside>
@@ -353,39 +362,50 @@ export default function App() {
       <section className="work-area">
         <header className="work-area__topbar">
           <div className="topbar__title">
-            {workspace?.configured ? 'Current Project' : 'Workspace Setup'}
+            {workspace?.configured ? tt('ui.workspace.currentProject') : tt('ui.workspace.setupTitle')}
           </div>
           <div className="topbar__actions">
-            <button className="action-btn">Run</button>
-            <button className="action-btn">Share</button>
-            <button className="action-btn" onClick={() => setSettingsOpen(true)}>Settings</button>
+            <label className="lang-switch">
+              <span>{tt('ui.language.label')}</span>
+              <select
+                className="settings-input lang-switch__select"
+                value={locale}
+                onChange={(event) => setLocale(event.target.value as Locale)}
+              >
+                <option value="en">{tt('ui.language.en')}</option>
+                <option value="zh">{tt('ui.language.zh')}</option>
+                <option value="ja">{tt('ui.language.ja')}</option>
+              </select>
+            </label>
+            <button className="action-btn">{tt('ui.actions.run')}</button>
+            <button className="action-btn">{tt('ui.actions.share')}</button>
+            <button className="action-btn" onClick={() => setSettingsOpen(true)}>{tt('ui.actions.settings')}</button>
           </div>
         </header>
 
         <main className="work-area__content">
           {needsWorkspaceSetup ? (
             <div className="workspace-setup">
-              <h2 className="workspace-setup__title">Configure your work directory</h2>
+              <h2 className="workspace-setup__title">{tt('ui.workspace.configureTitle')}</h2>
               <p className="workspace-setup__hint">
-                Set <code>KAISHA_WORKDIR</code> to force a path, or configure it
-                below for first-time initialization.
+                {tt('ui.workspace.configureHint')}
               </p>
               <label className="workspace-setup__label" htmlFor="workspace-path">
-                Workspace path
+                {tt('ui.workspace.pathLabel')}
               </label>
               <input
                 id="workspace-path"
                 className="workspace-setup__input"
                 value={workspaceInput}
                 onChange={(event) => setWorkspaceInput(event.target.value)}
-                placeholder="/path/to/kaisha-workspace"
+                placeholder={tt('ui.workspace.placeholder')}
               />
               <button
                 className="action-btn workspace-setup__save"
                 onClick={saveWorkspace}
                 disabled={savingWorkspace}
               >
-                {savingWorkspace ? 'Saving...' : 'Save Workspace'}
+                {savingWorkspace ? tt('ui.actions.saving') : tt('ui.actions.saveWorkspace')}
               </button>
               {workspaceError ? (
                 <p className="workspace-setup__error">{workspaceError}</p>
@@ -394,8 +414,8 @@ export default function App() {
           ) : (
             <div className="content-placeholder">
               <div>
-                <div>Workspace</div>
-                <div className="workspace-path">{workspace?.path ?? 'Not configured'}</div>
+                  <div>{tt('ui.workspace.panelTitle')}</div>
+                  <div className="workspace-path">{workspace?.path ?? tt('ui.workspace.notConfigured')}</div>
               </div>
             </div>
           )}
@@ -405,33 +425,33 @@ export default function App() {
         <div className="settings-modal">
           <div className="settings-panel">
             <aside className="settings-sidebar">
-              <div className="settings-sidebar__title">Configuration</div>
+              <div className="settings-sidebar__title">{tt('ui.settings.title')}</div>
               <button
                 className={`settings-nav ${settingsSection === 'tools' ? 'settings-nav--active' : ''}`}
                 onClick={() => setSettingsSection('tools')}
               >
-                Tools
+                {tt('ui.settings.menus.tools')}
               </button>
               <button
                 className={`settings-nav ${settingsSection === 'departments' ? 'settings-nav--active' : ''}`}
                 onClick={() => setSettingsSection('departments')}
               >
-                Departments
+                {tt('ui.settings.menus.departments')}
               </button>
               <button
                 className={`settings-nav ${settingsSection === 'roles' ? 'settings-nav--active' : ''}`}
                 onClick={() => setSettingsSection('roles')}
               >
-                Roles
+                {tt('ui.settings.menus.roles')}
               </button>
               <button
                 className={`settings-nav ${settingsSection === 'employees' ? 'settings-nav--active' : ''}`}
                 onClick={() => setSettingsSection('employees')}
               >
-                Employees
+                {tt('ui.settings.menus.employees')}
               </button>
               <button className="action-btn settings-close" onClick={() => setSettingsOpen(false)}>
-                Done
+                {tt('ui.actions.done')}
               </button>
             </aside>
             <section className="settings-content">

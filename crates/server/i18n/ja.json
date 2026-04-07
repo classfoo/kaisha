@@ -1,0 +1,11 @@
+{
+  "workspace_env_controlled": "ワークディレクトリは KAISHA_WORKDIR 環境変数で管理されています",
+  "workspace_not_configured": "ワークディレクトリが未設定です",
+  "menu_not_found": "設定メニューが見つかりません",
+  "unsupported_menu": "未対応の設定メニューです",
+  "address_not_found": "設定アドレスが見つかりません",
+  "address_empty": "設定アドレスは必須です",
+  "address_format": "設定アドレスは a.b.c 形式で指定してください",
+  "address_empty_segment": "設定アドレスに空のセグメントがあります",
+  "address_segment_invalid": "設定アドレスのセグメントは英数字、_、- のみ使用できます"
+}

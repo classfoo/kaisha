@@ -1,0 +1,11 @@
+{
+  "workspace_env_controlled": "工作目录由 KAISHA_WORKDIR 环境变量控制",
+  "workspace_not_configured": "工作目录尚未配置",
+  "menu_not_found": "配置菜单不存在",
+  "unsupported_menu": "不支持的配置菜单",
+  "address_not_found": "配置地址不存在",
+  "address_empty": "配置地址不能为空",
+  "address_format": "配置地址必须是 a.b.c 形式",
+  "address_empty_segment": "配置地址包含空片段",
+  "address_segment_invalid": "配置地址片段仅允许字母、数字、_ 或 -"
+}

@@ -120,6 +120,7 @@ body {
 .topbar__actions {
   display: flex;
   gap: 8px;
+  align-items: center;
 }
 
 .action-btn {
@@ -340,4 +341,16 @@ body {
   gap: 8px;
   align-items: center;
   color: #aeb9cf;
+}
+
+.lang-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #b6c2d9;
+  font-size: 13px;
+}
+
+.lang-switch__select {
+  min-width: 120px;
 }

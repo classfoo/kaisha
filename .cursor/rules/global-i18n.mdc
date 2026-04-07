@@ -1,0 +1,13 @@
+---
+description: Enforce global i18n for UI and backend copy
+alwaysApply: true
+---
+
+# Global Internationalization Rule
+
+- All user-facing text must be internationalized. Do not hardcode copy in UI components, API responses, logs shown to users, or validation/error messages.
+- Every new text key must be added to all supported locales: Chinese (`zh`), English (`en`), and Japanese (`ja`).
+- Frontend copy must be rendered through the global i18n accessor (`t(...)`) and locale files.
+- Backend response messages must be resolved through backend i18n dictionaries keyed by language.
+- Keep key naming stable and semantic (for example `ui.settings.tools.add`, `api.errors.address_not_found`).
+- If a feature cannot be localized immediately, block the change and add missing locale entries before merge.
