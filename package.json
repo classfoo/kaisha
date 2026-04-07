@@ -1,16 +1,16 @@
 {
-  "name": "codeband",
+  "name": "kaisha",
   "private": true,
   "workspaces": [
     "apps/web"
   ],
   "scripts": {
-    "dev:web": "npm --workspace @codeband/web run dev",
-    "dev:server": "cargo +${RUST_TOOLCHAIN:-stable} run -p server --bin codeband-server",
+    "dev:web": "npm --workspace @kaisha/web run dev",
+    "dev:server": "cargo +${RUST_TOOLCHAIN:-stable} run -p server --bin kaisha-server",
     "dev:desktop": "cargo +${RUST_TOOLCHAIN:-stable} tauri dev --manifest-path apps/desktop/src-tauri/Cargo.toml",
     "dev:browser": "concurrently -n WEB,API \"npm run dev:web\" \"npm run dev:server\"",
-    "build:web": "npm --workspace @codeband/web run build",
-    "build:server": "cargo +${RUST_TOOLCHAIN:-stable} build -p server --bin codeband-server --release",
+    "build:web": "npm --workspace @kaisha/web run build",
+    "build:server": "cargo +${RUST_TOOLCHAIN:-stable} build -p server --bin kaisha-server --release",
     "build:desktop": "cargo +${RUST_TOOLCHAIN:-stable} tauri build --manifest-path apps/desktop/src-tauri/Cargo.toml",
     "build:linux": "bash ./scripts/build_linux.sh",
     "build:macos": "bash ./scripts/build_macos.sh",
@@ -23,7 +23,7 @@
     "init:ios": "bash ./scripts/init_ios.sh",
     "init:android": "bash ./scripts/init_android.sh",
     "check:rust": "cargo +${RUST_TOOLCHAIN:-stable} check --workspace",
-    "check:web": "npm --workspace @codeband/web run typecheck"
+    "check:web": "npm --workspace @kaisha/web run typecheck"
   },
   "devDependencies": {
     "concurrently": "^9.0.1"

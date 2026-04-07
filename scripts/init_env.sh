@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# One-shot environment bootstrap for Codeband.
+# One-shot environment bootstrap for Kaisha.
 # Rust is managed only via rustup (no Homebrew-based Rust install).
 
 AUTO_YES=0

@@ -1,6 +1,6 @@
-# Codeband
+# Kaisha
 
-Codeband is a Rust-first desktop and web application scaffold based on Tauri 2.x.  
+Kaisha is a Rust-first desktop and web application scaffold based on Tauri 2.x.  
 It supports two runtime modes:
 
 - Desktop integrated mode (Tauri app + embedded backend server)
@@ -83,7 +83,7 @@ Flow:
 1. Clone repository and enter project root:
    ```bash
    git clone <your-repo-url>
-   cd codeband
+   cd kaisha
    ```
 2. Run one-shot environment initialization:
    ```bash
@@ -174,7 +174,7 @@ npm run build:android
    ```bash
    npm run build:server
    ```
-   Output: `target/release/codeband-server`
+   Output: `target/release/kaisha-server`
 
 ### B) Build Desktop Artifact (Current Host)
 
@@ -306,7 +306,7 @@ Fix:
 1. Change runtime ports in environment variables.
 2. Example:
    ```bash
-   CODEBAND_PORT=18080 VITE_API_BASE=http://127.0.0.1:18080 npm run dev:browser
+   KAISHA_PORT=18080 VITE_API_BASE=http://127.0.0.1:18080 npm run dev:browser
    ```
 
 ### 6) macOS iOS Build Issues (Xcode / Signing)
@@ -420,8 +420,8 @@ Copy and adjust values from:
 
 Key variables:
 
-- `CODEBAND_HOST`: backend bind host (default `127.0.0.1`)
-- `CODEBAND_PORT`: backend bind port (default `8080`)
+- `KAISHA_HOST`: backend bind host (default `127.0.0.1`)
+- `KAISHA_PORT`: backend bind port (default `8080`)
 - `VITE_API_BASE`: frontend API base URL
 
 ## Development Notes

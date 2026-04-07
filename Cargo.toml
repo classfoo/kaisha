@@ -10,7 +10,7 @@ members = [
 [workspace.package]
 edition = "2021"
 license = "MIT"
-authors = ["codeband team"]
+authors = ["kaisha team"]
 
 [workspace.dependencies]
 anyhow = "1"

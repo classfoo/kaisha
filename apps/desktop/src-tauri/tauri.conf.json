@@ -1,18 +1,18 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Codeband",
+  "productName": "Kaisha",
   "version": "0.1.0",
-  "identifier": "com.codeband.app",
+  "identifier": "com.kaisha.app",
   "build": {
-    "beforeDevCommand": "npm --workspace @codeband/web run dev",
+    "beforeDevCommand": "npm --workspace @kaisha/web run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm --workspace @codeband/web run build",
+    "beforeBuildCommand": "npm --workspace @kaisha/web run build",
     "frontendDist": "../../web/dist"
   },
   "app": {
     "windows": [
       {
-        "title": "Codeband",
+        "title": "Kaisha",
         "width": 1200,
         "height": 800
       }

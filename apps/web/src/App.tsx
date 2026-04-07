@@ -15,7 +15,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <aside className="side-panel">
-        <div className="side-panel__brand">Codeband</div>
+        <div className="side-panel__brand">Kaisha</div>
         <nav className="side-panel__nav">
           <button className="nav-item nav-item--active">Workspace</button>
           <button className="nav-item">Explorer</button>

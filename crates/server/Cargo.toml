@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "codeband-server"
+name = "kaisha-server"
 path = "src/main.rs"
 
 [dependencies]
