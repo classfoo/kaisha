@@ -10,6 +10,7 @@
     "frontendDist": "../../web"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "title": "Kaisha",
