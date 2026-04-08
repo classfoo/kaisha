@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
 RUST_TOOLCHAIN="${RUST_TOOLCHAIN:-stable}"
 
 if [[ -f "$HOME/.cargo/env" ]]; then
@@ -8,7 +11,10 @@ if [[ -f "$HOME/.cargo/env" ]]; then
   source "$HOME/.cargo/env"
 fi
 
+cd "$PROJECT_ROOT"
 npm install
 npm run build:web
 cargo +"$RUST_TOOLCHAIN" build -p server --bin kaisha-server --release
-cargo +"$RUST_TOOLCHAIN" tauri build -- --manifest-path "$(pwd)/apps/desktop/src-tauri/Cargo.toml"
+
+cd "$PROJECT_ROOT/apps/desktop/src-tauri"
+cargo +"$RUST_TOOLCHAIN" tauri build
