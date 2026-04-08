@@ -6,10 +6,15 @@ type MacWindowControlsProps = {
   t: (key: string) => string
 }
 
+// 检测是否在 Tauri 环境中运行
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+
 export const MacWindowControls: React.FC<MacWindowControlsProps> = ({ t }) => {
-  const appWindow = React.useMemo(() => getCurrentWindow(), [])
+  // 只在 Tauri 环境中获取窗口实例
+  const appWindow = isTauri ? getCurrentWindow() : null
 
   const handleWindowControl = async (action: 'close' | 'minimize' | 'maximize') => {
+    if (!appWindow) return
     if (action === 'close') {
       await appWindow.close()
       return
@@ -25,6 +30,9 @@ export const MacWindowControls: React.FC<MacWindowControlsProps> = ({ t }) => {
       await appWindow.maximize()
     }
   }
+
+  // 在浏览器模式下不渲染窗口控制按钮
+  if (!isTauri) return null
 
   return (
     <div className="mac-controls" onMouseDown={(e) => e.stopPropagation()}>

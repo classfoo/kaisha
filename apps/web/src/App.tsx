@@ -73,7 +73,10 @@ export default function App() {
   const [departments, setDepartments] = React.useState<DepartmentItem[]>([])
   const [roles, setRoles] = React.useState<RoleItem[]>([])
   const [employees, setEmployees] = React.useState<EmployeeItem[]>([])
-  const appWindow = React.useMemo(() => getCurrentWindow(), [])
+  // 检测是否在 Tauri 环境中运行
+  const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+  // 只在 Tauri 环境中获取窗口实例
+  const appWindow = isTauri ? getCurrentWindow() : null
   const tt = React.useCallback((key: string) => t(locale, key), [locale])
 
   React.useEffect(() => {
@@ -249,6 +252,7 @@ export default function App() {
   }
 
   const handleDragStart = async () => {
+    if (!appWindow) return
     try {
       await appWindow.startDragging()
     } catch (e) {
