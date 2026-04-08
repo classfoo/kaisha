@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MANIFEST_PATH="apps/desktop/src-tauri/Cargo.toml"
+# Get the script directory and project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT"
+
+MANIFEST_PATH="$PROJECT_ROOT/apps/desktop/src-tauri/Cargo.toml"
 RUST_TOOLCHAIN="${RUST_TOOLCHAIN:-stable}"
 
 if [[ -f "$HOME/.cargo/env" ]]; then
