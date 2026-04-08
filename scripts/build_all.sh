@@ -11,4 +11,4 @@ fi
 npm install
 npm run build:web
 cargo +"$RUST_TOOLCHAIN" build -p server --bin kaisha-server --release
-cargo +"$RUST_TOOLCHAIN" tauri build --manifest-path apps/desktop/src-tauri/Cargo.toml
+cargo +"$RUST_TOOLCHAIN" tauri build -- --manifest-path apps/desktop/src-tauri/Cargo.toml

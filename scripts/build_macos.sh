@@ -10,4 +10,4 @@ if [[ -f "$HOME/.cargo/env" ]]; then
 fi
 
 npm run build:web
-cargo +"$RUST_TOOLCHAIN" tauri build --manifest-path "$MANIFEST_PATH" --bundles app,dmg
+cargo +"$RUST_TOOLCHAIN" tauri build --bundles app,dmg -- --manifest-path "$MANIFEST_PATH"
