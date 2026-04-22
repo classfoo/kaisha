@@ -17,7 +17,7 @@ html {
   width: 100%;
   height: 100%;
   margin: 0;
-  background: #171b24;
+  background: transparent;
 }
 
 body,
@@ -25,7 +25,7 @@ body,
   width: 100%;
   height: 100%;
   margin: 0;
-  background: #171b24;
+  background: transparent;
 }
 
 body {
@@ -37,10 +37,11 @@ body {
   grid-template-columns: 260px 1fr;
   width: 100%;
   height: 100%;
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
   border: 1px solid #262b37;
   background: #0f1117;
+  box-shadow: 0 20px 55px rgba(0, 0, 0, 0.35);
 }
 
 .side-panel {

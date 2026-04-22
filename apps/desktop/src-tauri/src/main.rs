@@ -1,7 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::{env, net::SocketAddr, path::PathBuf};
-use tauri::Manager;
+use tauri::{
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Manager, WindowEvent,
+};
 
 fn main() {
     tracing_subscriber::fmt::init();
@@ -9,8 +12,39 @@ fn main() {
     tauri::Builder::default()
         .setup(|app| {
             let window = app.get_webview_window("main").expect("main window not found");
-            // 设置窗口背景色为深色，避免启动时显示白色
-            window.set_background_color(Some(tauri::window::Color(0x17, 0x1b, 0x24, 255))).ok();
+            let window_for_events = window.clone();
+            window.on_window_event(move |event| {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    // Keep the process alive and move the app to background.
+                    api.prevent_close();
+                    window_for_events.hide().ok();
+                }
+            });
+
+            #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+            {
+                if let Some(icon) = app.default_window_icon() {
+                    TrayIconBuilder::with_id("main")
+                        .icon(icon.clone())
+                        .on_tray_icon_event(|tray, event| {
+                            if let TrayIconEvent::Click {
+                                button: MouseButton::Left,
+                                button_state: MouseButtonState::Up,
+                                ..
+                            } = event
+                            {
+                                if let Some(window) = tray.app_handle().get_webview_window("main") {
+                                    window.show().ok();
+                                    window.unminimize().ok();
+                                    window.set_focus().ok();
+                                }
+                            }
+                        })
+                        .build(app)?;
+                } else {
+                    tracing::warn!("default window icon unavailable, skipping tray icon");
+                }
+            }
 
             let config_file = workspace_config_file(app)?;
             let workspace_init = server::resolve_workspace_from_env("KAISHA_WORKDIR", config_file)?;

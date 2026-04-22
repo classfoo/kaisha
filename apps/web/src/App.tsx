@@ -1,5 +1,4 @@
 import React from 'react'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import { Locale, resolveLocale, t } from './i18n'
 import { MacWindowControls } from './components/MacWindowControls'
 
@@ -73,10 +72,6 @@ export default function App() {
   const [departments, setDepartments] = React.useState<DepartmentItem[]>([])
   const [roles, setRoles] = React.useState<RoleItem[]>([])
   const [employees, setEmployees] = React.useState<EmployeeItem[]>([])
-  // 检测是否在 Tauri 环境中运行
-  const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-  // 只在 Tauri 环境中获取窗口实例
-  const appWindow = isTauri ? getCurrentWindow() : null
   const tt = React.useCallback((key: string) => t(locale, key), [locale])
 
   React.useEffect(() => {
@@ -249,15 +244,6 @@ export default function App() {
       },
     ])
     setEmployeeForm({ name: '', department: '', role: '' })
-  }
-
-  const handleDragStart = async () => {
-    if (!appWindow) return
-    try {
-      await appWindow.startDragging()
-    } catch (e) {
-      // Ignore drag errors (e.g., when not in Tauri environment)
-    }
   }
 
   const renderSettingsCards = () => {
@@ -513,7 +499,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <MacWindowControls locale={locale} t={tt} />
-      <aside className="side-panel" onMouseDown={() => void handleDragStart()}>
+      <aside className="side-panel" data-tauri-drag-region>
         <div className="side-panel__brand">{tt('ui.brand')}</div>
         <nav className="side-panel__nav">
           <button className="nav-item nav-item--active">{tt('ui.nav.workspace')}</button>
@@ -528,7 +514,7 @@ export default function App() {
       </aside>
 
       <section className="work-area">
-        <header className="work-area__topbar" onMouseDown={() => void handleDragStart()}>
+        <header className="work-area__topbar" data-tauri-drag-region>
           <div className="topbar__drag" data-tauri-drag-region />
           <div className="topbar__title">
             {workspace?.configured ? tt('ui.workspace.currentProject') : tt('ui.workspace.setupTitle')}
