@@ -33,6 +33,10 @@
     "employeeList": {
       "title": "従業員一覧",
       "empty": "従業員がいません",
+      "create": "従業員を作成",
+      "creating": "作成中...",
+      "createError": "従業員の作成に失敗しました",
+      "newNamePrefix": "従業員",
       "snippet": "{name}: 最新メモリ更新",
       "unread": "未読",
       "read": "既読",

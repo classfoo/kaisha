@@ -33,6 +33,10 @@
     "employeeList": {
       "title": "Employees",
       "empty": "No employees found",
+      "create": "Create Employee",
+      "creating": "Creating...",
+      "createError": "Failed to create employee",
+      "newNamePrefix": "Employee",
       "snippet": "{name}: Latest memory update",
       "unread": "Unread",
       "read": "Read",

@@ -33,6 +33,10 @@
     "employeeList": {
       "title": "员工列表",
       "empty": "暂无员工",
+      "create": "创建员工",
+      "creating": "创建中...",
+      "createError": "创建员工失败",
+      "newNamePrefix": "员工",
       "snippet": "{name}：最近更新了一条记忆",
       "unread": "未读",
       "read": "已读",

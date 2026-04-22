@@ -1,8 +1,10 @@
 import React from 'react'
 import { Locale, resolveLocale, t } from './i18n'
 import { MacWindowControls } from './components/MacWindowControls'
-import { EmployeeList, EmployeeDirectoryRecord } from './components/EmployeeList'
-import { EmployeeChatPanel } from './components/EmployeeChatPanel'
+import { EmployeeDirectoryRecord } from './components/EmployeeList'
+import { LeftSidebar, NavMenu } from './components/LeftSidebar'
+import { LeftPanel } from './components/LeftPanel'
+import { WorkArea } from './components/WorkArea'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8080'
 type WorkspaceStatus = {
@@ -77,7 +79,21 @@ export default function App() {
   const [departments, setDepartments] = React.useState<DepartmentItem[]>([])
   const [roles, setRoles] = React.useState<RoleItem[]>([])
   const [employees, setEmployees] = React.useState<EmployeeItem[]>([])
+  const [creatingEmployee, setCreatingEmployee] = React.useState(false)
+  const [employeeCreateError, setEmployeeCreateError] = React.useState('')
+  const [activeNav, setActiveNav] = React.useState<NavMenu>('workspace')
+  const [refreshTick, setRefreshTick] = React.useState(0)
+  const [sidePanelWidth, setSidePanelWidth] = React.useState(260)
+  const [resizingPanel, setResizingPanel] = React.useState(false)
+  const resizeStartXRef = React.useRef(0)
+  const resizeStartWidthRef = React.useRef(260)
   const tt = React.useCallback((key: string) => t(locale, key), [locale])
+  const navItems: { id: NavMenu; labelKey: string; icon: string }[] = [
+    { id: 'workspace', labelKey: 'ui.nav.workspace', icon: 'W' },
+    { id: 'explorer', labelKey: 'ui.nav.explorer', icon: 'E' },
+    { id: 'search', labelKey: 'ui.nav.search', icon: 'S' },
+    { id: 'settings', labelKey: 'ui.nav.settings', icon: 'T' },
+  ]
 
   React.useEffect(() => {
     fetch(`${API_BASE}/api/health`)
@@ -94,7 +110,7 @@ export default function App() {
         }
       })
       .catch(() => setWorkspaceError(tt('ui.workspace.loadError')))
-  }, [])
+  }, [refreshTick])
 
   React.useEffect(() => {
     if (!workspace?.configured) {
@@ -102,25 +118,72 @@ export default function App() {
       setSelectedEmployeeId(null)
       return
     }
+
+    let cancelled = false
+    let retryTimer: number | undefined
+    let retries = 0
     const headers = { 'x-lang': locale }
-    fetch(`${API_BASE}/api/employees`, { headers })
-      .then((res) => {
-        if (!res.ok) throw new Error('load employees failed')
-        return res.json()
-      })
-      .then((json: EmployeeDirectoryRecord[]) => {
-        setEmployeeDirectory(json)
-        if (json.length > 0) {
-          setSelectedEmployeeId((prev) => prev ?? json[0].id)
-        } else {
+    const loadEmployees = () => {
+      fetch(`${API_BASE}/api/employees`, { headers })
+        .then((res) => {
+          if (!res.ok) throw new Error('load employees failed')
+          return res.json()
+        })
+        .then((json: EmployeeDirectoryRecord[]) => {
+          if (cancelled) return
+          setEmployeeDirectory(json)
+          if (json.length > 0) {
+            setSelectedEmployeeId((prev) => prev ?? json[0].id)
+          } else {
+            setSelectedEmployeeId(null)
+          }
+        })
+        .catch(() => {
+          if (cancelled) return
+          if (retries < 4) {
+            retries += 1
+            retryTimer = window.setTimeout(loadEmployees, 500)
+            return
+          }
+          setEmployeeDirectory([])
           setSelectedEmployeeId(null)
-        }
-      })
-      .catch(() => {
-        setEmployeeDirectory([])
-        setSelectedEmployeeId(null)
-      })
-  }, [workspace?.configured, locale])
+        })
+    }
+
+    loadEmployees()
+
+    return () => {
+      cancelled = true
+      if (retryTimer !== undefined) {
+        window.clearTimeout(retryTimer)
+      }
+    }
+  }, [workspace?.configured, workspace?.path, locale, refreshTick])
+
+  React.useEffect(() => {
+    if (!resizingPanel) return
+    const minWidth = 220
+    const maxWidth = 520
+
+    const onMouseMove = (event: MouseEvent) => {
+      const delta = event.clientX - resizeStartXRef.current
+      const nextWidth = Math.min(maxWidth, Math.max(minWidth, resizeStartWidthRef.current + delta))
+      setSidePanelWidth(nextWidth)
+    }
+
+    const onMouseUp = () => {
+      setResizingPanel(false)
+    }
+
+    document.body.style.cursor = 'col-resize'
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      document.body.style.cursor = ''
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [resizingPanel])
 
   React.useEffect(() => {
     if (!settingsOpen || settingsSection !== 'tools') return
@@ -182,7 +245,6 @@ export default function App() {
     }
   }, [workspaceInput])
 
-  const needsWorkspaceSetup = workspace?.configured === false
   const nextId = React.useRef(1)
 
   const createTool = async () => {
@@ -275,6 +337,64 @@ export default function App() {
       },
     ])
     setEmployeeForm({ name: '', department: '', role: '' })
+  }
+
+  const createSidebarEmployee = async () => {
+    if (!workspace?.configured || creatingEmployee) return
+    setCreatingEmployee(true)
+    setEmployeeCreateError('')
+    const headers = { 'Content-Type': 'application/json', 'x-lang': locale }
+    const requestBody = {
+      id: `employee-${Date.now()}`,
+      name: `${tt('ui.employeeList.newNamePrefix')} ${employeeDirectory.length + 1}`,
+      department: 'default',
+      role: 'default',
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/api/employees`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(requestBody),
+      })
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(text || tt('ui.employeeList.createError'))
+      }
+
+      const created: EmployeeDirectoryRecord = await response.json()
+      setEmployeeDirectory((prev) => {
+        const next = [...prev, created]
+        next.sort((a, b) => a.id.localeCompare(b.id))
+        return next
+      })
+      setSelectedEmployeeId(created.id)
+    } catch (err) {
+      setEmployeeCreateError(
+        err instanceof Error && err.message ? err.message : tt('ui.employeeList.createError'),
+      )
+    } finally {
+      setCreatingEmployee(false)
+    }
+  }
+
+  const handleNavMenuClick = (menu: NavMenu) => {
+    setActiveNav(menu)
+    setSettingsOpen(false)
+    setWorkspace(null)
+    setStatus('checking...')
+    setWorkspaceError('')
+    setEmployeeCreateError('')
+    setEmployeeDirectory([])
+    setSelectedEmployeeId(null)
+    setMessageDraft('')
+    setRefreshTick((prev) => prev + 1)
+  }
+
+  const startResizePanel = (event: React.MouseEvent<HTMLDivElement>) => {
+    resizeStartXRef.current = event.clientX
+    resizeStartWidthRef.current = sidePanelWidth
+    setResizingPanel(true)
   }
 
   const renderSettingsCards = () => {
@@ -530,124 +650,49 @@ export default function App() {
   return (
     <div className="app-shell">
       <MacWindowControls locale={locale} t={tt} />
-      <aside className="side-panel" data-tauri-drag-region>
-        <div className="side-panel__brand">{tt('ui.brand')}</div>
-        <EmployeeList
-          employees={employeeDirectory}
-          selectedEmployeeId={selectedEmployeeId}
-          onSelectEmployee={setSelectedEmployeeId}
-          t={tt}
-        />
-        <div className="side-panel__footer">
-          <span>{tt('ui.backend')}</span>
-          <span className={`status status--${status}`}>{status}</span>
-        </div>
-      </aside>
-
-      <section className="work-area">
-        <header className="work-area__topbar" data-tauri-drag-region>
-          <div className="topbar__drag" data-tauri-drag-region />
-          <div className="topbar__title">
-            {workspace?.configured ? tt('ui.workspace.currentProject') : tt('ui.workspace.setupTitle')}
-          </div>
-          <div className="topbar__actions" onMouseDown={(e) => e.stopPropagation()}>
-            <label className="lang-switch">
-              <span>{tt('ui.language.label')}</span>
-              <select
-                className="settings-input lang-switch__select"
-                value={locale}
-                onChange={(event) => setLocale(event.target.value as Locale)}
-              >
-                <option value="en">{tt('ui.language.en')}</option>
-                <option value="zh">{tt('ui.language.zh')}</option>
-                <option value="ja">{tt('ui.language.ja')}</option>
-              </select>
-            </label>
-            <button className="action-btn">{tt('ui.actions.run')}</button>
-            <button className="action-btn">{tt('ui.actions.share')}</button>
-            <button className="action-btn" onClick={() => setSettingsOpen(true)}>{tt('ui.actions.settings')}</button>
-          </div>
-        </header>
-
-        <main className="work-area__content">
-          {needsWorkspaceSetup ? (
-            <div className="workspace-setup">
-              <h2 className="workspace-setup__title">{tt('ui.workspace.configureTitle')}</h2>
-              <p className="workspace-setup__hint">
-                {tt('ui.workspace.configureHint')}
-              </p>
-              <label className="workspace-setup__label" htmlFor="workspace-path">
-                {tt('ui.workspace.pathLabel')}
-              </label>
-              <input
-                id="workspace-path"
-                className="workspace-setup__input"
-                value={workspaceInput}
-                onChange={(event) => setWorkspaceInput(event.target.value)}
-                placeholder={tt('ui.workspace.placeholder')}
-              />
-              <button
-                className="action-btn workspace-setup__save"
-                onClick={saveWorkspace}
-                disabled={savingWorkspace}
-              >
-                {savingWorkspace ? tt('ui.actions.saving') : tt('ui.actions.saveWorkspace')}
-              </button>
-              {workspaceError ? (
-                <p className="workspace-setup__error">{workspaceError}</p>
-              ) : null}
-            </div>
-          ) : (
-            <EmployeeChatPanel
-              employees={employeeDirectory}
-              selectedEmployeeId={selectedEmployeeId}
-              messageDraft={messageDraft}
-              onMessageDraftChange={setMessageDraft}
-              workspacePath={workspace?.path ?? null}
-              t={tt}
-            />
-          )}
-        </main>
-      </section>
-      {settingsOpen ? (
-        <div className="settings-modal">
-          <div className="settings-panel">
-            <aside className="settings-sidebar">
-              <div className="settings-sidebar__title">{tt('ui.settings.title')}</div>
-              <button
-                className={`settings-nav ${settingsSection === 'tools' ? 'settings-nav--active' : ''}`}
-                onClick={() => setSettingsSection('tools')}
-              >
-                {tt('ui.settings.menus.tools')}
-              </button>
-              <button
-                className={`settings-nav ${settingsSection === 'departments' ? 'settings-nav--active' : ''}`}
-                onClick={() => setSettingsSection('departments')}
-              >
-                {tt('ui.settings.menus.departments')}
-              </button>
-              <button
-                className={`settings-nav ${settingsSection === 'roles' ? 'settings-nav--active' : ''}`}
-                onClick={() => setSettingsSection('roles')}
-              >
-                {tt('ui.settings.menus.roles')}
-              </button>
-              <button
-                className={`settings-nav ${settingsSection === 'employees' ? 'settings-nav--active' : ''}`}
-                onClick={() => setSettingsSection('employees')}
-              >
-                {tt('ui.settings.menus.employees')}
-              </button>
-              <button className="action-btn settings-close" onClick={() => setSettingsOpen(false)}>
-                {tt('ui.actions.done')}
-              </button>
-            </aside>
-            <section className="settings-content">
-              {renderSettingsCards()}
-            </section>
-          </div>
-        </div>
-      ) : null}
+      <LeftSidebar
+        activeNav={activeNav}
+        navItems={navItems}
+        t={tt}
+        onMenuClick={handleNavMenuClick}
+      />
+      <LeftPanel
+        panelKey={`left-panel-${activeNav}-${refreshTick}`}
+        sidePanelWidth={sidePanelWidth}
+        employees={employeeDirectory}
+        selectedEmployeeId={selectedEmployeeId}
+        onSelectEmployee={setSelectedEmployeeId}
+        creatingEmployee={creatingEmployee}
+        employeeCreateError={employeeCreateError}
+        workspaceConfigured={Boolean(workspace?.configured)}
+        status={status}
+        t={tt}
+        onCreateEmployee={() => void createSidebarEmployee()}
+        onResizeMouseDown={startResizePanel}
+      />
+      <WorkArea
+        workAreaKey={`work-area-${activeNav}-${refreshTick}`}
+        locale={locale}
+        workspaceConfigured={Boolean(workspace?.configured)}
+        workspacePath={workspace?.path ?? null}
+        workspaceInput={workspaceInput}
+        workspaceError={workspaceError}
+        savingWorkspace={savingWorkspace}
+        messageDraft={messageDraft}
+        settingsOpen={settingsOpen}
+        settingsSection={settingsSection}
+        employees={employeeDirectory}
+        selectedEmployeeId={selectedEmployeeId}
+        t={tt}
+        onSetLocale={setLocale}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onSetWorkspaceInput={setWorkspaceInput}
+        onSaveWorkspace={() => void saveWorkspace()}
+        onMessageDraftChange={setMessageDraft}
+        onCloseSettings={() => setSettingsOpen(false)}
+        onSetSettingsSection={setSettingsSection}
+        renderSettingsCards={renderSettingsCards}
+      />
     </div>
   )
 }

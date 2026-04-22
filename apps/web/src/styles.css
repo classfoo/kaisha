@@ -34,7 +34,7 @@ body {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 64px auto 1fr;
   width: 100%;
   height: 100%;
   border-radius: 12px;
@@ -44,13 +44,70 @@ body {
   box-shadow: 0 20px 55px rgba(0, 0, 0, 0.35);
 }
 
+.left-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #121722;
+  border-right: 1px solid #262b37;
+  -webkit-app-region: no-drag;
+}
+
+.left-rail__top-space {
+  height: 44px;
+}
+
+.left-rail__menu {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+}
+
+.left-rail__btn {
+  appearance: none;
+  border: 1px solid #2c3446;
+  border-radius: 10px;
+  background: #1a2231;
+  color: #dbe3f0;
+  height: 36px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.left-rail__btn:hover {
+  background: #223049;
+}
+
+.left-rail__btn--active {
+  border-color: #4c6290;
+  background: #263a5d;
+}
+
+.side-panel-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6px;
+  min-width: 220px;
+  max-width: 520px;
+  border-right: 1px solid #262b37;
+}
+
 .side-panel {
   display: flex;
   flex-direction: column;
   padding: 0 14px 18px 14px;
   background: #171b24;
-  border-right: 1px solid #262b37;
   -webkit-app-region: drag;
+}
+
+.side-panel-resizer {
+  cursor: col-resize;
+  background: #1a2130;
+}
+
+.side-panel-resizer:hover {
+  background: #2a3852;
 }
 
 .employee-list {
@@ -281,11 +338,30 @@ body {
   margin-top: auto;
   border-top: 1px solid #2a3040;
   padding: 12px 10px 2px;
+  display: grid;
+  gap: 10px;
+  -webkit-app-region: no-drag;
+}
+
+.side-panel__toolbar {
+  display: grid;
+  gap: 6px;
+}
+
+.side-panel__add-employee {
+  width: 100%;
+}
+
+.side-panel__error {
+  color: #ff8f8f;
+  font-size: 12px;
+}
+
+.side-panel__status {
   display: flex;
   justify-content: space-between;
   color: #a8b0c0;
   font-size: 13px;
-  -webkit-app-region: no-drag;
 }
 
 .status {

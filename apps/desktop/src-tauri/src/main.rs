@@ -15,9 +15,18 @@ fn main() {
             let window_for_events = window.clone();
             window.on_window_event(move |event| {
                 if let WindowEvent::CloseRequested { api, .. } = event {
-                    // Keep the process alive and move the app to background.
-                    api.prevent_close();
-                    window_for_events.hide().ok();
+                    #[cfg(target_os = "macos")]
+                    {
+                        let _ = (&api, &window_for_events);
+                        return;
+                    }
+
+                    #[cfg(not(target_os = "macos"))]
+                    {
+                        // Keep the process alive and move the app to background.
+                        api.prevent_close();
+                        window_for_events.hide().ok();
+                    }
                 }
             });
 
