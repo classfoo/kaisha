@@ -309,6 +309,13 @@ body {
   -webkit-app-region: no-drag;
 }
 
+.side-panel__section-title {
+  margin: 10px 0 8px;
+  padding: 0 4px;
+  font-size: 13px;
+  color: #9ba7be;
+}
+
 .side-panel__nav {
   display: flex;
   flex-direction: column;

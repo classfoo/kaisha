@@ -81,7 +81,7 @@ export default function App() {
   const [employees, setEmployees] = React.useState<EmployeeItem[]>([])
   const [creatingEmployee, setCreatingEmployee] = React.useState(false)
   const [employeeCreateError, setEmployeeCreateError] = React.useState('')
-  const [activeNav, setActiveNav] = React.useState<NavMenu>('workspace')
+  const [activeNav, setActiveNav] = React.useState<NavMenu>('chat')
   const [refreshTick, setRefreshTick] = React.useState(0)
   const [sidePanelWidth, setSidePanelWidth] = React.useState(260)
   const [resizingPanel, setResizingPanel] = React.useState(false)
@@ -89,10 +89,11 @@ export default function App() {
   const resizeStartWidthRef = React.useRef(260)
   const tt = React.useCallback((key: string) => t(locale, key), [locale])
   const navItems: { id: NavMenu; labelKey: string; icon: string }[] = [
-    { id: 'workspace', labelKey: 'ui.nav.workspace', icon: 'W' },
-    { id: 'explorer', labelKey: 'ui.nav.explorer', icon: 'E' },
-    { id: 'search', labelKey: 'ui.nav.search', icon: 'S' },
-    { id: 'settings', labelKey: 'ui.nav.settings', icon: 'T' },
+    { id: 'home', labelKey: 'ui.nav.home', icon: 'H' },
+    { id: 'chat', labelKey: 'ui.nav.chat', icon: 'C' },
+    { id: 'build', labelKey: 'ui.nav.build', icon: 'B' },
+    { id: 'test', labelKey: 'ui.nav.test', icon: 'T' },
+    { id: 'produce', labelKey: 'ui.nav.produce', icon: 'P' },
   ]
 
   React.useEffect(() => {
@@ -662,6 +663,7 @@ export default function App() {
         employees={employeeDirectory}
         selectedEmployeeId={selectedEmployeeId}
         onSelectEmployee={setSelectedEmployeeId}
+        activeNav={activeNav}
         creatingEmployee={creatingEmployee}
         employeeCreateError={employeeCreateError}
         workspaceConfigured={Boolean(workspace?.configured)}

@@ -2,10 +2,11 @@
   "ui": {
     "brand": "Kaisha",
     "nav": {
-      "workspace": "ワークスペース",
-      "explorer": "エクスプローラー",
-      "search": "検索",
-      "settings": "設定"
+      "home": "ホーム",
+      "chat": "会話",
+      "build": "ビルド",
+      "test": "テスト",
+      "produce": "プロダクト"
     },
     "backend": "バックエンド",
     "actions": {
@@ -54,6 +55,30 @@
       "seed": {
         "employeeIntro": "マネージャーさん、{name}です。本日の進捗を memory に更新しました。",
         "managerReply": "確認しました。引き続き進めて、詰まりはすぐ共有してください。"
+      }
+    },
+    "leftPanel": {
+      "home": {
+        "empty": "ホームメニューは準備完了です。"
+      },
+      "build": {
+        "title": "ビルドチェーン",
+        "items": {
+          "resolve": "依存関係を解決",
+          "bundle": "成果物をバンドル",
+          "package": "リリースパッケージを作成"
+        }
+      },
+      "test": {
+        "title": "テストチェーン",
+        "items": {
+          "unit": "ユニットテストを実行",
+          "integration": "統合テストを実行",
+          "e2e": "E2Eテストを実行"
+        }
+      },
+      "produce": {
+        "empty": "プロダクトメニューは準備完了です。"
       }
     },
     "settings": {

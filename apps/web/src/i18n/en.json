@@ -2,10 +2,11 @@
   "ui": {
     "brand": "Kaisha",
     "nav": {
-      "workspace": "Workspace",
-      "explorer": "Explorer",
-      "search": "Search",
-      "settings": "Settings"
+      "home": "Home",
+      "chat": "Chat",
+      "build": "Build",
+      "test": "Test",
+      "produce": "Produce"
     },
     "backend": "Backend",
     "actions": {
@@ -54,6 +55,30 @@
       "seed": {
         "employeeIntro": "Hi manager, I am {name}. I have updated today's task progress in memory.",
         "managerReply": "Received. Keep it up and send blockers immediately."
+      }
+    },
+    "leftPanel": {
+      "home": {
+        "empty": "Home menu is ready."
+      },
+      "build": {
+        "title": "Build Chain",
+        "items": {
+          "resolve": "Resolve dependencies",
+          "bundle": "Bundle artifacts",
+          "package": "Package release output"
+        }
+      },
+      "test": {
+        "title": "Test Chain",
+        "items": {
+          "unit": "Run unit tests",
+          "integration": "Run integration tests",
+          "e2e": "Run end-to-end tests"
+        }
+      },
+      "produce": {
+        "empty": "Produce menu is ready."
       }
     },
     "settings": {

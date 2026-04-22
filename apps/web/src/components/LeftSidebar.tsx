@@ -1,6 +1,6 @@
 import React from 'react'
 
-export type NavMenu = 'workspace' | 'explorer' | 'search' | 'settings'
+export type NavMenu = 'home' | 'chat' | 'build' | 'test' | 'produce'
 
 type LeftSidebarProps = {
   activeNav: NavMenu
