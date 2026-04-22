@@ -7,5 +7,11 @@
   "address_empty": "設定アドレスは必須です",
   "address_format": "設定アドレスは a.b.c 形式で指定してください",
   "address_empty_segment": "設定アドレスに空のセグメントがあります",
-  "address_segment_invalid": "設定アドレスのセグメントは英数字、_、- のみ使用できます"
+  "address_segment_invalid": "設定アドレスのセグメントは英数字、_、- のみ使用できます",
+  "employee_name_empty": "従業員名は必須です",
+  "employee_department_empty": "従業員の部署は必須です",
+  "employee_role_empty": "従業員の役割は必須です",
+  "employee_id_empty": "従業員IDは必須です",
+  "employee_id_invalid": "従業員IDは英数字、_、- のみ使用できます",
+  "employee_already_exists": "従業員は既に存在します"
 }

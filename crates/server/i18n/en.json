@@ -7,5 +7,11 @@
   "address_empty": "Address cannot be empty",
   "address_format": "Address must be in a.b.c style",
   "address_empty_segment": "Address contains empty segment",
-  "address_segment_invalid": "Address segments can only contain letters, numbers, _ or -"
+  "address_segment_invalid": "Address segments can only contain letters, numbers, _ or -",
+  "employee_name_empty": "Employee name cannot be empty",
+  "employee_department_empty": "Employee department cannot be empty",
+  "employee_role_empty": "Employee role cannot be empty",
+  "employee_id_empty": "Employee id cannot be empty",
+  "employee_id_invalid": "Employee id can only contain letters, numbers, _ or -",
+  "employee_already_exists": "Employee already exists"
 }

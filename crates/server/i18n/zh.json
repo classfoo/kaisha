@@ -7,5 +7,11 @@
   "address_empty": "配置地址不能为空",
   "address_format": "配置地址必须是 a.b.c 形式",
   "address_empty_segment": "配置地址包含空片段",
-  "address_segment_invalid": "配置地址片段仅允许字母、数字、_ 或 -"
+  "address_segment_invalid": "配置地址片段仅允许字母、数字、_ 或 -",
+  "employee_name_empty": "员工姓名不能为空",
+  "employee_department_empty": "员工部门不能为空",
+  "employee_role_empty": "员工角色不能为空",
+  "employee_id_empty": "员工ID不能为空",
+  "employee_id_invalid": "员工ID仅允许字母、数字、_ 或 -",
+  "employee_already_exists": "员工已存在"
 }

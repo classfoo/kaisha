@@ -1,3 +1,4 @@
+mod employee;
 mod i18n;
 mod tools;
 
@@ -222,6 +223,8 @@ async fn set_workspace(
     let mut tools = state.tools.write().expect("tools lock poisoned");
     tools
         .reload(Some(&normalized))
+        .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    employee::ensure_default_employee(&normalized)
         .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
     workspace.path = Some(normalized);
@@ -459,6 +462,9 @@ async fn upsert_settings_item(
 }
 
 pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow::Result<()> {
+    if let Some(workspace) = workspace_init.path.as_deref() {
+        employee::ensure_default_employee(workspace)?;
+    }
     let settings_state = load_settings_state(workspace_init.path.clone())?;
     let tools_manager = ToolManager::new(workspace_init.path.as_deref())?;
     let app = Router::new()
@@ -468,6 +474,10 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
         .route(
             "/api/settings/:menu/:address",
             get(get_settings_item).put(upsert_settings_item),
+        )
+        .route(
+            "/api/employees",
+            get(employee::list_employees).post(employee::create_employee),
         )
         .route("/api/tools/catalog", get(get_tool_catalog))
         .route("/api/tools/instances", get(list_tool_instances).post(create_tool_instance))
