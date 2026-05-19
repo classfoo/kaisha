@@ -5,6 +5,54 @@ use crate::tools::{
 use serde_json::{json, Value};
 use std::process::Command;
 
+const PERMISSION_MODES: &[&str] = &[
+    "acceptEdits",
+    "bypassPermissions",
+    "default",
+    "delegate",
+    "dontAsk",
+    "plan",
+];
+
+fn auto_accept_permissions_enabled(config: &Value) -> bool {
+    config
+        .get("auto_accept_permissions")
+        .and_then(Value::as_bool)
+        .unwrap_or(true)
+}
+
+fn shell_quote(arg: &str) -> String {
+    if arg
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '=' | '/'))
+    {
+        arg.to_string()
+    } else {
+        format!("'{}'", arg.replace('\'', "'\\''"))
+    }
+}
+
+fn claude_chat_cli_args(config: &Value) -> Vec<String> {
+    let mut args = Vec::new();
+    if let Some(model) = config.get("model").and_then(Value::as_str) {
+        let model = model.trim();
+        if !model.is_empty() {
+            args.push("--model".to_string());
+            args.push(model.to_string());
+        }
+    }
+    if auto_accept_permissions_enabled(config) {
+        args.push("--dangerously-skip-permissions".to_string());
+    } else if let Some(mode) = config.get("permission_mode").and_then(Value::as_str) {
+        let mode = mode.trim();
+        if !mode.is_empty() {
+            args.push("--permission-mode".to_string());
+            args.push(mode.to_string());
+        }
+    }
+    args
+}
+
 pub struct ClaudeCodeDriver;
 
 impl CodingToolDriver for ClaudeCodeDriver {
@@ -45,7 +93,9 @@ impl CodingToolDriver for ClaudeCodeDriver {
             "command":"claude",
             "model":"claude-sonnet-4",
             "api_key_env":"ANTHROPIC_API_KEY",
-            "prompt_mode":"stdin"
+            "prompt_mode":"stdin",
+            "auto_accept_permissions": true,
+            "permission_mode":"bypassPermissions"
         })
     }
 
@@ -60,6 +110,12 @@ impl CodingToolDriver for ClaudeCodeDriver {
             .unwrap_or("stdin");
         if prompt_mode != "stdin" && prompt_mode != "arg" {
             anyhow::bail!("prompt_mode must be stdin or arg");
+        }
+        if let Some(mode) = config.get("permission_mode").and_then(Value::as_str) {
+            let mode = mode.trim();
+            if !mode.is_empty() && !PERMISSION_MODES.contains(&mode) {
+                anyhow::bail!("permission_mode must be one of: {}", PERMISSION_MODES.join(", "));
+            }
         }
         Ok(())
     }
@@ -139,19 +195,29 @@ impl CodingToolDriver for ClaudeCodeDriver {
             .and_then(Value::as_str)
             .unwrap_or("stdin");
         let prompt = crate::tools::driver::join_chat_prompt(messages);
+        let cli_args = claude_chat_cli_args(config);
+        let cli_prefix = cli_args.iter().map(|arg| shell_quote(arg)).collect::<Vec<_>>().join(" ");
 
         if prompt_mode == "arg" {
+            let mut args = cli_args;
+            args.push("-p".to_string());
+            args.push(prompt);
             Ok(ChatSubprocessSpec {
                 program: command.to_string(),
-                args: vec!["-p".to_string(), prompt],
+                args,
                 env: vec![],
             })
         } else {
+            let command_with_flags = if cli_prefix.is_empty() {
+                command.to_string()
+            } else {
+                format!("{command} {cli_prefix}")
+            };
             Ok(ChatSubprocessSpec {
                 program: "sh".to_string(),
                 args: vec![
                     "-c".to_string(),
-                    format!("printf %s \"$PROMPT\" | {} -p -", command),
+                    format!("printf %s \"$PROMPT\" | {command_with_flags} -p -"),
                 ],
                 env: vec![("PROMPT".to_string(), prompt)],
             })
@@ -181,5 +247,65 @@ impl CodingToolDriver for ClaudeCodeDriver {
             completion_tokens,
             total_tokens: prompt_tokens + completion_tokens,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tools::driver::{CodingToolDriver, ToolChatMessage};
+
+    fn sample_messages() -> Vec<ToolChatMessage> {
+        vec![ToolChatMessage {
+            role: "user".to_string(),
+            content: "hello".to_string(),
+        }]
+    }
+
+    #[test]
+    fn default_chat_spec_skips_permission_prompts() {
+        let driver = ClaudeCodeDriver;
+        let config = driver.default_config();
+        let spec = driver
+            .chat_subprocess_spec(&config, &sample_messages())
+            .expect("spec");
+        let joined = spec.args.join(" ");
+        assert!(joined.contains("--dangerously-skip-permissions"));
+        assert!(joined.contains("--model"));
+    }
+
+    #[test]
+    fn arg_mode_passes_auto_accept_flags_before_prompt() {
+        let driver = ClaudeCodeDriver;
+        let mut config = driver.default_config();
+        config["prompt_mode"] = json!("arg");
+        let spec = driver
+            .chat_subprocess_spec(&config, &sample_messages())
+            .expect("spec");
+        assert_eq!(spec.program, "claude");
+        let skip_idx = spec
+            .args
+            .iter()
+            .position(|a| a == "--dangerously-skip-permissions")
+            .expect("skip flag");
+        let prompt_idx = spec.args.iter().position(|a| a == "-p").expect("-p flag");
+        assert!(skip_idx < prompt_idx);
+    }
+
+    #[test]
+    fn permission_mode_used_when_auto_accept_disabled() {
+        let driver = ClaudeCodeDriver;
+        let mut config = driver.default_config();
+        config["auto_accept_permissions"] = json!(false);
+        config["prompt_mode"] = json!("arg");
+        let spec = driver
+            .chat_subprocess_spec(&config, &sample_messages())
+            .expect("spec");
+        assert!(spec.args.contains(&"--permission-mode".to_string()));
+        assert!(spec.args.contains(&"bypassPermissions".to_string()));
+        assert!(!spec
+            .args
+            .iter()
+            .any(|a| a == "--dangerously-skip-permissions"));
     }
 }
