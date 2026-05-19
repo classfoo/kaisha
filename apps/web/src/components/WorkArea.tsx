@@ -2,6 +2,8 @@ import React from 'react'
 import type { ChatSenderProfile } from '../features/employee-chat/useEmployeeChatMessages'
 import { EmployeeChatPanel } from './EmployeeChatPanel'
 import { EmployeeDirectoryRecord } from './EmployeeList'
+import { GitPanel } from './GitPanel'
+import type { useGitWorkspace } from '../features/git/useGitWorkspace'
 import { RpgHomeEntry } from '../features/rpg-home'
 import { NavMenu } from './LeftSidebar'
 
@@ -22,6 +24,7 @@ type WorkAreaProps = {
   apiBase: string
   locale: string
   chatSenderProfile: ChatSenderProfile
+  git: ReturnType<typeof useGitWorkspace>
   t: (key: string) => string
   onOpenSettings: () => void
   onSetWorkspaceInput: (value: string) => void
@@ -49,6 +52,7 @@ export function WorkArea({
   apiBase,
   locale,
   chatSenderProfile,
+  git,
   t,
   onOpenSettings,
   onSetWorkspaceInput,
@@ -61,6 +65,7 @@ export function WorkArea({
   const needsWorkspaceSetup = workspaceConfigured === false
   const usesSplitLayout = splitPane !== null
   const showChatPanel = activeNav === 'chat' || activeNav === 'build' || activeNav === 'test'
+  const showGitPanel = activeNav === 'git'
   const [searchQuery, setSearchQuery] = React.useState('')
   const searchPlaceholder = workspacePath?.trim()
     ? workspacePath.trim()
@@ -72,7 +77,7 @@ export function WorkArea({
 
   const actionKeys: string[] = (() => {
     if (activeNav === 'home') return ['ui.actions.settings']
-    if (activeNav === 'produce') return ['ui.actions.share', 'ui.actions.settings']
+    if (activeNav === 'produce' || activeNav === 'git') return ['ui.actions.share', 'ui.actions.settings']
     return ['ui.actions.run', 'ui.actions.share', 'ui.actions.settings']
   })()
   const iconForAction = (key: string) => {
@@ -147,6 +152,10 @@ export function WorkArea({
           t={t}
         />
       )
+    }
+
+    if (showGitPanel) {
+      return <GitPanel git={git} t={t} />
     }
 
     if (activeNav === 'home') {

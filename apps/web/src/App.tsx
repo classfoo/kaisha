@@ -2,6 +2,7 @@ import React from 'react'
 import { Locale, resolveLocale, t } from './i18n'
 import { EmployeeDirectoryRecord } from './components/EmployeeList'
 import { LeftSidebar, NavMenu } from './components/LeftSidebar'
+import { useGitWorkspace } from './features/git/useGitWorkspace'
 import { LeftPanel } from './components/LeftPanel'
 import { WorkArea } from './components/WorkArea'
 
@@ -119,10 +120,13 @@ export default function App() {
     { id: 'build', labelKey: 'ui.nav.build' },
     { id: 'test', labelKey: 'ui.nav.test' },
     { id: 'produce', labelKey: 'ui.nav.produce' },
+    { id: 'git', labelKey: 'ui.nav.git' },
   ]
   const bottomNavItems: { id: 'settings'; labelKey: string }[] = [
     { id: 'settings', labelKey: 'ui.actions.settings' },
   ]
+  const git = useGitWorkspace(API_BASE, locale, Boolean(workspace?.configured), refreshTick)
+  const [newGitRepoName, setNewGitRepoName] = React.useState('')
 
   React.useEffect(() => {
     fetch(`${API_BASE}/api/health`)
@@ -807,7 +811,8 @@ export default function App() {
     )
   }
 
-  const usesSplitWorkArea = activeNav === 'chat' || activeNav === 'build' || activeNav === 'test'
+  const usesSplitWorkArea =
+    activeNav === 'chat' || activeNav === 'build' || activeNav === 'test' || activeNav === 'git'
 
   return (
     <div className="app-shell">
@@ -838,6 +843,19 @@ export default function App() {
             t={tt}
             onCreateEmployee={() => void createSidebarEmployee()}
             onResizeMouseDown={startResizePanel}
+            gitRepos={git.repos}
+            selectedGitRepoId={git.selectedRepoId}
+            onSelectGitRepo={(id) => void git.selectRepo(id)}
+            newGitRepoName={newGitRepoName}
+            onNewGitRepoNameChange={setNewGitRepoName}
+            onCreateGitRepo={() => {
+              const name = newGitRepoName.trim()
+              if (!name) return
+              void git.createRepo(name).then(() => setNewGitRepoName(''))
+            }}
+            gitBusy={git.busy}
+            gitError={git.error}
+            gitLoading={git.loading}
           />
         ) : null}
         workspaceConfigured={Boolean(workspace?.configured)}
@@ -853,6 +871,7 @@ export default function App() {
         apiBase={API_BASE}
         locale={locale}
         chatSenderProfile={chatSenderProfile}
+        git={git}
         t={tt}
         onOpenSettings={() => setSettingsOpen(true)}
         onSetWorkspaceInput={setWorkspaceInput}

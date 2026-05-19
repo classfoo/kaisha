@@ -23,5 +23,15 @@
   "git_project_empty": "Gitプロジェクト名は必須です",
   "git_project_invalid": "Gitプロジェクト名には英数字、_、-、. のみ使用できます",
   "git_project_not_found": "ワークスペース内にGitプロジェクトが存在しません",
-  "git_args_empty": "Gitコマンド引数は必須です"
+  "git_args_empty": "Gitコマンド引数は必須です",
+  "git_repo_id_empty": "GitリポジトリIDは必須です",
+  "git_repo_id_invalid": "GitリポジトリIDは英数字、_、- のみ使用できます",
+  "git_repo_name_empty": "Gitリポジトリ名は必須です",
+  "git_repo_not_found": "Gitリポジトリが見つかりません",
+  "git_repo_already_exists": "Gitリポジトリは既に存在します",
+  "git_not_initialized": "Gitリポジトリが初期化されていません",
+  "git_config_injection_denied": "Git設定の注入は許可されていません",
+  "git_command_failed": "Gitコマンドの実行に失敗しました",
+  "git_clone_target_exists": "クローン先ディレクトリは既に存在します",
+  "git_invalid_operation": "無効なGit操作です"
 }

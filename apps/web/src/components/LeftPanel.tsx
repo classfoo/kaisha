@@ -1,5 +1,7 @@
 import React from 'react'
+import type { GitRepo } from '../features/git/gitApi'
 import { EmployeeDirectoryRecord, EmployeeList } from './EmployeeList'
+import { GitRepoList } from './GitRepoList'
 import { NavMenu } from './LeftSidebar'
 
 type LeftPanelProps = {
@@ -16,6 +18,15 @@ type LeftPanelProps = {
   t: (key: string) => string
   onCreateEmployee: () => void
   onResizeMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void
+  gitRepos: GitRepo[]
+  selectedGitRepoId: string | null
+  onSelectGitRepo: (id: string) => void
+  newGitRepoName: string
+  onNewGitRepoNameChange: (value: string) => void
+  onCreateGitRepo: () => void
+  gitBusy: boolean
+  gitError: string | null
+  gitLoading: boolean
 }
 
 export function LeftPanel({
@@ -32,6 +43,15 @@ export function LeftPanel({
   t,
   onCreateEmployee,
   onResizeMouseDown,
+  gitRepos,
+  selectedGitRepoId,
+  onSelectGitRepo,
+  newGitRepoName,
+  onNewGitRepoNameChange,
+  onCreateGitRepo,
+  gitBusy,
+  gitError,
+  gitLoading,
 }: LeftPanelProps) {
   const renderPanelBody = () => {
     if (activeNav === 'chat') {
@@ -62,6 +82,39 @@ export function LeftPanel({
             <div className="side-panel__status">
               <span>{t('ui.backend')}</span>
               <span className={`status status--${status}`}>{status}</span>
+            </div>
+          </div>
+        </>
+      )
+    }
+
+    if (activeNav === 'git') {
+      return (
+        <>
+          <GitRepoList
+            repos={gitRepos}
+            selectedRepoId={selectedGitRepoId}
+            onSelectRepo={onSelectGitRepo}
+            t={t}
+          />
+          <div className="side-panel__footer">
+            <div className="side-panel__toolbar">
+              <input
+                className="settings-input side-panel__git-name"
+                value={newGitRepoName}
+                onChange={(event) => onNewGitRepoNameChange(event.target.value)}
+                placeholder={t('ui.git.newRepoPlaceholder')}
+                disabled={gitBusy || gitLoading}
+              />
+              <button
+                type="button"
+                className="action-btn side-panel__add-employee"
+                onClick={onCreateGitRepo}
+                disabled={gitBusy || gitLoading || !newGitRepoName.trim()}
+              >
+                {gitBusy ? t('ui.git.creating') : t('ui.git.createRepo')}
+              </button>
+              {gitError ? <div className="side-panel__error">{gitError}</div> : null}
             </div>
           </div>
         </>

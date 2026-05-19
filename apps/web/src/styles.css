@@ -779,6 +779,144 @@ select,
   border: 1px solid rgba(240, 120, 120, 0.25);
 }
 
+.git-repo-list__badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #2a3d5c;
+  color: #9ec4f0;
+  border: 1px solid #3d5a82;
+  white-space: nowrap;
+}
+
+.side-panel__git-name {
+  width: 100%;
+}
+
+.git-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 2px;
+}
+
+.git-panel__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+}
+
+.git-panel__title {
+  margin: 0;
+  font-size: 18px;
+}
+
+.git-panel__path {
+  font-size: 11px;
+  color: #8b99b0;
+  font-family: ui-monospace, monospace;
+  word-break: break-all;
+}
+
+.git-panel__error {
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: #f0a8a8;
+  background: rgba(240, 120, 120, 0.1);
+  border: 1px solid rgba(240, 120, 120, 0.25);
+  font-size: 12px;
+}
+
+.git-panel__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.git-panel__section--row {
+  gap: 10px;
+}
+
+.git-panel__section-title {
+  margin: 0;
+  font-size: 13px;
+  color: #aeb9cf;
+  font-weight: 600;
+}
+
+.git-panel__status-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  font-size: 13px;
+}
+
+.git-panel__porcelain,
+.git-panel__output {
+  margin: 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: #0f141e;
+  border: 1px solid #2b3446;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow: auto;
+  max-height: 200px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.git-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.git-panel__input {
+  width: 100%;
+  border: 1px solid #3a465e;
+  border-radius: 8px;
+  background: #101521;
+  color: #dbe3f0;
+  font-size: 13px;
+  padding: 8px 10px;
+}
+
+.git-panel__textarea {
+  resize: vertical;
+  min-height: 64px;
+  font-family: inherit;
+}
+
+.git-panel__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.git-panel__label {
+  font-size: 12px;
+  color: #9ba7be;
+}
+
+.git-panel__field-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.git-panel__status,
+.git-panel__empty {
+  color: #97a2b7;
+  padding: 12px 4px;
+}
+
 .chat-input-wrap {
   border: 1px solid #2b3446;
   border-radius: 10px;

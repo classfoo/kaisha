@@ -23,5 +23,15 @@
   "git_project_empty": "Git 项目名称不能为空",
   "git_project_invalid": "Git 项目名称仅允许字母、数字、_、- 或 .",
   "git_project_not_found": "工作区中不存在该 Git 项目",
-  "git_args_empty": "Git 命令参数不能为空"
+  "git_args_empty": "Git 命令参数不能为空",
+  "git_repo_id_empty": "Git 仓库 ID 不能为空",
+  "git_repo_id_invalid": "Git 仓库 ID 仅允许字母、数字、_ 或 -",
+  "git_repo_name_empty": "Git 仓库名称不能为空",
+  "git_repo_not_found": "未找到该 Git 仓库",
+  "git_repo_already_exists": "Git 仓库已存在",
+  "git_not_initialized": "Git 仓库尚未初始化",
+  "git_config_injection_denied": "不允许通过 Git 注入配置",
+  "git_command_failed": "Git 命令执行失败",
+  "git_clone_target_exists": "克隆目标目录已存在",
+  "git_invalid_operation": "无效的 Git 操作"
 }

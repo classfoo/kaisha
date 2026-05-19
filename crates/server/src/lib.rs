@@ -236,6 +236,8 @@ async fn set_workspace(
         .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
     employee::ensure_default_employee(&normalized)
         .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    git::ensure_workspace_repos(&normalized)
+        .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
     workspace.path = Some(normalized);
     workspace.source = WorkspaceSource::Config;
@@ -474,6 +476,7 @@ async fn upsert_settings_item(
 pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow::Result<()> {
     if let Some(workspace) = workspace_init.path.as_deref() {
         employee::ensure_default_employee(workspace)?;
+        git::ensure_workspace_repos(workspace)?;
     }
     let settings_state = load_settings_state(workspace_init.path.clone())?;
     let tools_manager = ToolManager::new(workspace_init.path.as_deref())?;
@@ -505,6 +508,9 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
         .route("/api/tools/catalog", get(get_tool_catalog))
         .route("/api/tools/instances", get(list_tool_instances).post(create_tool_instance))
         .route("/api/tools/instances/:id", get(get_tool_instance).put(update_tool_instance))
+        .route("/api/git/repos", get(git::list_git_repos).post(git::create_git_repo))
+        .route("/api/git/repos/:id", get(git::get_git_repo))
+        .route("/api/git/repos/:id/op", axum::routing::post(git::run_git_operation))
         .route("/api/git/init", axum::routing::post(git::init_git_project))
         .route("/api/git/exec", axum::routing::post(git::exec_git))
         .layer(cors)

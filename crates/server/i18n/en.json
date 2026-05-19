@@ -23,5 +23,15 @@
   "git_project_empty": "Git project name cannot be empty",
   "git_project_invalid": "Git project name can only contain letters, numbers, _, - or .",
   "git_project_not_found": "Git project does not exist in workspace",
-  "git_args_empty": "Git command args cannot be empty"
+  "git_args_empty": "Git command args cannot be empty",
+  "git_repo_id_empty": "Git repository id cannot be empty",
+  "git_repo_id_invalid": "Git repository id can only contain letters, numbers, _ or -",
+  "git_repo_name_empty": "Git repository name cannot be empty",
+  "git_repo_not_found": "Git repository not found",
+  "git_repo_already_exists": "Git repository already exists",
+  "git_not_initialized": "Git repository is not initialized",
+  "git_config_injection_denied": "Git config injection is not allowed",
+  "git_command_failed": "Git command failed",
+  "git_clone_target_exists": "Clone target directory already exists",
+  "git_invalid_operation": "Invalid git operation"
 }
