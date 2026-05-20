@@ -1,7 +1,10 @@
 use crate::{
     employee::{employee_root, normalize_employee_id},
+    employee_requirement_agent::{
+        build_requirement_agent_messages, prior_conversation_context, requirement_agent_workdir,
+    },
     i18n,
-    tools::{driver::ToolChatMessage, manager::ToolManager},
+    tools::manager::ToolManager,
     AppState,
 };
 use axum::{
@@ -148,13 +151,29 @@ fn normalize_optional_text(value: Option<String>) -> Option<String> {
     })
 }
 
-fn to_tool_chat(msgs: &[StoredMessage]) -> Vec<ToolChatMessage> {
-    msgs.iter()
-        .map(|m| ToolChatMessage {
-            role: m.role.clone(),
-            content: m.content.clone(),
-        })
-        .collect()
+fn run_requirement_agent_turn(
+    tools: &ToolManager,
+    workspace: &Path,
+    user_input: &str,
+    conv_messages: &[StoredMessage],
+) -> Result<(crate::tools::model::ToolInstance, crate::tools::driver::ToolExecutionResult), String> {
+    let workdir = requirement_agent_workdir(workspace).map_err(|e| e.to_string())?;
+    let prior_rows: Vec<(String, String, u64)> = conv_messages
+        .iter()
+        .map(|m| (m.role.clone(), m.content.clone(), m.created_at_ms))
+        .collect();
+    let prior = prior_conversation_context(&prior_rows);
+    let tool_messages =
+        build_requirement_agent_messages(workspace, user_input, &prior).map_err(|e| e.to_string())?;
+    tools.execute_code_chat(&workdir, &tool_messages).map_err(|e| {
+        let msg = e.root_cause().to_string();
+        if msg == "no_enabled_coding_tool" {
+            "chat_tool_missing".to_string()
+        } else {
+            tracing::warn!(error = %e, "requirement agent execution failed");
+            msg
+        }
+    })
 }
 
 fn map_process_error(err: String) -> &'static str {
@@ -191,25 +210,18 @@ fn process_post_message(
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0);
+    let user_content = trimmed.clone();
     conv.messages.push(StoredMessage {
         id: new_message_id("msg_user"),
         role: "user".to_string(),
-        content: trimmed,
+        content: user_content,
         created_at_ms: now,
         sender_name,
         sender_avatar_url,
     });
 
-    let tool_line = to_tool_chat(&conv.messages);
-    let (instance, exec_result) = tools.execute_code_chat(&workspace, &tool_line).map_err(|e| {
-        let msg = e.root_cause().to_string();
-        if msg == "no_enabled_coding_tool" {
-            "chat_tool_missing".to_string()
-        } else {
-            tracing::warn!(error = %e, "code chat tool execution failed");
-            msg
-        }
-    })?;
+    let (instance, exec_result) =
+        run_requirement_agent_turn(&tools, &workspace, &trimmed, &conv.messages)?;
 
     let assistant_now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -388,29 +400,39 @@ async fn run_stream_turn_inner(
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0);
+    let user_content = trimmed.clone();
     conv.messages.push(StoredMessage {
         id: new_message_id("msg_user"),
         role: "user".to_string(),
-        content: trimmed,
+        content: user_content,
         created_at_ms: now,
         sender_name,
         sender_avatar_url,
     });
     save_conversation(&conv_path, &conv).map_err(|e| e.to_string())?;
 
-    let tool_line = to_tool_chat(&conv.messages);
+    let workdir = requirement_agent_workdir(&workspace).map_err(|e| e.to_string())?;
+    let prior_rows: Vec<(String, String, u64)> = conv
+        .messages
+        .iter()
+        .map(|m| (m.role.clone(), m.content.clone(), m.created_at_ms))
+        .collect();
+    let prior = prior_conversation_context(&prior_rows);
+    let tool_messages =
+        build_requirement_agent_messages(&workspace, &trimmed, &prior).map_err(|e| e.to_string())?;
+
     let (delta_tx, delta_rx) = tokio::sync::mpsc::channel::<String>(64);
     let forward = tokio::spawn(forward_sse_deltas(delta_rx, sse_tx.clone()));
 
     let exec = tools
-        .execute_code_chat_streaming(&workspace, &tool_line, delta_tx)
+        .execute_code_chat_streaming(&workdir, &tool_messages, delta_tx)
         .await
         .map_err(|e| {
             let msg = e.root_cause().to_string();
             if msg == "no_enabled_coding_tool" {
                 "chat_tool_missing".to_string()
             } else {
-                tracing::warn!(error = %e, "code chat tool execution failed (stream)");
+                tracing::warn!(error = %e, "requirement agent execution failed (stream)");
                 msg
             }
         });

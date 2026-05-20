@@ -34,7 +34,7 @@ pub enum RequirementPhase {
 }
 
 impl RequirementPhase {
-    fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             Self::Collection => "collection",
             Self::Review => "review",
@@ -115,6 +115,41 @@ fn workspace_root(state: &AppState) -> Option<PathBuf> {
 
 pub fn requirements_root(workspace: &Path) -> PathBuf {
     workspace.join("requirements")
+}
+
+pub fn ensure_requirements_root(workspace: &Path) -> anyhow::Result<PathBuf> {
+    let root = requirements_root(workspace);
+    fs::create_dir_all(&root)?;
+    Ok(root)
+}
+
+pub fn phase_in_progress(phase: &RequirementPhase) -> bool {
+    !matches!(phase, RequirementPhase::Release)
+}
+
+/// Lists all requirements under the workspace, newest updates first.
+pub fn list_requirement_summaries(workspace: &Path) -> anyhow::Result<Vec<RequirementSummary>> {
+    let root = requirements_root(workspace);
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
+    let mut items = Vec::new();
+    for entry in fs::read_dir(&root)? {
+        let entry = entry?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let id = entry.file_name().to_string_lossy().to_string();
+        if !path.join(REQUIREMENT_FILE).exists() {
+            continue;
+        }
+        if let Ok(item) = load_summary(workspace, &id) {
+            items.push(item);
+        }
+    }
+    items.sort_by(|a, b| b.updated_at_ms.cmp(&a.updated_at_ms));
+    Ok(items)
 }
 
 fn now_ms() -> u64 {
@@ -202,7 +237,7 @@ fn list_subdirs(dir: &Path) -> anyhow::Result<Vec<String>> {
     Ok(names)
 }
 
-fn load_detail(workspace: &Path, id: &str) -> anyhow::Result<RequirementDetail> {
+pub(crate) fn load_requirement_detail(workspace: &Path, id: &str) -> anyhow::Result<RequirementDetail> {
     let dir = requirement_dir(workspace, id);
     let file_path = dir.join(REQUIREMENT_FILE);
     let raw = fs::read_to_string(&file_path)?;
@@ -224,7 +259,7 @@ fn load_detail(workspace: &Path, id: &str) -> anyhow::Result<RequirementDetail> 
 }
 
 fn load_summary(workspace: &Path, id: &str) -> anyhow::Result<RequirementSummary> {
-    let detail = load_detail(workspace, id)?;
+    let detail = load_requirement_detail(workspace, id)?;
     Ok(RequirementSummary {
         id: detail.id,
         title: detail.title,
@@ -245,28 +280,8 @@ pub async fn list_requirements(
             i18n::msg(&headers, "workspace_not_configured"),
         ));
     };
-    let root = requirements_root(&workspace);
-    if !root.exists() {
-        return Ok(Json(Vec::new()));
-    }
-    let mut items = Vec::new();
-    for entry in fs::read_dir(&root)
-        .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
-        .flatten()
-    {
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-        let id = entry.file_name().to_string_lossy().to_string();
-        if !path.join(REQUIREMENT_FILE).exists() {
-            continue;
-        }
-        if let Ok(item) = load_summary(&workspace, &id) {
-            items.push(item);
-        }
-    }
-    items.sort_by(|a, b| b.updated_at_ms.cmp(&a.updated_at_ms));
+    let items = list_requirement_summaries(&workspace)
+        .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
     Ok(Json(items))
 }
 
@@ -289,7 +304,7 @@ pub async fn get_requirement(
             i18n::msg(&headers, "requirement_not_found"),
         ));
     }
-    load_detail(&workspace, &id)
+    load_requirement_detail(&workspace, &id)
         .map(Json)
         .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
 }
@@ -340,7 +355,7 @@ pub async fn create_requirement(
         format_requirement_md(&meta, &content),
     )
     .map_err(internal_err)?;
-    load_detail(&workspace, &id)
+    load_requirement_detail(&workspace, &id)
         .map(Json)
         .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
 }
@@ -391,7 +406,7 @@ pub async fn update_requirement(
     }
     meta.updated_at_ms = now_ms();
     fs::write(&file_path, format_requirement_md(&meta, &content)).map_err(internal_err)?;
-    load_detail(&workspace, &id)
+    load_requirement_detail(&workspace, &id)
         .map(Json)
         .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
 }

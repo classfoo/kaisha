@@ -1,5 +1,6 @@
 mod employee;
 mod employee_chat;
+mod employee_requirement_agent;
 mod git;
 mod i18n;
 mod requirement;
