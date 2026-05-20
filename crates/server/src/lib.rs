@@ -2,6 +2,7 @@ mod employee;
 mod employee_chat;
 mod git;
 mod i18n;
+mod requirement;
 mod tools;
 
 use application::HealthService;
@@ -513,6 +514,14 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
         .route("/api/git/repos/:id/op", axum::routing::post(git::run_git_operation))
         .route("/api/git/init", axum::routing::post(git::init_git_project))
         .route("/api/git/exec", axum::routing::post(git::exec_git))
+        .route(
+            "/api/requirements",
+            get(requirement::list_requirements).post(requirement::create_requirement),
+        )
+        .route(
+            "/api/requirements/:id",
+            get(requirement::get_requirement).put(requirement::update_requirement),
+        )
         .layer(cors)
         .with_state(AppState {
             health: HealthService,

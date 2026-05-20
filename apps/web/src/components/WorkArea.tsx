@@ -3,7 +3,10 @@ import type { ChatSenderProfile } from '../features/employee-chat/useEmployeeCha
 import { EmployeeChatPanel } from './EmployeeChatPanel'
 import { EmployeeDirectoryRecord } from './EmployeeList'
 import { GitPanel } from './GitPanel'
+import { RequirementDetailPanel } from './RequirementDetailPanel'
 import type { useGitWorkspace } from '../features/git/useGitWorkspace'
+import type { useRequirementsWorkspace } from '../features/requirements/useRequirementsWorkspace'
+import type { RequirementPhase } from '../features/requirements/requirementsApi'
 import { RpgHomeEntry } from '../features/rpg-home'
 import { NavMenu } from './LeftSidebar'
 
@@ -25,6 +28,8 @@ type WorkAreaProps = {
   locale: string
   chatSenderProfile: ChatSenderProfile
   git: ReturnType<typeof useGitWorkspace>
+  requirements: ReturnType<typeof useRequirementsWorkspace>
+  requirementPhaseLabel: (phase: RequirementPhase) => string
   t: (key: string) => string
   onOpenSettings: () => void
   onSetWorkspaceInput: (value: string) => void
@@ -53,6 +58,8 @@ export function WorkArea({
   locale,
   chatSenderProfile,
   git,
+  requirements,
+  requirementPhaseLabel,
   t,
   onOpenSettings,
   onSetWorkspaceInput,
@@ -66,6 +73,7 @@ export function WorkArea({
   const usesSplitLayout = splitPane !== null
   const showChatPanel = activeNav === 'chat' || activeNav === 'build' || activeNav === 'test'
   const showGitPanel = activeNav === 'git'
+  const showRequirementsPanel = activeNav === 'requirements'
   const [searchQuery, setSearchQuery] = React.useState('')
   const searchPlaceholder = workspacePath?.trim()
     ? workspacePath.trim()
@@ -77,7 +85,9 @@ export function WorkArea({
 
   const actionKeys: string[] = (() => {
     if (activeNav === 'home') return ['ui.actions.settings']
-    if (activeNav === 'produce' || activeNav === 'git') return ['ui.actions.share', 'ui.actions.settings']
+    if (activeNav === 'produce' || activeNav === 'git' || activeNav === 'requirements') {
+      return ['ui.actions.share', 'ui.actions.settings']
+    }
     return ['ui.actions.run', 'ui.actions.share', 'ui.actions.settings']
   })()
   const iconForAction = (key: string) => {
@@ -156,6 +166,16 @@ export function WorkArea({
 
     if (showGitPanel) {
       return <GitPanel git={git} t={t} />
+    }
+
+    if (showRequirementsPanel) {
+      return (
+        <RequirementDetailPanel
+          requirements={requirements}
+          phaseLabel={requirementPhaseLabel}
+          t={t}
+        />
+      )
     }
 
     if (activeNav === 'home') {

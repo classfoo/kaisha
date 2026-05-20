@@ -1,7 +1,7 @@
 import React from 'react'
 import { MacWindowControls } from './MacWindowControls'
 
-export type NavMenu = 'home' | 'chat' | 'build' | 'test' | 'produce' | 'git'
+export type NavMenu = 'home' | 'chat' | 'build' | 'test' | 'produce' | 'git' | 'requirements'
 
 type LeftSidebarProps = {
   activeNav: NavMenu
@@ -47,6 +47,18 @@ function SidebarIcon({ menu }: { menu: NavMenu }) {
       <svg viewBox="0 0 24 24" aria-hidden="true" className="left-rail__icon-svg">
         <path
           d="M6 4h6l2 2h6v14H6V4zm3 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm6 4a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+        />
+      </svg>
+    )
+  }
+  if (menu === 'requirements') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="left-rail__icon-svg">
+        <path
+          d="M7 4h10v3H7V4zm0 6h10v3H7v-3zm0 6h7v3H7v-3z"
           fill="none"
           stroke="currentColor"
           strokeWidth="1.8"

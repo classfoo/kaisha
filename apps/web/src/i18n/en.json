@@ -7,7 +7,8 @@
       "build": "Build",
       "test": "Test",
       "produce": "Produce",
-      "git": "Git"
+      "git": "Git",
+      "requirements": "Requirements"
     },
     "backend": "Backend",
     "actions": {
@@ -207,6 +208,33 @@
         "checkoutNew": "Create branch",
         "addRemote": "Add remote",
         "runRaw": "Run"
+      }
+    },
+    "requirements": {
+      "listTitle": "Requirements",
+      "empty": "No requirements yet",
+      "create": "Create requirement",
+      "creating": "Creating…",
+      "loading": "Loading requirements…",
+      "selectHint": "Select a requirement from the list",
+      "newTitlePlaceholder": "Requirement title",
+      "titleLabel": "Title",
+      "phaseLabel": "Phase",
+      "timelineLabel": "Requirement lifecycle",
+      "timelineHint": "Click a stage to set the current phase",
+      "contentLabel": "Content",
+      "contentPlaceholder": "Write requirement details in Markdown…",
+      "dirLabel": "Directory",
+      "subdirsLabel": "Subdirectories",
+      "save": "Save",
+      "saving": "Saving…",
+      "phases": {
+        "collection": "Collection",
+        "review": "Review",
+        "confirm": "Confirm",
+        "development": "Development",
+        "testing": "Testing",
+        "release": "Release"
       }
     },
     "rpgHome": {

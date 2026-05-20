@@ -917,6 +917,237 @@ select,
   padding: 12px 4px;
 }
 
+.requirement-item__phase {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.requirement-item__phase-label {
+  color: #8b99b0;
+}
+
+.requirement-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 2px;
+}
+
+.requirement-detail--empty {
+  color: #97a2b7;
+  padding: 12px 4px;
+}
+
+.requirement-detail__header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.requirement-detail__title {
+  width: 100%;
+  border: 1px solid #3a465e;
+  border-radius: 8px;
+  background: #101521;
+  color: #e8edf5;
+  font-size: 18px;
+  font-weight: 600;
+  padding: 8px 10px;
+}
+
+.requirement-detail__timeline-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.requirement-detail__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.requirement-detail__label {
+  margin: 0;
+  font-size: 12px;
+  color: #9ba7be;
+  font-weight: 600;
+}
+
+.requirement-timeline {
+  width: 100%;
+}
+
+.requirement-timeline__hint {
+  margin: 0 0 10px;
+  font-size: 11px;
+  color: #7d8aa3;
+}
+
+.requirement-timeline__rail {
+  position: relative;
+  padding: 0 8px;
+}
+
+.requirement-timeline__line {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 13px;
+  height: 2px;
+  background: #2b3446;
+  border-radius: 1px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.requirement-timeline__line-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3d7dd6, #4a9eff);
+  border-radius: 1px;
+  transition: width 0.2s ease;
+}
+
+.requirement-timeline__track {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.requirement-timeline__step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: 72px;
+  padding: 0 4px 4px;
+}
+
+.requirement-timeline__node {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.requirement-timeline__node:hover:not(:disabled) {
+  transform: scale(1.08);
+}
+
+.requirement-timeline__node:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.requirement-timeline__dot {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #2b3446;
+  border: 2px solid #4a5568;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.requirement-timeline__step--done .requirement-timeline__dot {
+  background: #3d7dd6;
+  border-color: #5a9eff;
+}
+
+.requirement-timeline__step--current .requirement-timeline__dot {
+  width: 14px;
+  height: 14px;
+  background: #4a9eff;
+  border-color: #7eb8ff;
+  box-shadow: 0 0 0 4px rgba(74, 158, 255, 0.25);
+}
+
+.requirement-timeline__step--upcoming .requirement-timeline__dot {
+  background: #141b28;
+  border-color: #3a465e;
+}
+
+.requirement-timeline__label {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.25;
+  text-align: center;
+  color: #8b99b0;
+  word-break: break-word;
+  max-width: 88px;
+}
+
+.requirement-timeline__step--done .requirement-timeline__label {
+  color: #aeb9cf;
+}
+
+.requirement-timeline__step--current .requirement-timeline__label {
+  color: #dbe8ff;
+  font-weight: 600;
+}
+
+.requirement-detail__path,
+.requirement-detail__subdirs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 8px;
+}
+
+.requirement-detail__dir {
+  font-size: 11px;
+  color: #8b99b0;
+  font-family: ui-monospace, monospace;
+  word-break: break-all;
+}
+
+.requirement-detail__subdir-list {
+  font-size: 12px;
+  color: #aeb9cf;
+}
+
+.requirement-detail__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+
+.requirement-detail__editor {
+  flex: 1;
+  min-height: 240px;
+  resize: vertical;
+  width: 100%;
+  border: 1px solid #3a465e;
+  border-radius: 8px;
+  background: #0f141e;
+  color: #dbe3f0;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  font-family: ui-monospace, monospace;
+}
+
 .chat-input-wrap {
   border: 1px solid #2b3446;
   border-radius: 10px;

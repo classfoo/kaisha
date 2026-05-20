@@ -2,6 +2,8 @@ import React from 'react'
 import type { GitRepo } from '../features/git/gitApi'
 import { EmployeeDirectoryRecord, EmployeeList } from './EmployeeList'
 import { GitRepoList } from './GitRepoList'
+import type { RequirementPhase, RequirementSummary } from '../features/requirements/requirementsApi'
+import { RequirementList } from './RequirementList'
 import { NavMenu } from './LeftSidebar'
 
 type LeftPanelProps = {
@@ -27,6 +29,16 @@ type LeftPanelProps = {
   gitBusy: boolean
   gitError: string | null
   gitLoading: boolean
+  requirements: RequirementSummary[]
+  selectedRequirementId: string | null
+  onSelectRequirement: (id: string) => void
+  newRequirementTitle: string
+  onNewRequirementTitleChange: (value: string) => void
+  onCreateRequirement: () => void
+  requirementsBusy: boolean
+  requirementsError: string | null
+  requirementsLoading: boolean
+  requirementPhaseLabel: (phase: RequirementPhase) => string
 }
 
 export function LeftPanel({
@@ -52,6 +64,16 @@ export function LeftPanel({
   gitBusy,
   gitError,
   gitLoading,
+  requirements,
+  selectedRequirementId,
+  onSelectRequirement,
+  newRequirementTitle,
+  onNewRequirementTitleChange,
+  onCreateRequirement,
+  requirementsBusy,
+  requirementsError,
+  requirementsLoading,
+  requirementPhaseLabel,
 }: LeftPanelProps) {
   const renderPanelBody = () => {
     if (activeNav === 'chat') {
@@ -82,6 +104,40 @@ export function LeftPanel({
             <div className="side-panel__status">
               <span>{t('ui.backend')}</span>
               <span className={`status status--${status}`}>{status}</span>
+            </div>
+          </div>
+        </>
+      )
+    }
+
+    if (activeNav === 'requirements') {
+      return (
+        <>
+          <RequirementList
+            items={requirements}
+            selectedId={selectedRequirementId}
+            onSelect={onSelectRequirement}
+            phaseLabel={requirementPhaseLabel}
+            t={t}
+          />
+          <div className="side-panel__footer">
+            <div className="side-panel__toolbar">
+              <input
+                className="settings-input side-panel__git-name"
+                value={newRequirementTitle}
+                onChange={(event) => onNewRequirementTitleChange(event.target.value)}
+                placeholder={t('ui.requirements.newTitlePlaceholder')}
+                disabled={requirementsBusy || requirementsLoading}
+              />
+              <button
+                type="button"
+                className="action-btn side-panel__add-employee"
+                onClick={onCreateRequirement}
+                disabled={requirementsBusy || requirementsLoading || !newRequirementTitle.trim()}
+              >
+                {requirementsBusy ? t('ui.requirements.creating') : t('ui.requirements.create')}
+              </button>
+              {requirementsError ? <div className="side-panel__error">{requirementsError}</div> : null}
             </div>
           </div>
         </>

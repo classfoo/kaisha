@@ -33,5 +33,13 @@
   "git_config_injection_denied": "不允许通过 Git 注入配置",
   "git_command_failed": "Git 命令执行失败",
   "git_clone_target_exists": "克隆目标目录已存在",
-  "git_invalid_operation": "无效的 Git 操作"
+  "git_invalid_operation": "无效的 Git 操作",
+  "requirement_id_empty": "需求 ID 不能为空",
+  "requirement_id_invalid": "需求 ID 只能包含字母、数字、下划线或连字符",
+  "requirement_title_empty": "需求标题不能为空",
+  "requirement_not_found": "未找到该需求",
+  "requirement_already_exists": "需求已存在",
+  "requirement_phase_invalid": "需求阶段无效",
+  "requirement_frontmatter_missing": "需求文件缺少 YAML 元信息",
+  "requirement_parse_failed": "解析需求文件失败"
 }

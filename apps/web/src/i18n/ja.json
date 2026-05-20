@@ -7,7 +7,8 @@
       "build": "ビルド",
       "test": "テスト",
       "produce": "プロダクト",
-      "git": "Git"
+      "git": "Git",
+      "requirements": "要件"
     },
     "backend": "バックエンド",
     "actions": {
@@ -207,6 +208,33 @@
         "checkoutNew": "ブランチ作成",
         "addRemote": "リモート追加",
         "runRaw": "実行"
+      }
+    },
+    "requirements": {
+      "listTitle": "要件一覧",
+      "empty": "要件がありません",
+      "create": "要件を作成",
+      "creating": "作成中…",
+      "loading": "要件を読み込み中…",
+      "selectHint": "一覧から要件を選択してください",
+      "newTitlePlaceholder": "要件タイトル",
+      "titleLabel": "タイトル",
+      "phaseLabel": "フェーズ",
+      "timelineLabel": "要件ライフサイクル",
+      "timelineHint": "ステージをクリックして現在のフェーズを変更",
+      "contentLabel": "内容",
+      "contentPlaceholder": "Markdownで要件本文を記述…",
+      "dirLabel": "ディレクトリ",
+      "subdirsLabel": "サブディレクトリ",
+      "save": "保存",
+      "saving": "保存中…",
+      "phases": {
+        "collection": "収集",
+        "review": "レビュー",
+        "confirm": "確認",
+        "development": "開発",
+        "testing": "テスト",
+        "release": "リリース"
       }
     },
     "rpgHome": {

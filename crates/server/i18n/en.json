@@ -33,5 +33,13 @@
   "git_config_injection_denied": "Git config injection is not allowed",
   "git_command_failed": "Git command failed",
   "git_clone_target_exists": "Clone target directory already exists",
-  "git_invalid_operation": "Invalid git operation"
+  "git_invalid_operation": "Invalid git operation",
+  "requirement_id_empty": "Requirement id cannot be empty",
+  "requirement_id_invalid": "Requirement id can only contain letters, numbers, _ or -",
+  "requirement_title_empty": "Requirement title cannot be empty",
+  "requirement_not_found": "Requirement not found",
+  "requirement_already_exists": "Requirement already exists",
+  "requirement_phase_invalid": "Requirement phase is invalid",
+  "requirement_frontmatter_missing": "Requirement file is missing YAML frontmatter",
+  "requirement_parse_failed": "Failed to parse requirement file"
 }

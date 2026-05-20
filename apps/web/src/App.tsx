@@ -3,6 +3,8 @@ import { Locale, resolveLocale, t } from './i18n'
 import { EmployeeDirectoryRecord } from './components/EmployeeList'
 import { LeftSidebar, NavMenu } from './components/LeftSidebar'
 import { useGitWorkspace } from './features/git/useGitWorkspace'
+import { useRequirementsWorkspace } from './features/requirements/useRequirementsWorkspace'
+import type { RequirementPhase } from './features/requirements/requirementsApi'
 import { LeftPanel } from './components/LeftPanel'
 import { WorkArea } from './components/WorkArea'
 
@@ -121,12 +123,19 @@ export default function App() {
     { id: 'test', labelKey: 'ui.nav.test' },
     { id: 'produce', labelKey: 'ui.nav.produce' },
     { id: 'git', labelKey: 'ui.nav.git' },
+    { id: 'requirements', labelKey: 'ui.nav.requirements' },
   ]
   const bottomNavItems: { id: 'settings'; labelKey: string }[] = [
     { id: 'settings', labelKey: 'ui.actions.settings' },
   ]
   const git = useGitWorkspace(API_BASE, locale, Boolean(workspace?.configured), refreshTick)
+  const requirements = useRequirementsWorkspace(API_BASE, locale, Boolean(workspace?.configured), refreshTick)
   const [newGitRepoName, setNewGitRepoName] = React.useState('')
+  const [newRequirementTitle, setNewRequirementTitle] = React.useState('')
+  const requirementPhaseLabel = React.useCallback(
+    (phase: RequirementPhase) => tt(`ui.requirements.phases.${phase}`),
+    [tt],
+  )
 
   React.useEffect(() => {
     fetch(`${API_BASE}/api/health`)
@@ -812,7 +821,11 @@ export default function App() {
   }
 
   const usesSplitWorkArea =
-    activeNav === 'chat' || activeNav === 'build' || activeNav === 'test' || activeNav === 'git'
+    activeNav === 'chat' ||
+    activeNav === 'build' ||
+    activeNav === 'test' ||
+    activeNav === 'git' ||
+    activeNav === 'requirements'
 
   return (
     <div className="app-shell">
@@ -856,6 +869,20 @@ export default function App() {
             gitBusy={git.busy}
             gitError={git.error}
             gitLoading={git.loading}
+            requirements={requirements.items}
+            selectedRequirementId={requirements.selectedId}
+            onSelectRequirement={(id) => void requirements.selectRequirement(id)}
+            newRequirementTitle={newRequirementTitle}
+            onNewRequirementTitleChange={setNewRequirementTitle}
+            onCreateRequirement={() => {
+              const title = newRequirementTitle.trim()
+              if (!title) return
+              void requirements.createRequirement(title).then(() => setNewRequirementTitle(''))
+            }}
+            requirementsBusy={requirements.busy}
+            requirementsError={requirements.error}
+            requirementsLoading={requirements.loading}
+            requirementPhaseLabel={requirementPhaseLabel}
           />
         ) : null}
         workspaceConfigured={Boolean(workspace?.configured)}
@@ -872,6 +899,8 @@ export default function App() {
         locale={locale}
         chatSenderProfile={chatSenderProfile}
         git={git}
+        requirements={requirements}
+        requirementPhaseLabel={requirementPhaseLabel}
         t={tt}
         onOpenSettings={() => setSettingsOpen(true)}
         onSetWorkspaceInput={setWorkspaceInput}

@@ -7,7 +7,8 @@
       "build": "构建",
       "test": "测试",
       "produce": "产品",
-      "git": "Git"
+      "git": "Git",
+      "requirements": "需求"
     },
     "backend": "后端",
     "actions": {
@@ -207,6 +208,33 @@
         "checkoutNew": "新建分支",
         "addRemote": "添加远程",
         "runRaw": "执行"
+      }
+    },
+    "requirements": {
+      "listTitle": "需求列表",
+      "empty": "暂无需求",
+      "create": "创建需求",
+      "creating": "创建中…",
+      "loading": "加载需求中…",
+      "selectHint": "请从列表中选择一个需求",
+      "newTitlePlaceholder": "需求标题",
+      "titleLabel": "标题",
+      "phaseLabel": "阶段",
+      "timelineLabel": "需求生命周期",
+      "timelineHint": "点击阶段节点可切换当前阶段",
+      "contentLabel": "内容",
+      "contentPlaceholder": "使用 Markdown 编写需求正文…",
+      "dirLabel": "目录",
+      "subdirsLabel": "子目录",
+      "save": "保存",
+      "saving": "保存中…",
+      "phases": {
+        "collection": "收集",
+        "review": "评审",
+        "confirm": "确认",
+        "development": "开发",
+        "testing": "测试",
+        "release": "发布"
       }
     },
     "rpgHome": {

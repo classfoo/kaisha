@@ -33,5 +33,13 @@
   "git_config_injection_denied": "Git設定の注入は許可されていません",
   "git_command_failed": "Gitコマンドの実行に失敗しました",
   "git_clone_target_exists": "クローン先ディレクトリは既に存在します",
-  "git_invalid_operation": "無効なGit操作です"
+  "git_invalid_operation": "無効なGit操作です",
+  "requirement_id_empty": "要件IDは空にできません",
+  "requirement_id_invalid": "要件IDは英数字、_、- のみ使用できます",
+  "requirement_title_empty": "要件タイトルは空にできません",
+  "requirement_not_found": "要件が見つかりません",
+  "requirement_already_exists": "要件は既に存在します",
+  "requirement_phase_invalid": "要件フェーズが無効です",
+  "requirement_frontmatter_missing": "要件ファイルにYAMLメタ情報がありません",
+  "requirement_parse_failed": "要件ファイルの解析に失敗しました"
 }
