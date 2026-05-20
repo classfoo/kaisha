@@ -1,5 +1,11 @@
 import React from 'react'
 import {
+  createImeEnterGuardState,
+  onCompositionEnd,
+  onCompositionStart,
+  shouldSubmitOnEnter,
+} from '../features/employee-chat/imeSafeEnterSubmit'
+import {
   useEmployeeChatMessages,
   type ChatSenderProfile,
   type ChatWireMessage,
@@ -107,6 +113,7 @@ export function EmployeeChatPanel({
   t,
 }: EmployeeChatPanelProps) {
   const selectedEmployee = employees.find((item) => item.id === selectedEmployeeId) ?? null
+  const imeEnterGuardRef = React.useRef(createImeEnterGuardState())
   const { serverMessages, optimisticUser, streamingAssistantText, loading, sending, error, lastResult, sendMessage } =
     useEmployeeChatMessages(apiBase, locale, selectedEmployeeId, chatSenderProfile)
 
@@ -171,9 +178,20 @@ export function EmployeeChatPanel({
 
   const handlePromptKeyDown = React.useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (event.key !== 'Enter') return
-      if (event.shiftKey) return
-      if (event.nativeEvent.isComposing) return
+      const native = event.nativeEvent
+      if (
+        !shouldSubmitOnEnter(
+          {
+            key: event.key,
+            shiftKey: event.shiftKey,
+            isComposing: native.isComposing,
+            keyCode: native.keyCode,
+          },
+          imeEnterGuardRef.current,
+        )
+      ) {
+        return
+      }
       event.preventDefault()
       void sendFromDraft()
     },
@@ -282,6 +300,8 @@ export function EmployeeChatPanel({
               className="chat-input"
               value={messageDraft}
               onChange={(event) => onMessageDraftChange(event.target.value)}
+              onCompositionStart={() => onCompositionStart(imeEnterGuardRef.current)}
+              onCompositionEnd={() => onCompositionEnd(imeEnterGuardRef.current)}
               onKeyDown={handlePromptKeyDown}
               disabled={sending}
               placeholder={t('ui.chat.placeholder').replace('{name}', selectedEmployee.name)}
