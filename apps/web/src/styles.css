@@ -1133,6 +1133,78 @@ select,
   min-height: 0;
 }
 
+.requirement-detail__review {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.requirement-review-confirm {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #3a465e;
+  background: #0f141e;
+}
+
+.requirement-review-confirm__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.requirement-review__status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: baseline;
+}
+
+.requirement-review__opinion {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #2b3446;
+  background: #0f141e;
+}
+
+.requirement-review__opinion-head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+
+.requirement-review__opinion-body,
+.requirement-review__summary-body {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.45;
+  font-family: ui-monospace, monospace;
+  color: #c5d0e0;
+}
+
+.requirement-review__summary {
+  margin-top: 12px;
+}
+
+.work-rules-role {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #2b3446;
+}
+
+.work-rules-role__head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.work-rules-role__duty {
+  min-height: 72px;
+}
+
 .requirement-detail__editor {
   flex: 1;
   min-height: 240px;

@@ -94,7 +94,8 @@ Requirements in phases other than `release` are still active. Prefer updating an
 1. Read the catalog and any existing files you need.
 2. Create or update `{req_file}` files using valid frontmatter (id must match directory name, update `updated_at_ms` on edits, preserve `created_at_ms` on updates).
 3. You may create subdirectories under a requirement for process artifacts (notes, designs) when helpful.
-4. Reply in plain language summarizing what you created or changed (ids, titles, phases). Do not only describe intent — perform the file operations.
+4. If the user explicitly asks to **start requirement review** for a requirement id, ensure that requirement's phase is `review` in its frontmatter. Tell them to use chat phrase "进入需求评审" with the requirement id, or use the Review button in the UI (the server runs the multi-role review pipeline).
+5. Reply in plain language summarizing what you created or changed (ids, titles, phases). Do not only describe intent — perform the file operations.
 
 ## Current catalog
 {catalog}

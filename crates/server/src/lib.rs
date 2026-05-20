@@ -4,7 +4,9 @@ mod employee_requirement_agent;
 mod git;
 mod i18n;
 mod requirement;
+mod requirement_review;
 mod tools;
+mod work_rules;
 
 use application::HealthService;
 use axum::{
@@ -30,7 +32,7 @@ use tools::{
     model::{CreateToolInstanceRequest, ToolCatalogItem, ToolInstance, UpdateToolInstanceRequest},
 };
 
-const SETTINGS_MENUS: [&str; 4] = ["tools", "departments", "roles", "employees"];
+const SETTINGS_MENUS: [&str; 5] = ["tools", "departments", "roles", "employees", "work_rules"];
 
 #[derive(Clone)]
 struct AppState {
@@ -125,6 +127,7 @@ enum SettingsMenu {
     Departments,
     Roles,
     Employees,
+    WorkRules,
 }
 
 impl SettingsMenu {
@@ -134,6 +137,7 @@ impl SettingsMenu {
             SettingsMenu::Departments => "departments",
             SettingsMenu::Roles => "roles",
             SettingsMenu::Employees => "employees",
+            SettingsMenu::WorkRules => "work_rules",
         }
     }
 }
@@ -147,6 +151,7 @@ impl FromStr for SettingsMenu {
             "departments" => Ok(Self::Departments),
             "roles" => Ok(Self::Roles),
             "employees" => Ok(Self::Employees),
+            "work_rules" => Ok(Self::WorkRules),
             _ => Err("unsupported settings menu"),
         }
     }
@@ -240,6 +245,8 @@ async fn set_workspace(
         .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
     git::ensure_workspace_repos(&normalized)
         .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    work_rules::ensure_work_rules(&normalized)
+        .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
     workspace.path = Some(normalized);
     workspace.source = WorkspaceSource::Config;
@@ -308,11 +315,14 @@ fn load_settings_state(workspace: Option<PathBuf>) -> anyhow::Result<SettingsSta
         menus: BTreeMap::new(),
     };
 
+    // work_rules uses its own config format (roles/duties), handled by work_rules.rs.
+    let menu_keys = ["tools", "departments", "roles", "employees"];
+
     if let Some(workdir) = state.workspace.as_ref() {
         let settings_root = workdir.join("settings");
         fs::create_dir_all(&settings_root)?;
 
-        for menu in SETTINGS_MENUS {
+        for menu in menu_keys {
             let menu_dir = settings_root.join(menu);
             let menu_file = menu_dir.join("config.yml");
             fs::create_dir_all(&menu_dir)?;
@@ -331,7 +341,7 @@ fn load_settings_state(workspace: Option<PathBuf>) -> anyhow::Result<SettingsSta
             );
         }
     } else {
-        for menu in SETTINGS_MENUS {
+        for menu in menu_keys {
             state.menus.insert(menu.to_string(), MenuMemory::default());
         }
     }
@@ -479,6 +489,7 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
     if let Some(workspace) = workspace_init.path.as_deref() {
         employee::ensure_default_employee(workspace)?;
         git::ensure_workspace_repos(workspace)?;
+        work_rules::ensure_work_rules(workspace)?;
     }
     let settings_state = load_settings_state(workspace_init.path.clone())?;
     let tools_manager = ToolManager::new(workspace_init.path.as_deref())?;
@@ -522,6 +533,19 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
         .route(
             "/api/requirements/:id",
             get(requirement::get_requirement).put(requirement::update_requirement),
+        )
+        .route(
+            "/api/requirements/:id/review",
+            get(requirement_review::get_requirement_review)
+                .post(requirement_review::start_requirement_review),
+        )
+        .route(
+            "/api/requirements/:id/review/run",
+            axum::routing::post(requirement_review::run_review_handler),
+        )
+        .route(
+            "/api/work-rules",
+            get(work_rules::get_work_rules).put(work_rules::put_work_rules),
         )
         .layer(cors)
         .with_state(AppState {

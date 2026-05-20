@@ -7,6 +7,7 @@ import { useRequirementsWorkspace } from './features/requirements/useRequirement
 import type { RequirementPhase } from './features/requirements/requirementsApi'
 import { LeftPanel } from './components/LeftPanel'
 import { WorkArea } from './components/WorkArea'
+import { WorkRulesSettings } from './components/WorkRulesSettings'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8080'
 
@@ -33,7 +34,7 @@ type WorkspaceStatus = {
   path: string | null
   source: 'env' | 'config' | 'unset'
 }
-type SettingsSection = 'tools' | 'departments' | 'roles' | 'employees' | 'language'
+type SettingsSection = 'tools' | 'departments' | 'roles' | 'employees' | 'work_rules' | 'language'
 type ToolKind =
   | 'claude_code'
   | 'qwen_code'
@@ -703,6 +704,10 @@ export default function App() {
           </section>
         </>
       )
+    }
+
+    if (settingsSection === 'work_rules') {
+      return <WorkRulesSettings apiBase={API_BASE} locale={locale} t={tt} />
     }
 
     if (settingsSection === 'language') {

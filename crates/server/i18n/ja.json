@@ -41,5 +41,9 @@
   "requirement_already_exists": "要件は既に存在します",
   "requirement_phase_invalid": "要件フェーズが無効です",
   "requirement_frontmatter_missing": "要件ファイルにYAMLメタ情報がありません",
-  "requirement_parse_failed": "要件ファイルの解析に失敗しました"
+  "requirement_parse_failed": "要件ファイルの解析に失敗しました",
+  "review_not_started": "要件レビューはまだ開始されていません",
+  "review_no_employees": "レビューに参加できる社員がいません",
+  "review_requirement_unspecified": "レビューする要件を指定してください（メッセージに要件 id を含めてください）",
+  "review_already_completed": "この要件のレビューは既に完了しています"
 }

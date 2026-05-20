@@ -41,5 +41,9 @@
   "requirement_already_exists": "Requirement already exists",
   "requirement_phase_invalid": "Requirement phase is invalid",
   "requirement_frontmatter_missing": "Requirement file is missing YAML frontmatter",
-  "requirement_parse_failed": "Failed to parse requirement file"
+  "requirement_parse_failed": "Failed to parse requirement file",
+  "review_not_started": "Requirement review has not been started",
+  "review_no_employees": "No employees available to participate in review",
+  "review_requirement_unspecified": "Specify which requirement to review (include its id in your message)",
+  "review_already_completed": "Requirement review is already completed"
 }

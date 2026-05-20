@@ -3,6 +3,7 @@ import {
   createRequirementsApi,
   type RequirementDetail,
   type RequirementPhase,
+  type RequirementReview,
   type RequirementSummary,
 } from './requirementsApi'
 
@@ -19,17 +20,38 @@ export function useRequirementsWorkspace(
   const [loading, setLoading] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [review, setReview] = React.useState<RequirementReview | null>(null)
+  const [reviewLoading, setReviewLoading] = React.useState(false)
+  const [reviewRunning, setReviewRunning] = React.useState(false)
 
   const selectedIdRef = React.useRef(selectedId)
   selectedIdRef.current = selectedId
+
+  const loadReview = React.useCallback(
+    async (id: string) => {
+      setReviewLoading(true)
+      try {
+        const data = await api.getReview(id)
+        setReview(data)
+        return data
+      } catch (e) {
+        setReview(null)
+        throw e
+      } finally {
+        setReviewLoading(false)
+      }
+    },
+    [api],
+  )
 
   const loadDetail = React.useCallback(
     async (id: string) => {
       const data = await api.get(id)
       setDetail(data)
+      void loadReview(id).catch(() => setReview(null))
       return data
     },
-    [api],
+    [api, loadReview],
   )
 
   const refresh = React.useCallback(async () => {
@@ -137,16 +159,41 @@ export function useRequirementsWorkspace(
     [api],
   )
 
+  const runReview = React.useCallback(
+    async (id: string) => {
+      setReviewRunning(true)
+      setError(null)
+      try {
+        const result = await api.runReview(id)
+        setReview(result)
+        await loadDetail(id)
+        return result
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        throw e
+      } finally {
+        setReviewRunning(false)
+      }
+    },
+    [api, loadDetail],
+  )
+
   return {
     items,
     selectedId,
     detail,
+    review,
     loading,
     busy,
+    reviewLoading,
+    reviewRunning,
     error,
     refresh,
     selectRequirement,
     createRequirement,
     saveRequirement,
+    runReview,
+    loadReview,
   }
 }

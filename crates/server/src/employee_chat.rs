@@ -4,6 +4,8 @@ use crate::{
         build_requirement_agent_messages, prior_conversation_context, requirement_agent_workdir,
     },
     i18n,
+    requirement::list_requirement_summaries,
+    requirement_review::{detect_review_start_intent, run_requirement_review},
     tools::manager::ToolManager,
     AppState,
 };
@@ -151,6 +153,57 @@ fn normalize_optional_text(value: Option<String>) -> Option<String> {
     })
 }
 
+fn format_review_assistant_reply(
+    review: &crate::requirement_review::RequirementReviewWire,
+) -> String {
+    let conclusion = review
+        .conclusion
+        .as_ref()
+        .map(|c| match c {
+            crate::requirement_review::ReviewConclusion::Adopt => "adopt",
+            crate::requirement_review::ReviewConclusion::Supplement => "supplement",
+        })
+        .unwrap_or("pending");
+    let summary = review
+        .summary
+        .as_deref()
+        .unwrap_or("(no summary file)");
+    format!(
+        "Requirement review completed for `{}`.\n\n**Conclusion:** {conclusion}\n\n## Summary\n\n{summary}",
+        review.requirement_id
+    )
+}
+
+fn run_review_turn(
+    tools: &ToolManager,
+    workspace: &Path,
+    user_input: &str,
+) -> Result<(crate::tools::model::ToolInstance, crate::tools::driver::ToolExecutionResult), String> {
+    let summaries = list_requirement_summaries(workspace).map_err(|e| e.to_string())?;
+    let ids: Vec<String> = summaries.iter().map(|s| s.id.clone()).collect();
+    let req_id = detect_review_start_intent(user_input, &ids)
+        .ok_or_else(|| "review_requirement_unspecified".to_string())?;
+    let review = run_requirement_review(workspace, tools, &req_id).map_err(|e| e.to_string())?;
+    let output = format_review_assistant_reply(&review);
+    let instance = tools
+        .pick_enabled_chat_driver()
+        .map(|(inst, _)| inst)
+        .ok_or_else(|| "chat_tool_missing".to_string())?;
+    Ok((
+        instance,
+        crate::tools::driver::ToolExecutionResult {
+            output,
+            exit_code: 0,
+            usage: crate::tools::driver::ToolUsage {
+                model: "requirement-review".to_string(),
+                prompt_tokens: 0,
+                completion_tokens: 0,
+                total_tokens: 0,
+            },
+        },
+    ))
+}
+
 fn run_requirement_agent_turn(
     tools: &ToolManager,
     workspace: &Path,
@@ -220,8 +273,13 @@ fn process_post_message(
         sender_avatar_url,
     });
 
-    let (instance, exec_result) =
-        run_requirement_agent_turn(&tools, &workspace, &trimmed, &conv.messages)?;
+    let summaries = list_requirement_summaries(&workspace).map_err(|e| e.to_string())?;
+    let ids: Vec<String> = summaries.iter().map(|s| s.id.clone()).collect();
+    let (instance, exec_result) = if detect_review_start_intent(&trimmed, &ids).is_some() {
+        run_review_turn(&tools, &workspace, &trimmed)?
+    } else {
+        run_requirement_agent_turn(&tools, &workspace, &trimmed, &conv.messages)?
+    };
 
     let assistant_now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -411,43 +469,63 @@ async fn run_stream_turn_inner(
     });
     save_conversation(&conv_path, &conv).map_err(|e| e.to_string())?;
 
-    let workdir = requirement_agent_workdir(&workspace).map_err(|e| e.to_string())?;
-    let prior_rows: Vec<(String, String, u64)> = conv
-        .messages
-        .iter()
-        .map(|m| (m.role.clone(), m.content.clone(), m.created_at_ms))
-        .collect();
-    let prior = prior_conversation_context(&prior_rows);
-    let tool_messages =
-        build_requirement_agent_messages(&workspace, &trimmed, &prior).map_err(|e| e.to_string())?;
+    let summaries = list_requirement_summaries(&workspace).map_err(|e| e.to_string())?;
+    let ids: Vec<String> = summaries.iter().map(|s| s.id.clone()).collect();
+    let review_intent = detect_review_start_intent(&trimmed, &ids);
 
-    let (delta_tx, delta_rx) = tokio::sync::mpsc::channel::<String>(64);
-    let forward = tokio::spawn(forward_sse_deltas(delta_rx, sse_tx.clone()));
-
-    let exec = tools
-        .execute_code_chat_streaming(&workdir, &tool_messages, delta_tx)
+    let (instance, tool_result) = if review_intent.is_some() {
+        let result = tokio::task::spawn_blocking({
+            let tools = tools.clone();
+            let workspace = workspace.clone();
+            let trimmed = trimmed.clone();
+            move || run_review_turn(&tools, &workspace, &trimmed)
+        })
         .await
+        .map_err(|_| "chat_blocking_task_failed".to_string())?
         .map_err(|e| {
-            let msg = e.root_cause().to_string();
-            if msg == "no_enabled_coding_tool" {
-                "chat_tool_missing".to_string()
-            } else {
-                tracing::warn!(error = %e, "requirement agent execution failed (stream)");
-                msg
-            }
-        });
+            tracing::warn!(error = %e, "requirement review failed (stream)");
+            e
+        })?;
+        let payload = serde_json::to_string(&serde_json::json!({ "text": result.1.output }))
+            .map_err(|e| e.to_string())?;
+        let _ = sse_tx
+            .send(Ok(Event::default().event("delta").data(payload)))
+            .await;
+        result
+    } else {
+        let workdir = requirement_agent_workdir(&workspace).map_err(|e| e.to_string())?;
+        let prior_rows: Vec<(String, String, u64)> = conv
+            .messages
+            .iter()
+            .map(|m| (m.role.clone(), m.content.clone(), m.created_at_ms))
+            .collect();
+        let prior = prior_conversation_context(&prior_rows);
+        let tool_messages =
+            build_requirement_agent_messages(&workspace, &trimmed, &prior).map_err(|e| e.to_string())?;
 
-    let (instance, tool_result) = match exec {
-        Ok(v) => v,
-        Err(raw) => {
-            forward.abort();
-            return Err(raw);
+        let (delta_tx, delta_rx) = tokio::sync::mpsc::channel::<String>(64);
+        let forward = tokio::spawn(forward_sse_deltas(delta_rx, sse_tx.clone()));
+
+        let result = tools
+            .execute_code_chat_streaming(&workdir, &tool_messages, delta_tx)
+            .await
+            .map_err(|e| {
+                let msg = e.root_cause().to_string();
+                if msg == "no_enabled_coding_tool" {
+                    "chat_tool_missing".to_string()
+                } else {
+                    tracing::warn!(error = %e, "requirement agent execution failed (stream)");
+                    msg
+                }
+            });
+        match result {
+            Ok(v) => v,
+            Err(raw) => {
+                forward.abort();
+                return Err(raw);
+            }
         }
     };
-
-    if forward.await.is_err() {
-        tracing::warn!("sse delta forwarder join failed");
-    }
 
     let assistant_now = SystemTime::now()
         .duration_since(UNIX_EPOCH)

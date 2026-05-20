@@ -28,11 +28,11 @@ struct EmployeeProfileFile {
 
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct EmployeeRecord {
-    id: String,
-    name: String,
-    department: String,
-    role: String,
-    memory_file: String,
+    pub id: String,
+    pub name: String,
+    pub department: String,
+    pub role: String,
+    pub memory_file: String,
 }
 
 fn workspace_root(state: &AppState) -> Option<PathBuf> {
@@ -48,9 +48,58 @@ pub(crate) fn employee_root(workspace: &Path) -> PathBuf {
     workspace.join("shachiku")
 }
 
+pub(crate) fn list_employee_records(workspace: &Path) -> anyhow::Result<Vec<EmployeeRecord>> {
+    let root = employee_root(workspace);
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
+    let mut items = Vec::new();
+    for entry in fs::read_dir(&root)? {
+        let entry = entry?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let dir_name = entry.file_name().to_string_lossy().to_string();
+        let profile_path = path.join("profile.json");
+        if !profile_path.exists() {
+            continue;
+        }
+        if let Ok(item) = parse_employee(&dir_name, &profile_path) {
+            items.push(item);
+        }
+    }
+    items.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(items)
+}
+
+pub(crate) fn append_employee_memory(
+    workspace: &Path,
+    employee_id: &str,
+    section_title: &str,
+    body: &str,
+) -> anyhow::Result<()> {
+    let path = employee_root(workspace).join(employee_id).join("memory.md");
+    if !path.parent().map(|p| p.exists()).unwrap_or(false) {
+        anyhow::bail!("employee_not_found");
+    }
+    let mut existing = if path.exists() {
+        fs::read_to_string(&path)?
+    } else {
+        String::new()
+    };
+    if !existing.is_empty() && !existing.ends_with('\n') {
+        existing.push('\n');
+    }
+    existing.push_str(&format!("\n## {section_title}\n\n{body}\n"));
+    fs::write(path, existing)?;
+    Ok(())
+}
+
 pub(super) fn ensure_default_employee(workspace: &Path) -> anyhow::Result<()> {
     let root = employee_root(workspace);
     fs::create_dir_all(&root)?;
+    ensure_role_employees(workspace)?;
     let employee_id = "employee-1";
     let employee_dir = root.join(employee_id);
     if employee_dir.exists() {
@@ -69,6 +118,33 @@ pub(super) fn ensure_default_employee(workspace: &Path) -> anyhow::Result<()> {
         serde_json::to_string_pretty(&profile)?,
     )?;
     fs::write(employee_dir.join("memory.md"), "")?;
+    Ok(())
+}
+
+/// Seeds one employee per standard role (product, engineering, testing, operations) when missing.
+pub(super) fn ensure_role_employees(workspace: &Path) -> anyhow::Result<()> {
+    let seeds: [(&str, &str, &str, &str); 4] = [
+        ("product-lead", "Product Lead", "product", "产品"),
+        ("engineering-lead", "Engineering Lead", "engineering", "研发"),
+        ("testing-lead", "Testing Lead", "qa", "测试"),
+        ("operations-lead", "Operations Lead", "operations", "运营"),
+    ];
+    let root = employee_root(workspace);
+    for (id, name, department, role) in seeds {
+        let dir = root.join(id);
+        if dir.exists() {
+            continue;
+        }
+        fs::create_dir_all(&dir)?;
+        let profile = EmployeeProfileFile {
+            id: id.to_string(),
+            name: name.to_string(),
+            department: department.to_string(),
+            role: role.to_string(),
+        };
+        fs::write(dir.join("profile.json"), serde_json::to_string_pretty(&profile)?)?;
+        fs::write(dir.join("memory.md"), "")?;
+    }
     Ok(())
 }
 

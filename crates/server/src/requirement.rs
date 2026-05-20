@@ -213,7 +213,7 @@ pub fn format_requirement_md(meta: &RequirementMeta, content: &str) -> String {
     format!("---\n{yaml}---\n\n{content}")
 }
 
-fn requirement_dir(workspace: &Path, id: &str) -> PathBuf {
+pub fn requirement_dir(workspace: &Path, id: &str) -> PathBuf {
     requirements_root(workspace).join(id)
 }
 

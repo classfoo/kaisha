@@ -99,6 +99,7 @@
         "departments": "Departments",
         "roles": "Roles",
         "employees": "Employees",
+        "workRules": "Work rules",
         "language": "Language"
       },
       "tools": {
@@ -235,7 +236,39 @@
         "development": "Development",
         "testing": "Testing",
         "release": "Release"
+      },
+      "review": {
+        "sectionTitle": "Requirement review",
+        "enter": "Enter review",
+        "confirmText": "Start a multi-role review? All employees will analyze this requirement with their coding agent and produce opinions.",
+        "confirm": "Start review",
+        "cancel": "Cancel",
+        "running": "Review in progress…",
+        "loading": "Loading review…",
+        "notStarted": "No review yet. Use Enter review to run the pipeline.",
+        "statusLabel": "Status",
+        "statusInProgress": "In progress",
+        "statusCompleted": "Completed",
+        "conclusionLabel": "Conclusion",
+        "conclusionAdopt": "Adopt requirement",
+        "conclusionSupplement": "Needs supplement",
+        "conclusionPending": "Pending",
+        "opinionsTitle": "Reviewer opinions",
+        "summaryTitle": "Review summary"
       }
+    },
+    "workRules": {
+      "title": "Work rules",
+      "hint": "Define role duties for each lifecycle phase. Employees are matched to roles by profile role / aliases.",
+      "roleKey": "Role key",
+      "displayName": "Display name",
+      "aliases": "Aliases (comma-separated)",
+      "dutyReview": "Duty in review phase",
+      "save": "Save rules",
+      "saving": "Saving…",
+      "loadError": "Failed to load work rules",
+      "saveError": "Failed to save work rules",
+      "saved": "Work rules saved"
     },
     "rpgHome": {
       "title": "Office RPG Home",

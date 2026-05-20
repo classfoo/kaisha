@@ -21,7 +21,7 @@ type WorkAreaProps = {
   savingWorkspace: boolean
   messageDraft: string
   settingsOpen: boolean
-  settingsSection: 'tools' | 'departments' | 'roles' | 'employees' | 'language'
+  settingsSection: 'tools' | 'departments' | 'roles' | 'employees' | 'work_rules' | 'language'
   employees: EmployeeDirectoryRecord[]
   selectedEmployeeId: string | null
   apiBase: string
@@ -36,7 +36,7 @@ type WorkAreaProps = {
   onSaveWorkspace: () => void
   onMessageDraftChange: (value: string) => void
   onCloseSettings: () => void
-  onSetSettingsSection: (value: 'tools' | 'departments' | 'roles' | 'employees' | 'language') => void
+  onSetSettingsSection: (value: 'tools' | 'departments' | 'roles' | 'employees' | 'work_rules' | 'language') => void
   renderSettingsCards: () => React.ReactNode
 }
 

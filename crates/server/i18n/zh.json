@@ -41,5 +41,9 @@
   "requirement_already_exists": "需求已存在",
   "requirement_phase_invalid": "需求阶段无效",
   "requirement_frontmatter_missing": "需求文件缺少 YAML 元信息",
-  "requirement_parse_failed": "解析需求文件失败"
+  "requirement_parse_failed": "解析需求文件失败",
+  "review_not_started": "尚未启动该需求评审",
+  "review_no_employees": "没有可参与评审的员工",
+  "review_requirement_unspecified": "请指明要评审的需求（在消息中包含需求 id）",
+  "review_already_completed": "该需求评审已完成"
 }
