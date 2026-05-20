@@ -32,7 +32,7 @@ use tools::{
     model::{CreateToolInstanceRequest, ToolCatalogItem, ToolInstance, UpdateToolInstanceRequest},
 };
 
-const SETTINGS_MENUS: [&str; 5] = ["tools", "departments", "roles", "employees", "work_rules"];
+const SETTINGS_MENUS: [&str; 4] = ["tools", "departments", "roles", "employees"];
 
 #[derive(Clone)]
 struct AppState {
@@ -315,14 +315,11 @@ fn load_settings_state(workspace: Option<PathBuf>) -> anyhow::Result<SettingsSta
         menus: BTreeMap::new(),
     };
 
-    // work_rules uses its own config format (roles/duties), handled by work_rules.rs.
-    let menu_keys = ["tools", "departments", "roles", "employees"];
-
     if let Some(workdir) = state.workspace.as_ref() {
         let settings_root = workdir.join("settings");
         fs::create_dir_all(&settings_root)?;
 
-        for menu in menu_keys {
+        for menu in SETTINGS_MENUS {
             let menu_dir = settings_root.join(menu);
             let menu_file = menu_dir.join("config.yml");
             fs::create_dir_all(&menu_dir)?;
@@ -341,7 +338,7 @@ fn load_settings_state(workspace: Option<PathBuf>) -> anyhow::Result<SettingsSta
             );
         }
     } else {
-        for menu in menu_keys {
+        for menu in SETTINGS_MENUS {
             state.menus.insert(menu.to_string(), MenuMemory::default());
         }
     }

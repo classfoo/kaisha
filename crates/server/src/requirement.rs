@@ -44,18 +44,6 @@ impl RequirementPhase {
             Self::Release => "release",
         }
     }
-
-    fn from_str(s: &str) -> Option<Self> {
-        match s.trim() {
-            "collection" => Some(Self::Collection),
-            "review" => Some(Self::Review),
-            "confirm" => Some(Self::Confirm),
-            "development" => Some(Self::Development),
-            "testing" => Some(Self::Testing),
-            "release" => Some(Self::Release),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
