@@ -11,7 +11,7 @@ type RequirementDetailPanelProps = {
 }
 
 export function RequirementDetailPanel({ requirements, phaseLabel, t }: RequirementDetailPanelProps) {
-  const { detail, loading, busy, error, saveRequirement, runReview, reviewRunning } = requirements
+  const { detail, loading, busy, error, saveRequirement, runReview, reviewRunning, reviewForcePassing, confirming, abandoning, reconfirming, confirmRequirement, abandonRequirement, reconfirmRequirement } = requirements
   const [titleDraft, setTitleDraft] = React.useState('')
   const [phaseDraft, setPhaseDraft] = React.useState<RequirementPhase>('collection')
   const [viewPhase, setViewPhase] = React.useState<RequirementPhase>('collection')
@@ -20,6 +20,14 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
   const [saveError, setSaveError] = React.useState('')
   const [confirmReviewOpen, setConfirmReviewOpen] = React.useState(false)
   const [reviewError, setReviewError] = React.useState('')
+  const [confirmConfirmOpen, setConfirmConfirmOpen] = React.useState(false)
+  const [confirmActionError, setConfirmActionError] = React.useState('')
+  const [confirmAbandonOpen, setConfirmAbandonOpen] = React.useState(false)
+  const [abandonActionError, setAbandonActionError] = React.useState('')
+  const [confirmReconfirmOpen, setConfirmReconfirmOpen] = React.useState(false)
+  const [reconfirmActionError, setReconfirmActionError] = React.useState('')
+  const [confirmForceOpen, setConfirmForceOpen] = React.useState(false)
+  const [forceError, setForceError] = React.useState('')
 
   React.useEffect(() => {
     if (!detail) {
@@ -55,6 +63,285 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
     }
   }
 
+  const currentPhase = detail?.phase ?? phaseDraft
+
+  const renderPhaseToolbar = () => {
+    const phase = currentPhase
+
+    // collection phase: save button
+    if (phase === 'collection') {
+      return (
+        <div className="requirement-phase-toolbar">
+          <button
+            type="button"
+            className="action-btn"
+            onClick={() => void onSave()}
+            disabled={busy || !dirty}
+          >
+            {busy ? t('ui.requirements.saving') : t('ui.requirements.save')}
+          </button>
+        </div>
+      )
+    }
+
+    // review phase: enter review, force pass
+    if (phase === 'review') {
+      return (
+        <div className="requirement-phase-toolbar">
+          <button
+            type="button"
+            className="action-btn"
+            onClick={() => setConfirmReviewOpen(true)}
+            disabled={busy || reviewRunning}
+          >
+            {reviewRunning ? t('ui.requirements.review.running') : t('ui.requirements.review.enter')}
+          </button>
+          {!reviewRunning && (
+            <button
+              type="button"
+              className="action-btn"
+              onClick={() => setConfirmForceOpen(true)}
+              disabled={busy || reviewForcePassing}
+            >
+              {reviewForcePassing ? t('ui.requirements.review.forcePassing') : t('ui.requirements.review.forcePass')}
+            </button>
+          )}
+          {confirmReviewOpen ? (
+            <div className="requirement-review-confirm" role="dialog" aria-modal="true">
+              <p className="requirement-review-confirm__text">{t('ui.requirements.review.confirmText')}</p>
+              <div className="requirement-review-confirm__actions">
+                <button
+                  type="button"
+                  className="action-btn"
+                  onClick={() => {
+                    setConfirmReviewOpen(false)
+                    setReviewError('')
+                  }}
+                >
+                  {t('ui.requirements.review.cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="action-btn"
+                  onClick={() => {
+                    if (!detail) return
+                    setReviewError('')
+                    void runReview(detail.id)
+                      .then(() => {
+                        setConfirmReviewOpen(false)
+                        setViewPhase('review')
+                      })
+                      .catch((e) => setReviewError(e instanceof Error ? e.message : String(e)))
+                  }}
+                  disabled={reviewRunning}
+                >
+                  {t('ui.requirements.review.confirm')}
+                </button>
+              </div>
+              {reviewError ? <p className="workspace-setup__error">{reviewError}</p> : null}
+            </div>
+          ) : null}
+          {confirmForceOpen ? (
+            <div className="requirement-review-confirm" role="dialog" aria-modal="true">
+              <p className="requirement-review-confirm__text">{t('ui.requirements.review.forcePassConfirmText')}</p>
+              <div className="requirement-review-confirm__actions">
+                <button
+                  type="button"
+                  className="action-btn"
+                  onClick={() => {
+                    setConfirmForceOpen(false)
+                    setForceError('')
+                  }}
+                >
+                  {t('ui.requirements.review.cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="action-btn"
+                  onClick={() => {
+                    if (!detail) return
+                    setForceError('')
+                    void requirements.forcePassReview(detail.id)
+                      .then(() => {
+                        setConfirmForceOpen(false)
+                      })
+                      .catch((e) => setForceError(e instanceof Error ? e.message : String(e)))
+                  }}
+                  disabled={reviewForcePassing}
+                >
+                  {t('ui.requirements.review.forcePassConfirm')}
+                </button>
+              </div>
+              {forceError ? <p className="workspace-setup__error">{forceError}</p> : null}
+            </div>
+          ) : null}
+        </div>
+      )
+    }
+
+    // confirm phase: confirm, abandon, reconfirm based on status
+    if (phase === 'confirm') {
+      const confirmStatus = detail?.confirm_status
+      const isAbandoned = confirmStatus === 'abandoned'
+      const isConfirmed = confirmStatus === 'confirmed'
+
+      return (
+        <div className="requirement-phase-toolbar">
+          {!isConfirmed && !isAbandoned && (
+            <>
+              <button
+                type="button"
+                className="action-btn"
+                onClick={() => setConfirmConfirmOpen(true)}
+                disabled={busy || confirming}
+              >
+                {confirming ? t('ui.requirements.confirm.processing') : t('ui.requirements.confirm.confirmAction')}
+              </button>
+              <button
+                type="button"
+                className="action-btn"
+                onClick={() => setConfirmAbandonOpen(true)}
+                disabled={busy || abandoning}
+              >
+                {abandoning ? t('ui.requirements.confirm.processing') : t('ui.requirements.confirm.abandonAction')}
+              </button>
+            </>
+          )}
+          {isAbandoned && (
+            <button
+              type="button"
+              className="action-btn"
+              onClick={() => setConfirmReconfirmOpen(true)}
+              disabled={busy || reconfirming}
+            >
+              {reconfirming ? t('ui.requirements.confirm.processing') : t('ui.requirements.confirm.reconfirmAction')}
+            </button>
+          )}
+          {isConfirmed && (
+            <button type="button" className="action-btn" disabled>
+              {t('ui.requirements.confirm.statusConfirmed')}
+            </button>
+          )}
+          {confirmConfirmOpen ? (
+            <div className="requirement-review-confirm" role="dialog" aria-modal="true">
+              <p className="requirement-review-confirm__text">{t('ui.requirements.confirm.confirmDialogText')}</p>
+              <div className="requirement-review-confirm__actions">
+                <button
+                  type="button"
+                  className="action-btn"
+                  onClick={() => {
+                    setConfirmConfirmOpen(false)
+                    setConfirmActionError('')
+                  }}
+                >
+                  {t('ui.requirements.review.cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="action-btn"
+                  onClick={() => {
+                    if (!detail) return
+                    setConfirmActionError('')
+                    void confirmRequirement(detail.id)
+                      .then(() => {
+                        setConfirmConfirmOpen(false)
+                        setViewPhase(detail.phase === 'confirm' ? 'development' : detail.phase)
+                      })
+                      .catch((e) => setConfirmActionError(e instanceof Error ? e.message : String(e)))
+                  }}
+                  disabled={confirming}
+                >
+                  {t('ui.requirements.confirm.confirmDialogTitle')}
+                </button>
+              </div>
+              {confirmActionError ? <p className="workspace-setup__error">{confirmActionError}</p> : null}
+            </div>
+          ) : null}
+          {confirmAbandonOpen ? (
+            <div className="requirement-review-confirm" role="dialog" aria-modal="true">
+              <p className="requirement-review-confirm__text">{t('ui.requirements.confirm.abandonDialogText')}</p>
+              <div className="requirement-review-confirm__actions">
+                <button
+                  type="button"
+                  className="action-btn"
+                  onClick={() => {
+                    setConfirmAbandonOpen(false)
+                    setAbandonActionError('')
+                  }}
+                >
+                  {t('ui.requirements.review.cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="action-btn"
+                  onClick={() => {
+                    if (!detail) return
+                    setAbandonActionError('')
+                    void abandonRequirement(detail.id)
+                      .then(() => setConfirmAbandonOpen(false))
+                      .catch((e) => setAbandonActionError(e instanceof Error ? e.message : String(e)))
+                  }}
+                  disabled={abandoning}
+                >
+                  {t('ui.requirements.confirm.abandonDialogTitle')}
+                </button>
+              </div>
+              {abandonActionError ? <p className="workspace-setup__error">{abandonActionError}</p> : null}
+            </div>
+          ) : null}
+          {confirmReconfirmOpen ? (
+            <div className="requirement-review-confirm" role="dialog" aria-modal="true">
+              <p className="requirement-review-confirm__text">{t('ui.requirements.confirm.reconfirmDialogText')}</p>
+              <div className="requirement-review-confirm__actions">
+                <button
+                  type="button"
+                  className="action-btn"
+                  onClick={() => {
+                    setConfirmReconfirmOpen(false)
+                    setReconfirmActionError('')
+                  }}
+                >
+                  {t('ui.requirements.review.cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="action-btn"
+                  onClick={() => {
+                    if (!detail) return
+                    setReconfirmActionError('')
+                    void reconfirmRequirement(detail.id)
+                      .then(() => {
+                        setConfirmReconfirmOpen(false)
+                      })
+                      .catch((e) => setReconfirmActionError(e instanceof Error ? e.message : String(e)))
+                  }}
+                  disabled={reconfirming}
+                >
+                  {t('ui.requirements.confirm.reconfirmDialogTitle')}
+                </button>
+              </div>
+              {reconfirmActionError ? <p className="workspace-setup__error">{reconfirmActionError}</p> : null}
+            </div>
+          ) : null}
+        </div>
+      )
+    }
+
+    // development, testing, release: placeholder toolbar (save button)
+    return (
+      <div className="requirement-phase-toolbar">
+        <button
+          type="button"
+          className="action-btn"
+          onClick={() => void onSave()}
+          disabled={busy || !dirty}
+        >
+          {busy ? t('ui.requirements.saving') : t('ui.requirements.save')}
+        </button>
+      </div>
+    )
+  }
+
   if (loading && !detail) {
     return <div className="requirement-detail requirement-detail--empty">{t('ui.requirements.loading')}</div>
   }
@@ -75,10 +362,7 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
           }}
           aria-label={t('ui.requirements.titleLabel')}
         />
-        <section className="requirement-detail__timeline-wrap" aria-labelledby="requirement-phase-heading">
-          <h3 id="requirement-phase-heading" className="requirement-detail__label">
-            {t('ui.requirements.phaseLabel')}
-          </h3>
+        <section className="requirement-detail__timeline-wrap">
           <RequirementPhaseTimeline
             phase={phaseDraft}
             viewPhase={viewPhase}
@@ -89,62 +373,9 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
               setPhaseDraft(next)
               markDirty()
             }}
-            t={t}
           />
         </section>
-        <div className="requirement-detail__actions">
-          <button
-            type="button"
-            className="action-btn"
-            onClick={() => setConfirmReviewOpen(true)}
-            disabled={busy || reviewRunning}
-          >
-            {reviewRunning ? t('ui.requirements.review.running') : t('ui.requirements.review.enter')}
-          </button>
-          <button
-            type="button"
-            className="action-btn"
-            onClick={() => void onSave()}
-            disabled={busy || !dirty}
-          >
-            {busy ? t('ui.requirements.saving') : t('ui.requirements.save')}
-          </button>
-        </div>
-        {confirmReviewOpen ? (
-          <div className="requirement-review-confirm" role="dialog" aria-modal="true">
-            <p className="requirement-review-confirm__text">{t('ui.requirements.review.confirmText')}</p>
-            <div className="requirement-review-confirm__actions">
-              <button
-                type="button"
-                className="action-btn"
-                onClick={() => {
-                  setConfirmReviewOpen(false)
-                  setReviewError('')
-                }}
-              >
-                {t('ui.requirements.review.cancel')}
-              </button>
-              <button
-                type="button"
-                className="action-btn"
-                onClick={() => {
-                  if (!detail) return
-                  setReviewError('')
-                  void runReview(detail.id)
-                    .then(() => {
-                      setConfirmReviewOpen(false)
-                      setViewPhase('review')
-                    })
-                    .catch((e) => setReviewError(e instanceof Error ? e.message : String(e)))
-                }}
-                disabled={reviewRunning}
-              >
-                {t('ui.requirements.review.confirm')}
-              </button>
-            </div>
-            {reviewError ? <p className="workspace-setup__error">{reviewError}</p> : null}
-          </div>
-        ) : null}
+        {renderPhaseToolbar()}
         <div className="requirement-detail__path">
           <span className="settings-subtext">{t('ui.requirements.dirLabel')}</span>
           <code className="requirement-detail__dir">{detail.dir_path}</code>

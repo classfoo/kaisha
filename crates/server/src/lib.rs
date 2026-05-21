@@ -549,6 +549,18 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
             axum::routing::post(requirement_review::opinion_action_handler),
         )
         .route(
+            "/api/requirements/:id/confirm",
+            axum::routing::post(requirement::confirm_requirement),
+        )
+        .route(
+            "/api/requirements/:id/abandon",
+            axum::routing::post(requirement::abandon_requirement),
+        )
+        .route(
+            "/api/requirements/:id/reconfirm",
+            axum::routing::post(requirement::reconfirm_requirement),
+        )
+        .route(
             "/api/work-rules",
             get(work_rules::get_work_rules).put(work_rules::put_work_rules),
         )

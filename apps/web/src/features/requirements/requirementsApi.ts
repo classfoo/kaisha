@@ -6,10 +6,13 @@ export type RequirementPhase =
   | 'testing'
   | 'release'
 
+export type RequirementConfirmStatus = 'pending' | 'confirmed' | 'abandoned'
+
 export type RequirementSummary = {
   id: string
   title: string
   phase: RequirementPhase
+  confirm_status?: RequirementConfirmStatus
   created_at_ms: number
   updated_at_ms: number
   dir_path: string
@@ -144,6 +147,33 @@ export function createRequirementsApi(apiBase: string, locale: string) {
     async forcePassReview(id: string): Promise<RequirementReview> {
       const res = await fetch(
         `${apiBase}/api/requirements/${encodeURIComponent(id)}/review/force-pass`,
+        { method: 'POST', headers },
+      )
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async confirm(id: string): Promise<RequirementDetail> {
+      const res = await fetch(
+        `${apiBase}/api/requirements/${encodeURIComponent(id)}/confirm`,
+        { method: 'POST', headers },
+      )
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async abandon(id: string): Promise<RequirementDetail> {
+      const res = await fetch(
+        `${apiBase}/api/requirements/${encodeURIComponent(id)}/abandon`,
+        { method: 'POST', headers },
+      )
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async reconfirm(id: string): Promise<RequirementDetail> {
+      const res = await fetch(
+        `${apiBase}/api/requirements/${encodeURIComponent(id)}/reconfirm`,
         { method: 'POST', headers },
       )
       if (!res.ok) throw new Error(await readError(res))

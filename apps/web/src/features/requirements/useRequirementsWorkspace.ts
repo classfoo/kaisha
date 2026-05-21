@@ -26,6 +26,9 @@ export function useRequirementsWorkspace(
   const [reviewRunning, setReviewRunning] = React.useState(false)
   const [reviewForcePassing, setReviewForcePassing] = React.useState(false)
   const [opinionActionKey, setOpinionActionKey] = React.useState<string | null>(null)
+  const [confirming, setConfirming] = React.useState(false)
+  const [abandoning, setAbandoning] = React.useState(false)
+  const [reconfirming, setReconfirming] = React.useState(false)
 
   const selectedIdRef = React.useRef(selectedId)
   selectedIdRef.current = selectedId
@@ -248,6 +251,108 @@ export function useRequirementsWorkspace(
     [api, loadDetail],
   )
 
+  const confirmRequirement = React.useCallback(
+    async (id: string) => {
+      setConfirming(true)
+      setError(null)
+      try {
+        const updated = await api.confirm(id)
+        setDetail(updated)
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === updated.id
+              ? {
+                  id: updated.id,
+                  title: updated.title,
+                  phase: updated.phase,
+                  confirm_status: updated.confirm_status,
+                  created_at_ms: updated.created_at_ms,
+                  updated_at_ms: updated.updated_at_ms,
+                  dir_path: updated.dir_path,
+                }
+              : item,
+          ),
+        )
+        return updated
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        throw e
+      } finally {
+        setConfirming(false)
+      }
+    },
+    [api],
+  )
+
+  const abandonRequirement = React.useCallback(
+    async (id: string) => {
+      setAbandoning(true)
+      setError(null)
+      try {
+        const updated = await api.abandon(id)
+        setDetail(updated)
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === updated.id
+              ? {
+                  id: updated.id,
+                  title: updated.title,
+                  phase: updated.phase,
+                  confirm_status: updated.confirm_status,
+                  created_at_ms: updated.created_at_ms,
+                  updated_at_ms: updated.updated_at_ms,
+                  dir_path: updated.dir_path,
+                }
+              : item,
+          ),
+        )
+        return updated
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        throw e
+      } finally {
+        setAbandoning(false)
+      }
+    },
+    [api],
+  )
+
+  const reconfirmRequirement = React.useCallback(
+    async (id: string) => {
+      setReconfirming(true)
+      setError(null)
+      try {
+        const updated = await api.reconfirm(id)
+        setDetail(updated)
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === updated.id
+              ? {
+                  id: updated.id,
+                  title: updated.title,
+                  phase: updated.phase,
+                  confirm_status: updated.confirm_status,
+                  created_at_ms: updated.created_at_ms,
+                  updated_at_ms: updated.updated_at_ms,
+                  dir_path: updated.dir_path,
+                }
+              : item,
+          ),
+        )
+        return updated
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        throw e
+      } finally {
+        setReconfirming(false)
+      }
+    },
+    [api],
+  )
+
   return {
     items,
     selectedId,
@@ -259,6 +364,9 @@ export function useRequirementsWorkspace(
     reviewRunning,
     reviewForcePassing,
     opinionActionKey,
+    confirming,
+    abandoning,
+    reconfirming,
     error,
     refresh,
     selectRequirement,
@@ -268,5 +376,8 @@ export function useRequirementsWorkspace(
     forcePassReview,
     opinionAction,
     loadReview,
+    confirmRequirement,
+    abandonRequirement,
+    reconfirmRequirement,
   }
 }

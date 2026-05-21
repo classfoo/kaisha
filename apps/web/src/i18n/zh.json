@@ -243,6 +243,23 @@
         "testing": { "empty": "测试阶段内容将在后续版本中展示。" },
         "release": { "empty": "发布阶段内容将在后续版本中展示。" }
       },
+      "confirm": {
+        "sectionTitle": "需求确认",
+        "statusLabel": "确认状态",
+        "statusPending": "待确认",
+        "statusConfirmed": "已确认",
+        "statusAbandoned": "已放弃",
+        "confirmAction": "确认需求",
+        "abandonAction": "放弃需求",
+        "reconfirmAction": "重新确认",
+        "confirmDialogTitle": "确认需求",
+        "confirmDialogText": "确认将此需求推进至开发阶段？",
+        "abandonDialogTitle": "放弃需求",
+        "abandonDialogText": "放弃后需求将不进入开发，可随时重新确认。是否继续？",
+        "reconfirmDialogTitle": "重新确认",
+        "reconfirmDialogText": "将已放弃的需求重新确认并推进至开发阶段？",
+        "processing": "处理中…"
+      },
       "review": {
         "sectionTitle": "需求评审",
         "enter": "进入评审",

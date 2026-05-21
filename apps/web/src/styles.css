@@ -1073,11 +1073,9 @@ select,
   border-color: #5a9eff;
 }
 
-.requirement-timeline__step--current .requirement-timeline__dot {
+.requirement-timeline__step--selected .requirement-timeline__dot {
   width: 14px;
   height: 14px;
-  background: #4a9eff;
-  border-color: #7eb8ff;
   box-shadow: 0 0 0 4px rgba(74, 158, 255, 0.25);
 }
 
@@ -1100,7 +1098,7 @@ select,
   color: #aeb9cf;
 }
 
-.requirement-timeline__step--current .requirement-timeline__label {
+.requirement-timeline__step--selected .requirement-timeline__label {
   color: #dbe8ff;
   font-weight: 600;
 }
@@ -1144,6 +1142,49 @@ select,
 
 .requirement-detail__stage--placeholder {
   padding: 8px 2px;
+}
+
+.requirement-phase-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid #333;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.requirement-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.requirement-confirm__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.requirement-confirm__badge {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.requirement-confirm__badge--pending {
+  background: #3d3d3d;
+  color: #aaa;
+}
+
+.requirement-confirm__badge--confirmed {
+  background: #1e3a2f;
+  color: #4ade80;
+}
+
+.requirement-confirm__badge--abandoned {
+  background: #3d2d2d;
+  color: #f87171;
 }
 
 .requirement-review-confirm {

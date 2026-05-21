@@ -243,6 +243,23 @@
         "testing": { "empty": "Testing-stage content will be available in a future release." },
         "release": { "empty": "Release-stage content will be available in a future release." }
       },
+      "confirm": {
+        "sectionTitle": "Requirement confirmation",
+        "statusLabel": "Status",
+        "statusPending": "Pending",
+        "statusConfirmed": "Confirmed",
+        "statusAbandoned": "Abandoned",
+        "confirmAction": "Confirm requirement",
+        "abandonAction": "Abandon requirement",
+        "reconfirmAction": "Reconfirm",
+        "confirmDialogTitle": "Confirm requirement",
+        "confirmDialogText": "Confirm this requirement and proceed to development?",
+        "abandonDialogTitle": "Abandon requirement",
+        "abandonDialogText": "This requirement will not enter development. You can reconfirm it later. Continue?",
+        "reconfirmDialogTitle": "Reconfirm requirement",
+        "reconfirmDialogText": "Reconfirm this abandoned requirement and proceed to development?",
+        "processing": "Processing\u2026"
+      },
       "review": {
         "sectionTitle": "Requirement review",
         "enter": "Enter review",

@@ -9,7 +9,6 @@ type RequirementPhaseTimelineProps = {
   phaseLabel: (phase: RequirementPhase) => string
   disabled?: boolean
   onViewPhaseChange: (phase: RequirementPhase) => void
-  t: (key: string) => string
 }
 
 function phaseIndex(phase: RequirementPhase): number {
@@ -22,7 +21,6 @@ export function RequirementPhaseTimeline({
   phaseLabel,
   disabled = false,
   onViewPhaseChange,
-  t,
 }: RequirementPhaseTimelineProps) {
   const progressIndex = phaseIndex(phase)
   const viewIndex = phaseIndex(viewPhase)
@@ -32,12 +30,7 @@ export function RequirementPhaseTimeline({
       : (progressIndex / (REQUIREMENT_PHASES.length - 1)) * 100
 
   return (
-    <div
-      className="requirement-timeline"
-      role="list"
-      aria-label={t('ui.requirements.timelineLabel')}
-    >
-      <p className="requirement-timeline__hint">{t('ui.requirements.timelineHint')}</p>
+    <div className="requirement-timeline">
       <div className="requirement-timeline__rail">
         <div className="requirement-timeline__line" aria-hidden="true">
           <div
@@ -48,12 +41,11 @@ export function RequirementPhaseTimeline({
         <ol className="requirement-timeline__track">
           {REQUIREMENT_PHASES.map((item, index) => {
             const isViewing = index === viewIndex
-            const isDone = index < progressIndex
-            const stateClass = isViewing ? 'current' : isDone ? 'done' : 'upcoming'
+            const isDone = index <= progressIndex
             return (
               <li
                 key={item}
-                className={`requirement-timeline__step requirement-timeline__step--${stateClass}`}
+                className={`requirement-timeline__step${isDone ? ' requirement-timeline__step--done' : ''}${isViewing ? ' requirement-timeline__step--selected' : ''}`}
                 role="listitem"
               >
                 <button
