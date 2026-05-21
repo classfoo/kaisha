@@ -1,6 +1,7 @@
 import * as React from 'react'
 import {
   createRequirementsApi,
+  type OpinionUserAction,
   type RequirementDetail,
   type RequirementPhase,
   type RequirementReview,
@@ -23,6 +24,8 @@ export function useRequirementsWorkspace(
   const [review, setReview] = React.useState<RequirementReview | null>(null)
   const [reviewLoading, setReviewLoading] = React.useState(false)
   const [reviewRunning, setReviewRunning] = React.useState(false)
+  const [reviewForcePassing, setReviewForcePassing] = React.useState(false)
+  const [opinionActionKey, setOpinionActionKey] = React.useState<string | null>(null)
 
   const selectedIdRef = React.useRef(selectedId)
   selectedIdRef.current = selectedId
@@ -164,16 +167,82 @@ export function useRequirementsWorkspace(
       setReviewRunning(true)
       setError(null)
       try {
-        const result = await api.runReview(id)
-        setReview(result)
+        let current = await api.runReview(id)
+        setReview(current)
+        while (current.status === 'in_progress') {
+          await new Promise((resolve) => setTimeout(resolve, 2000))
+          const polled = await api.getReview(id)
+          if (!polled) break
+          current = polled
+          setReview(polled)
+        }
         await loadDetail(id)
-        return result
+        return current
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         setError(msg)
         throw e
       } finally {
         setReviewRunning(false)
+      }
+    },
+    [api, loadDetail],
+  )
+
+  React.useEffect(() => {
+    if (!selectedId || review?.status !== 'in_progress' || reviewRunning) return
+    const timer = window.setInterval(() => {
+      void loadReview(selectedId).catch(() => undefined)
+    }, 2000)
+    return () => window.clearInterval(timer)
+  }, [selectedId, review?.status, reviewRunning, loadReview])
+
+  const opinionAction = React.useCallback(
+    async (requirementId: string, employeeId: string, action: OpinionUserAction) => {
+      const key = `${employeeId}:${action}`
+      setOpinionActionKey(key)
+      setError(null)
+      try {
+        const result = await api.opinionAction(requirementId, employeeId, action)
+        setReview(result)
+        if (action === 'rerun') {
+          for (let i = 0; i < 120; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 2000))
+            const polled = await api.getReview(requirementId)
+            if (!polled) break
+            setReview(polled)
+            const row = polled.opinions.find((o) => o.employee_id === employeeId)
+            if (row && row.status !== 'in_progress' && row.status !== 'revising') break
+          }
+        }
+        await loadDetail(requirementId)
+        return result
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        throw e
+      } finally {
+        setOpinionActionKey(null)
+      }
+    },
+    [api, loadDetail],
+  )
+
+  const forcePassReview = React.useCallback(
+    async (id: string) => {
+      setReviewForcePassing(true)
+      setError(null)
+      try {
+        const result = await api.forcePassReview(id)
+        setReview(result)
+        const updated = await loadDetail(id)
+        return { review: result, detail: updated }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        throw e
+      } finally {
+        setReviewForcePassing(false)
       }
     },
     [api, loadDetail],
@@ -188,12 +257,16 @@ export function useRequirementsWorkspace(
     busy,
     reviewLoading,
     reviewRunning,
+    reviewForcePassing,
+    opinionActionKey,
     error,
     refresh,
     selectRequirement,
     createRequirement,
     saveRequirement,
     runReview,
+    forcePassReview,
+    opinionAction,
     loadReview,
   }
 }

@@ -22,13 +22,17 @@ export type RequirementDetail = RequirementSummary & {
 
 export type ReviewStatus = 'in_progress' | 'completed'
 export type ReviewConclusion = 'adopt' | 'supplement'
+export type OpinionItemStatus = 'pending' | 'in_progress' | 'revising' | 'completed' | 'abandoned'
+export type OpinionUserAction = 'rerun' | 'pass' | 'fail' | 'abandon'
 
 export type ReviewOpinion = {
   employee_id: string
   employee_name: string
   role: string
   role_key: string | null
-  content: string
+  status: OpinionItemStatus
+  passed: boolean | null
+  content: string | null
 }
 
 export type RequirementReview = {
@@ -40,6 +44,12 @@ export type RequirementReview = {
   participants: string[]
   opinions: ReviewOpinion[]
   summary: string | null
+  passed_count: number
+  failed_count: number
+  pending_count: number
+  undecided_count: number
+  abandoned_count: number
+  overall_passed: boolean
 }
 
 export type WorkRoleDefinition = {
@@ -114,6 +124,28 @@ export function createRequirementsApi(apiBase: string, locale: string) {
         method: 'POST',
         headers,
       })
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async opinionAction(
+      requirementId: string,
+      employeeId: string,
+      action: OpinionUserAction,
+    ): Promise<RequirementReview> {
+      const res = await fetch(
+        `${apiBase}/api/requirements/${encodeURIComponent(requirementId)}/review/opinions/${encodeURIComponent(employeeId)}/${action}`,
+        { method: 'POST', headers },
+      )
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async forcePassReview(id: string): Promise<RequirementReview> {
+      const res = await fetch(
+        `${apiBase}/api/requirements/${encodeURIComponent(id)}/review/force-pass`,
+        { method: 'POST', headers },
+      )
       if (!res.ok) throw new Error(await readError(res))
       return res.json()
     },

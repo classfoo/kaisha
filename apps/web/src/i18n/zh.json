@@ -222,7 +222,7 @@
       "titleLabel": "标题",
       "phaseLabel": "阶段",
       "timelineLabel": "需求生命周期",
-      "timelineHint": "点击阶段节点可切换当前阶段",
+      "timelineHint": "点击阶段查看该阶段的详情；保存时将同步更新当前阶段",
       "contentLabel": "内容",
       "contentPlaceholder": "使用 Markdown 编写需求正文…",
       "dirLabel": "目录",
@@ -237,13 +237,27 @@
         "testing": "测试",
         "release": "发布"
       },
+      "phaseViews": {
+        "confirm": { "empty": "确认阶段内容将在后续版本中展示。" },
+        "development": { "empty": "开发阶段内容将在后续版本中展示。" },
+        "testing": { "empty": "测试阶段内容将在后续版本中展示。" },
+        "release": { "empty": "发布阶段内容将在后续版本中展示。" }
+      },
       "review": {
         "sectionTitle": "需求评审",
         "enter": "进入评审",
+        "forcePass": "通过评审",
+        "forcePassing": "处理中…",
+        "forcePassConfirmText": "将跳过剩余评审流程，强制标记为通过并进入确认阶段。是否继续？",
+        "forcePassConfirm": "确认通过",
         "confirmText": "将启动多角色评审：所有员工会以各自角色调用编码 agent 分析该需求并产出意见，是否继续？",
         "confirm": "开始评审",
         "cancel": "取消",
         "running": "评审进行中…",
+        "activeReviewers": "{count} 位员工正在通过 coding agent 评审…",
+        "agentRunning": "正在使用 coding agent 撰写评审意见…",
+        "agentRevising": "正在使用 coding agent 根据评审意见修改需求…",
+        "mustReviseHint": "未通过：该员工需自行修改需求并重新评审直至通过。",
         "loading": "加载评审…",
         "notStarted": "尚未评审。点击「进入评审」启动流程。",
         "statusLabel": "状态",
@@ -253,7 +267,37 @@
         "conclusionAdopt": "采纳需求",
         "conclusionSupplement": "需补充需求",
         "conclusionPending": "待定",
+        "tally": "通过 {passed} 人，不通过 {failed} 人，进行中 {pending} 人",
+        "tallyPassed": "通过",
+        "tallyFailed": "不通过",
+        "tallyPending": "进行中",
+        "tallyUndecided": "待定",
+        "overallLabel": "整体",
+        "overallPassed": "整体通过（全员通过）",
+        "overallFailed": "未整体通过",
+        "overallPending": "评审中",
         "opinionsTitle": "评审意见",
+        "opinionsEmpty": "暂无评审意见。",
+        "opinionAbandonedHint": "已放弃参与本次评审。",
+        "opinionActions": {
+          "rerun": "重新评审",
+          "pass": "评审通过",
+          "fail": "不通过",
+          "abandon": "放弃评审",
+          "busy": "处理中…"
+        },
+        "opinionStatus": {
+          "pending": "待评审",
+          "in_progress": "进行中",
+          "revising": "修改需求中",
+          "completed": "已完成",
+          "abandoned": "已放弃"
+        },
+        "opinionPassed": {
+          "yes": "通过",
+          "no": "需修改",
+          "unknown": "待定"
+        },
         "summaryTitle": "评审汇总"
       }
     },

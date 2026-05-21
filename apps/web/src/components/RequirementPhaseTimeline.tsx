@@ -2,10 +2,13 @@ import React from 'react'
 import { REQUIREMENT_PHASES, type RequirementPhase } from '../features/requirements/requirementsApi'
 
 type RequirementPhaseTimelineProps = {
+  /** Saved workflow phase (progress rail). */
   phase: RequirementPhase
+  /** Stage currently shown in the detail panel. */
+  viewPhase: RequirementPhase
   phaseLabel: (phase: RequirementPhase) => string
   disabled?: boolean
-  onPhaseChange: (phase: RequirementPhase) => void
+  onViewPhaseChange: (phase: RequirementPhase) => void
   t: (key: string) => string
 }
 
@@ -15,16 +18,18 @@ function phaseIndex(phase: RequirementPhase): number {
 
 export function RequirementPhaseTimeline({
   phase,
+  viewPhase,
   phaseLabel,
   disabled = false,
-  onPhaseChange,
+  onViewPhaseChange,
   t,
 }: RequirementPhaseTimelineProps) {
-  const currentIndex = phaseIndex(phase)
+  const progressIndex = phaseIndex(phase)
+  const viewIndex = phaseIndex(viewPhase)
   const progressPct =
     REQUIREMENT_PHASES.length <= 1
       ? 0
-      : (currentIndex / (REQUIREMENT_PHASES.length - 1)) * 100
+      : (progressIndex / (REQUIREMENT_PHASES.length - 1)) * 100
 
   return (
     <div
@@ -42,9 +47,9 @@ export function RequirementPhaseTimeline({
         </div>
         <ol className="requirement-timeline__track">
           {REQUIREMENT_PHASES.map((item, index) => {
-            const isCurrent = index === currentIndex
-            const isDone = index < currentIndex
-            const stateClass = isCurrent ? 'current' : isDone ? 'done' : 'upcoming'
+            const isViewing = index === viewIndex
+            const isDone = index < progressIndex
+            const stateClass = isViewing ? 'current' : isDone ? 'done' : 'upcoming'
             return (
               <li
                 key={item}
@@ -55,10 +60,10 @@ export function RequirementPhaseTimeline({
                   type="button"
                   className="requirement-timeline__node"
                   disabled={disabled}
-                  aria-current={isCurrent ? 'step' : undefined}
+                  aria-current={isViewing ? 'step' : undefined}
                   aria-label={phaseLabel(item)}
                   title={phaseLabel(item)}
-                  onClick={() => onPhaseChange(item)}
+                  onClick={() => onViewPhaseChange(item)}
                 >
                   <span className="requirement-timeline__dot" aria-hidden="true" />
                 </button>

@@ -222,7 +222,7 @@
       "titleLabel": "タイトル",
       "phaseLabel": "フェーズ",
       "timelineLabel": "要件ライフサイクル",
-      "timelineHint": "ステージをクリックして現在のフェーズを変更",
+      "timelineHint": "ステージをクリックして詳細を表示。保存時に現在フェーズも更新されます",
       "contentLabel": "内容",
       "contentPlaceholder": "Markdownで要件本文を記述…",
       "dirLabel": "ディレクトリ",
@@ -237,13 +237,25 @@
         "testing": "テスト",
         "release": "リリース"
       },
+      "phaseViews": {
+        "confirm": { "empty": "確認フェーズの内容は今後のバージョンで表示されます。" },
+        "development": { "empty": "開発フェーズの内容は今後のバージョンで表示されます。" },
+        "testing": { "empty": "テストフェーズの内容は今後のバージョンで表示されます。" },
+        "release": { "empty": "リリースフェーズの内容は今後のバージョンで表示されます。" }
+      },
       "review": {
         "sectionTitle": "要件レビュー",
         "enter": "レビューを開始",
+        "forcePass": "レビュー通過",
+        "forcePassing": "処理中…",
+        "forcePassConfirmText": "残りのレビューをスキップし、強制的に承認して確認フェーズへ進めます。続行しますか？",
+        "forcePassConfirm": "通過を確定",
         "confirmText": "全社員が各ロールでコーディング agent を使い要件を分析します。開始しますか？",
         "confirm": "開始",
         "cancel": "キャンセル",
         "running": "レビュー実行中…",
+        "activeReviewers": "{count} 名が coding agent でレビュー中…",
+        "agentRunning": "coding agent がレビュー意見を作成中…",
         "loading": "レビューを読み込み中…",
         "notStarted": "未レビュー。「レビューを開始」でパイプラインを実行します。",
         "statusLabel": "状態",
@@ -253,7 +265,37 @@
         "conclusionAdopt": "要件を採用",
         "conclusionSupplement": "要件の補足が必要",
         "conclusionPending": "未定",
+        "tally": "承認 {passed}、否認 {failed}、進行中 {pending}",
+        "tallyPassed": "承認",
+        "tallyFailed": "否認",
+        "tallyPending": "進行中",
+        "tallyUndecided": "未定",
+        "overallLabel": "全体",
+        "overallPassed": "全体承認（全員承認）",
+        "overallFailed": "全体未承認",
+        "overallPending": "レビュー中",
         "opinionsTitle": "レビュー意見",
+        "opinionsEmpty": "レビュー意見はまだありません。",
+        "opinionAbandonedHint": "このレビュアーはレビューから退出しました。",
+        "opinionActions": {
+          "rerun": "再レビュー",
+          "pass": "承認",
+          "fail": "否認",
+          "abandon": "レビュー退出",
+          "busy": "処理中…"
+        },
+        "opinionStatus": {
+          "pending": "未着手",
+          "in_progress": "進行中",
+          "revising": "要件修正中",
+          "completed": "完了",
+          "abandoned": "退出済み"
+        },
+        "opinionPassed": {
+          "yes": "承認",
+          "no": "要修正",
+          "unknown": "未定"
+        },
         "summaryTitle": "レビュー要約"
       }
     },

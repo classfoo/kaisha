@@ -1133,10 +1133,17 @@ select,
   min-height: 0;
 }
 
-.requirement-detail__review {
+.requirement-detail__review,
+.requirement-detail__stage {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+
+.requirement-detail__stage--placeholder {
+  padding: 8px 2px;
 }
 
 .requirement-review-confirm {
@@ -1152,6 +1159,42 @@ select,
   margin-top: 10px;
 }
 
+.requirement-review__tally {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: baseline;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #2b3446;
+  background: #0f141e;
+}
+
+.requirement-review__tally-summary {
+  flex: 1 1 100%;
+  margin: 4px 0 0;
+}
+
+.requirement-review__tally-stat--passed strong {
+  color: #8fd4a8;
+}
+
+.requirement-review__tally-stat--failed strong {
+  color: #f0a8a8;
+}
+
+.requirement-review__tally-stat--pending strong {
+  color: #9ed0ff;
+}
+
+.requirement-review__overall--pass {
+  color: #8fd4a8;
+}
+
+.requirement-review__overall--fail {
+  color: #f0a8a8;
+}
+
 .requirement-review__status {
   display: flex;
   flex-wrap: wrap;
@@ -1159,19 +1202,178 @@ select,
   align-items: baseline;
 }
 
+.requirement-review__opinion-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.requirement-review__opinion-list > li + li {
+  margin-top: 8px;
+}
+
+.requirement-review__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.requirement-review__running-hint {
+  margin: 0;
+}
+
 .requirement-review__opinion {
-  margin-top: 10px;
-  padding: 10px;
+  margin-top: 0;
+  padding: 0;
   border-radius: 8px;
   border: 1px solid #2b3446;
   background: #0f141e;
+  overflow: hidden;
 }
 
-.requirement-review__opinion-head {
+.requirement-review__opinion--in_progress {
+  border-color: #3d6eb8;
+  box-shadow: 0 0 0 1px rgba(74, 158, 255, 0.15);
+}
+
+.requirement-review__opinion-toggle {
   display: flex;
-  gap: 8px;
-  align-items: baseline;
-  margin-bottom: 6px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.requirement-review__opinion-toggle:not(:disabled) {
+  cursor: pointer;
+}
+
+.requirement-review__opinion-toggle:not(:disabled):hover {
+  background: rgba(74, 158, 255, 0.06);
+}
+
+.requirement-review__opinion-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.requirement-review__opinion-name {
+  font-size: 13px;
+}
+
+.requirement-review__opinion-role {
+  font-size: 11px;
+}
+
+.requirement-review__opinion-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.requirement-review__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.requirement-review__badge--status-pending {
+  color: #9ba7be;
+  background: #1a2230;
+}
+
+.requirement-review__badge--status-in_progress {
+  color: #9ed0ff;
+  background: #1a2d4a;
+}
+
+.requirement-review__badge--status-completed {
+  color: #b8e6c8;
+  background: #1a3028;
+}
+
+.requirement-review__badge--passed-yes {
+  color: #b8e6c8;
+  background: #1a3028;
+}
+
+.requirement-review__badge--passed-no {
+  color: #f0b8b8;
+  background: #3a2020;
+}
+
+.requirement-review__badge--passed-unknown {
+  color: #d0c8a8;
+  background: #2e2a1a;
+}
+
+.requirement-review__badge-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4a9eff;
+  animation: requirement-review-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes requirement-review-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+.requirement-review__opinion-chevron {
+  flex-shrink: 0;
+  color: #8b99b0;
+  font-size: 12px;
+}
+
+.requirement-review__opinion-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 12px 10px;
+}
+
+.action-btn--compact {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+.requirement-review__badge--status-abandoned {
+  color: #a8b0c0;
+  background: #222830;
+}
+
+.requirement-review__opinion-hint {
+  margin: 0;
+  padding: 0 12px 10px;
+}
+
+.requirement-review__opinion-body {
+  margin: 0;
+  padding: 0 12px 12px;
+  border-top: 1px solid #2b3446;
 }
 
 .requirement-review__opinion-body,

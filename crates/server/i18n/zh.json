@@ -45,5 +45,8 @@
   "review_not_started": "尚未启动该需求评审",
   "review_no_employees": "没有可参与评审的员工",
   "review_requirement_unspecified": "请指明要评审的需求（在消息中包含需求 id）",
-  "review_already_completed": "该需求评审已完成"
+  "review_already_completed": "该需求评审已完成",
+  "review_opinion_busy": "另有评审任务进行中，请稍后再试",
+  "review_opinion_not_participant": "该员工不在本次评审参与者列表中",
+  "review_opinion_invalid_action": "无效的评审操作"
 }

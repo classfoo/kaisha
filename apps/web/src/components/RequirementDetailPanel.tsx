@@ -2,7 +2,7 @@ import React from 'react'
 import type { useRequirementsWorkspace } from '../features/requirements/useRequirementsWorkspace'
 import type { RequirementPhase } from '../features/requirements/requirementsApi'
 import { RequirementPhaseTimeline } from './RequirementPhaseTimeline'
-import { RequirementReviewSection } from './RequirementReviewSection'
+import { RequirementPhaseContent } from './RequirementPhaseContent'
 
 type RequirementDetailPanelProps = {
   requirements: ReturnType<typeof useRequirementsWorkspace>
@@ -14,6 +14,7 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
   const { detail, loading, busy, error, saveRequirement, runReview, reviewRunning } = requirements
   const [titleDraft, setTitleDraft] = React.useState('')
   const [phaseDraft, setPhaseDraft] = React.useState<RequirementPhase>('collection')
+  const [viewPhase, setViewPhase] = React.useState<RequirementPhase>('collection')
   const [contentDraft, setContentDraft] = React.useState('')
   const [dirty, setDirty] = React.useState(false)
   const [saveError, setSaveError] = React.useState('')
@@ -24,12 +25,14 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
     if (!detail) {
       setTitleDraft('')
       setPhaseDraft('collection')
+      setViewPhase('collection')
       setContentDraft('')
       setDirty(false)
       return
     }
     setTitleDraft(detail.title)
     setPhaseDraft(detail.phase)
+    setViewPhase(detail.phase)
     setContentDraft(detail.content)
     setDirty(false)
     setSaveError('')
@@ -78,9 +81,11 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
           </h3>
           <RequirementPhaseTimeline
             phase={phaseDraft}
+            viewPhase={viewPhase}
             phaseLabel={phaseLabel}
             disabled={busy}
-            onPhaseChange={(next) => {
+            onViewPhaseChange={(next) => {
+              setViewPhase(next)
               setPhaseDraft(next)
               markDirty()
             }}
@@ -126,7 +131,10 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
                   if (!detail) return
                   setReviewError('')
                   void runReview(detail.id)
-                    .then(() => setConfirmReviewOpen(false))
+                    .then(() => {
+                      setConfirmReviewOpen(false)
+                      setViewPhase('review')
+                    })
                     .catch((e) => setReviewError(e instanceof Error ? e.message : String(e)))
                 }}
                 disabled={reviewRunning}
@@ -151,25 +159,17 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
           <p className="workspace-setup__error">{saveError || error}</p>
         ) : null}
       </header>
-      <section className="requirement-detail__review">
-        <h3 className="requirement-detail__label">{t('ui.requirements.review.sectionTitle')}</h3>
-        <RequirementReviewSection requirements={requirements} t={t} />
-      </section>
-      <section className="requirement-detail__body">
-        <label className="requirement-detail__label" htmlFor="requirement-content">
-          {t('ui.requirements.contentLabel')}
-        </label>
-        <textarea
-          id="requirement-content"
-          className="requirement-detail__editor"
-          value={contentDraft}
-          onChange={(e) => {
-            setContentDraft(e.target.value)
-            markDirty()
-          }}
-          placeholder={t('ui.requirements.contentPlaceholder')}
-        />
-      </section>
+      <RequirementPhaseContent
+        viewPhase={viewPhase}
+        phaseLabel={phaseLabel}
+        contentDraft={contentDraft}
+        onContentChange={(value) => {
+          setContentDraft(value)
+          markDirty()
+        }}
+        requirements={requirements}
+        t={t}
+      />
     </div>
   )
 }

@@ -222,7 +222,7 @@
       "titleLabel": "Title",
       "phaseLabel": "Phase",
       "timelineLabel": "Requirement lifecycle",
-      "timelineHint": "Click a stage to set the current phase",
+      "timelineHint": "Click a stage to view its details; saving also updates the current phase",
       "contentLabel": "Content",
       "contentPlaceholder": "Write requirement details in Markdown…",
       "dirLabel": "Directory",
@@ -237,13 +237,25 @@
         "testing": "Testing",
         "release": "Release"
       },
+      "phaseViews": {
+        "confirm": { "empty": "Confirm-stage content will be available in a future release." },
+        "development": { "empty": "Development-stage content will be available in a future release." },
+        "testing": { "empty": "Testing-stage content will be available in a future release." },
+        "release": { "empty": "Release-stage content will be available in a future release." }
+      },
       "review": {
         "sectionTitle": "Requirement review",
         "enter": "Enter review",
+        "forcePass": "Pass review",
+        "forcePassing": "Processing…",
+        "forcePassConfirmText": "Skip the remaining review process, mark this requirement as passed, and move to the confirm phase. Continue?",
+        "forcePassConfirm": "Confirm pass",
         "confirmText": "Start a multi-role review? All employees will analyze this requirement with their coding agent and produce opinions.",
         "confirm": "Start review",
         "cancel": "Cancel",
         "running": "Review in progress…",
+        "activeReviewers": "{count} reviewer(s) running coding agent…",
+        "agentRunning": "Coding agent is writing the review opinion…",
         "loading": "Loading review…",
         "notStarted": "No review yet. Use Enter review to run the pipeline.",
         "statusLabel": "Status",
@@ -253,7 +265,37 @@
         "conclusionAdopt": "Adopt requirement",
         "conclusionSupplement": "Needs supplement",
         "conclusionPending": "Pending",
+        "tally": "{passed} passed, {failed} failed, {pending} in progress",
+        "tallyPassed": "Passed",
+        "tallyFailed": "Failed",
+        "tallyPending": "In progress",
+        "tallyUndecided": "Undecided",
+        "overallLabel": "Overall",
+        "overallPassed": "Overall passed (all reviewers approved)",
+        "overallFailed": "Not passed overall",
+        "overallPending": "Review in progress",
         "opinionsTitle": "Reviewer opinions",
+        "opinionsEmpty": "No reviewer opinions yet.",
+        "opinionAbandonedHint": "This reviewer has withdrawn from the review.",
+        "opinionActions": {
+          "rerun": "Re-review",
+          "pass": "Approve",
+          "fail": "Reject",
+          "abandon": "Withdraw",
+          "busy": "Processing…"
+        },
+        "opinionStatus": {
+          "pending": "Pending",
+          "in_progress": "In progress",
+          "revising": "Revising requirement",
+          "completed": "Completed",
+          "abandoned": "Withdrawn"
+        },
+        "opinionPassed": {
+          "yes": "Approved",
+          "no": "Needs changes",
+          "unknown": "Undecided"
+        },
         "summaryTitle": "Review summary"
       }
     },
