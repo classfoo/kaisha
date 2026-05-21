@@ -1,8 +1,10 @@
 import * as React from 'react'
 import {
   createRequirementsApi,
+  type DevTaskStatus,
   type OpinionUserAction,
   type RequirementDetail,
+  type RequirementDevelopment,
   type RequirementPhase,
   type RequirementReview,
   type RequirementSummary,
@@ -29,6 +31,10 @@ export function useRequirementsWorkspace(
   const [confirming, setConfirming] = React.useState(false)
   const [abandoning, setAbandoning] = React.useState(false)
   const [reconfirming, setReconfirming] = React.useState(false)
+  const [development, setDevelopment] = React.useState<RequirementDevelopment | null>(null)
+  const [devLoading, setDevLoading] = React.useState(false)
+  const [devActionKey, setDevActionKey] = React.useState<string | null>(null)
+  const [devStarting, setDevStarting] = React.useState(false)
 
   const selectedIdRef = React.useRef(selectedId)
   selectedIdRef.current = selectedId
@@ -353,11 +359,127 @@ export function useRequirementsWorkspace(
     [api],
   )
 
+  const loadDevelopment = React.useCallback(
+    async (id: string) => {
+      setDevLoading(true)
+      try {
+        const data = await api.getDevelopment(id)
+        setDevelopment(data)
+        return data
+      } catch (e) {
+        setDevelopment(null)
+        throw e
+      } finally {
+        setDevLoading(false)
+      }
+    },
+    [api],
+  )
+
+  const startDevelopmentAction = React.useCallback(
+    async (id: string) => {
+      setDevStarting(true)
+      setError(null)
+      try {
+        const updated = await api.startDevelopment(id)
+        setDevelopment(updated)
+        await loadDetail(id)
+        return updated
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        throw e
+      } finally {
+        setDevStarting(false)
+      }
+    },
+    [api, loadDetail],
+  )
+
+  const createDevTaskAction = React.useCallback(
+    async (id: string, payload: { title: string; assignee?: string }) => {
+      setDevActionKey('create')
+      setError(null)
+      try {
+        const updated = await api.createDevTask(id, payload)
+        setDevelopment(updated)
+        await loadDetail(id)
+        return updated
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        throw e
+      } finally {
+        setDevActionKey(null)
+      }
+    },
+    [api, loadDetail],
+  )
+
+  const updateDevTaskAction = React.useCallback(
+    async (id: string, taskId: string, payload: { title?: string; assignee?: string; progress?: number }) => {
+      setDevActionKey(`${taskId}:update`)
+      setError(null)
+      try {
+        const updated = await api.updateDevTask(id, taskId, payload)
+        setDevelopment(updated)
+        return updated
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        throw e
+      } finally {
+        setDevActionKey(null)
+      }
+    },
+    [api],
+  )
+
+  const deleteDevTaskAction = React.useCallback(
+    async (id: string, taskId: string) => {
+      setDevActionKey(`${taskId}:delete`)
+      setError(null)
+      try {
+        const updated = await api.deleteDevTask(id, taskId)
+        setDevelopment(updated)
+        return updated
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        throw e
+      } finally {
+        setDevActionKey(null)
+      }
+    },
+    [api],
+  )
+
+  const devTaskAction = React.useCallback(
+    async (id: string, taskId: string, action: string) => {
+      setDevActionKey(`${taskId}:${action}`)
+      setError(null)
+      try {
+        const updated = await api.devTaskAction(id, taskId, action)
+        setDevelopment(updated)
+        await loadDetail(id)
+        return updated
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        throw e
+      } finally {
+        setDevActionKey(null)
+      }
+    },
+    [api, loadDetail],
+  )
+
   return {
     items,
     selectedId,
     detail,
     review,
+    development,
     loading,
     busy,
     reviewLoading,
@@ -367,6 +489,9 @@ export function useRequirementsWorkspace(
     confirming,
     abandoning,
     reconfirming,
+    devLoading,
+    devActionKey,
+    devStarting,
     error,
     refresh,
     selectRequirement,
@@ -379,5 +504,11 @@ export function useRequirementsWorkspace(
     confirmRequirement,
     abandonRequirement,
     reconfirmRequirement,
+    loadDevelopment,
+    startDevelopmentAction,
+    createDevTaskAction,
+    updateDevTaskAction,
+    deleteDevTaskAction,
+    devTaskAction,
   }
 }

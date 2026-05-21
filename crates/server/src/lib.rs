@@ -4,6 +4,7 @@ mod employee_requirement_agent;
 mod git;
 mod i18n;
 mod requirement;
+mod requirement_development;
 mod requirement_review;
 mod tools;
 mod work_rules;
@@ -559,6 +560,24 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
         .route(
             "/api/requirements/:id/reconfirm",
             axum::routing::post(requirement::reconfirm_requirement),
+        )
+        .route(
+            "/api/requirements/:id/development",
+            axum::routing::get(requirement_development::get_development)
+                .post(requirement_development::start_development),
+        )
+        .route(
+            "/api/requirements/:id/development/tasks",
+            axum::routing::post(requirement_development::create_task),
+        )
+        .route(
+            "/api/requirements/:id/development/tasks/:task_id",
+            axum::routing::put(requirement_development::update_task)
+                .delete(requirement_development::delete_task),
+        )
+        .route(
+            "/api/requirements/:id/development/tasks/:task_id/:action",
+            axum::routing::post(requirement_development::task_action),
         )
         .route(
             "/api/work-rules",

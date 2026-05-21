@@ -240,7 +240,7 @@ pub fn requirement_dir(workspace: &Path, id: &str) -> PathBuf {
     requirements_root(workspace).join(id)
 }
 
-fn requirement_file_path(workspace: &Path, id: &str) -> PathBuf {
+pub(crate) fn requirement_file_path(workspace: &Path, id: &str) -> PathBuf {
     requirement_dir(workspace, id).join(REQUIREMENT_FILE)
 }
 

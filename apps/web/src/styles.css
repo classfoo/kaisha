@@ -1187,6 +1187,116 @@ select,
   color: #f87171;
 }
 
+.requirement-development {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.requirement-development__feature-branch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #2b3446;
+  border-radius: 8px;
+  background: #0f141e;
+}
+
+.requirement-development__branch-name {
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  color: #9ed0ff;
+}
+
+.requirement-development__toolbar {
+  display: flex;
+  gap: 8px;
+}
+
+.requirement-development__task-list {
+  display: grid;
+  gap: 8px;
+}
+
+.requirement-development__task {
+  border: 1px solid #2b3446;
+  border-radius: 8px;
+  padding: 12px;
+  background: #0f141e;
+}
+
+.requirement-development__task-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.requirement-development__task-title {
+  font-weight: 600;
+}
+
+.requirement-development__task-status {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.requirement-development__task-meta {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #8b99b0;
+}
+
+.requirement-development__task-branch {
+  font-family: ui-monospace, monospace;
+}
+
+.requirement-development__progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.requirement-development__progress-bar {
+  flex: 1;
+  height: 6px;
+  background: #2b3446;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.requirement-development__progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3d7dd6, #4a9eff);
+  border-radius: 3px;
+  transition: width 0.2s ease;
+}
+
+.requirement-development__progress-label {
+  font-size: 11px;
+  color: #8b99b0;
+  min-width: 32px;
+  text-align: right;
+}
+
+.requirement-development__progress-slider {
+  width: 100%;
+  margin-top: 4px;
+  accent-color: #4a9eff;
+}
+
+.requirement-development__task-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
 .requirement-review-confirm {
   padding: 12px;
   border-radius: 8px;

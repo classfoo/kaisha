@@ -4,6 +4,7 @@ import type { RequirementPhase } from '../features/requirements/requirementsApi'
 import { phaseViewKind } from '../features/requirements/requirementPhaseView'
 import { RequirementReviewSection } from './RequirementReviewSection'
 import { RequirementConfirmSection } from './RequirementConfirmSection'
+import { RequirementDevelopmentSection } from './RequirementDevelopmentSection'
 
 type RequirementPhaseContentProps = {
   viewPhase: RequirementPhase
@@ -61,6 +62,15 @@ export function RequirementPhaseContent({
       <section className="requirement-detail__stage requirement-detail__stage--confirm">
         <h3 className="requirement-detail__label">{t('ui.requirements.confirm.sectionTitle')}</h3>
         <RequirementConfirmSection requirements={requirements} t={t} />
+      </section>
+    )
+  }
+
+  if (kind === 'development') {
+    return (
+      <section className="requirement-detail__stage requirement-detail__stage--development">
+        <h3 className="requirement-detail__label">{t('ui.requirements.development.sectionTitle')}</h3>
+        <RequirementDevelopmentSection requirements={requirements} t={t} />
       </section>
     )
   }

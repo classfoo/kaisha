@@ -260,6 +260,39 @@
         "reconfirmDialogText": "Reconfirm this abandoned requirement and proceed to development?",
         "processing": "Processing\u2026"
       },
+      "development": {
+        "sectionTitle": "Development",
+        "start": "Start Development",
+        "createTask": "Create Task",
+        "featureBranch": "Feature Branch",
+        "taskTitle": "Task Title",
+        "taskAssignee": "Assignee",
+        "taskBranch": "Branch",
+        "taskProgress": "Progress",
+        "taskStatus": {
+          "branch_created": "Branch Created",
+          "in_development": "In Development",
+          "dev_complete": "Dev Complete",
+          "in_review": "In Review",
+          "review_complete": "Review Complete",
+          "merged": "Merged"
+        },
+        "actions": {
+          "startDev": "Start Development",
+          "completeDev": "Complete Development",
+          "startReview": "Start Review",
+          "completeReview": "Complete Review",
+          "merge": "Merge to Feature"
+        },
+        "noTasks": "No development tasks yet. Create one to start.",
+        "createTaskTitle": "Create Development Task",
+        "createTaskText": "Create a new development task? This will create a branch from the feature branch.",
+        "confirm": "Confirm",
+        "cancel": "Cancel",
+        "loading": "Loading development...",
+        "notStarted": "Development not started yet.",
+        "processing": "Processing\u2026"
+      },
       "review": {
         "sectionTitle": "Requirement review",
         "enter": "Enter review",

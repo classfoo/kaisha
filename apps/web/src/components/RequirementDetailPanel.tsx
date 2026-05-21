@@ -28,6 +28,10 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
   const [reconfirmActionError, setReconfirmActionError] = React.useState('')
   const [confirmForceOpen, setConfirmForceOpen] = React.useState(false)
   const [forceError, setForceError] = React.useState('')
+  const [createTaskOpen, setCreateTaskOpen] = React.useState(false)
+  const [createTaskTitle, setCreateTaskTitle] = React.useState('')
+  const [createTaskAssignee, setCreateTaskAssignee] = React.useState('')
+  const [createError, setCreateError] = React.useState('')
 
   React.useEffect(() => {
     if (!detail) {
@@ -326,7 +330,89 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
       )
     }
 
-    // development, testing, release: placeholder toolbar (save button)
+    // development phase: start development, create task
+    if (phase === 'development') {
+      const dev = requirements.development
+      const featureBranchCreated = dev?.feature_branch_created
+
+      return (
+        <div className="requirement-phase-toolbar">
+          {!featureBranchCreated && (
+            <button
+              type="button"
+              className="action-btn"
+              onClick={() => void requirements.startDevelopmentAction(detail!.id)}
+              disabled={busy || requirements.devStarting}
+            >
+              {requirements.devStarting ? t('ui.requirements.development.processing') : t('ui.requirements.development.start')}
+            </button>
+          )}
+          {featureBranchCreated && (
+            <button
+              type="button"
+              className="action-btn"
+              onClick={() => {
+                setCreateTaskOpen(true)
+                setCreateError('')
+              }}
+            >
+              {t('ui.requirements.development.createTask')}
+            </button>
+          )}
+          {createTaskOpen ? (
+            <div className="requirement-review-confirm" role="dialog" aria-modal="true">
+              <p className="requirement-review-confirm__text">{t('ui.requirements.development.createTaskText')}</p>
+              <input
+                type="text"
+                className="workspace-setup__input"
+                placeholder={t('ui.requirements.development.taskTitle')}
+                value={createTaskTitle}
+                onChange={(e) => setCreateTaskTitle(e.target.value)}
+                autoFocus
+              />
+              <input
+                type="text"
+                className="workspace-setup__input"
+                placeholder={t('ui.requirements.development.taskAssignee')}
+                value={createTaskAssignee}
+                onChange={(e) => setCreateTaskAssignee(e.target.value)}
+              />
+              <div className="requirement-review-confirm__actions">
+                <button
+                  type="button"
+                  className="action-btn"
+                  onClick={() => {
+                    setCreateTaskOpen(false)
+                    setCreateError('')
+                  }}
+                >
+                  {t('ui.requirements.development.cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="action-btn"
+                  onClick={() => {
+                    if (!createTaskTitle.trim()) return
+                    setCreateError('')
+                    void requirements.createDevTaskAction(detail!.id, {
+                      title: createTaskTitle.trim(),
+                      assignee: createTaskAssignee.trim() || undefined,
+                    })
+                      .then(() => setCreateTaskOpen(false))
+                      .catch((e) => setCreateError(e instanceof Error ? e.message : String(e)))
+                  }}
+                >
+                  {t('ui.requirements.development.confirm')}
+                </button>
+              </div>
+              {createError ? <p className="workspace-setup__error">{createError}</p> : null}
+            </div>
+          ) : null}
+        </div>
+      )
+    }
+
+    // testing, release: placeholder toolbar (save button)
     return (
       <div className="requirement-phase-toolbar">
         <button
@@ -373,16 +459,6 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
           />
         </section>
         {renderPhaseToolbar()}
-        <div className="requirement-detail__path">
-          <span className="settings-subtext">{t('ui.requirements.dirLabel')}</span>
-          <code className="requirement-detail__dir">{detail.dir_path}</code>
-        </div>
-        {detail.subdirs.length > 0 ? (
-          <div className="requirement-detail__subdirs">
-            <span className="settings-subtext">{t('ui.requirements.subdirsLabel')}</span>
-            <span className="requirement-detail__subdir-list">{detail.subdirs.join(', ')}</span>
-          </div>
-        ) : null}
         {error || saveError ? (
           <p className="workspace-setup__error">{saveError || error}</p>
         ) : null}

@@ -260,6 +260,39 @@
         "reconfirmDialogText": "将已放弃的需求重新确认并推进至开发阶段？",
         "processing": "处理中…"
       },
+      "development": {
+        "sectionTitle": "开发阶段",
+        "start": "开始开发",
+        "createTask": "创建任务",
+        "featureBranch": "特性分支",
+        "taskTitle": "任务标题",
+        "taskAssignee": "负责人",
+        "taskBranch": "分支",
+        "taskProgress": "进度",
+        "taskStatus": {
+          "branch_created": "分支已创建",
+          "in_development": "开发中",
+          "dev_complete": "开发完成",
+          "in_review": "Review中",
+          "review_complete": "Review完成",
+          "merged": "已合并"
+        },
+        "actions": {
+          "startDev": "开始开发",
+          "completeDev": "完成开发",
+          "startReview": "开始Review",
+          "completeReview": "完成Review",
+          "merge": "合并到特性分支"
+        },
+        "noTasks": "暂无开发任务，创建一个开始开发",
+        "createTaskTitle": "创建开发任务",
+        "createTaskText": "创建新的开发任务？这将基于特性分支创建任务分支。",
+        "confirm": "确认",
+        "cancel": "取消",
+        "loading": "加载开发阶段中…",
+        "notStarted": "开发尚未开始",
+        "processing": "处理中…"
+      },
       "review": {
         "sectionTitle": "需求评审",
         "enter": "进入评审",

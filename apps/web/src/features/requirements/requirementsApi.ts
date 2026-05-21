@@ -55,6 +55,33 @@ export type RequirementReview = {
   overall_passed: boolean
 }
 
+export type DevTaskStatus =
+  | 'branch_created'
+  | 'in_development'
+  | 'dev_complete'
+  | 'in_review'
+  | 'review_complete'
+  | 'merged'
+
+export type DevTask = {
+  id: string
+  title: string
+  assignee?: string
+  branch: string
+  status: DevTaskStatus
+  progress: number
+  created_at_ms: number
+  updated_at_ms: number
+}
+
+export type RequirementDevelopment = {
+  requirement_id: string
+  feature_branch: string
+  feature_branch_created: boolean
+  tasks: DevTask[]
+  current_task_id?: string
+}
+
 export type WorkRoleDefinition = {
   display_name: string
   aliases: string[]
@@ -175,6 +202,62 @@ export function createRequirementsApi(apiBase: string, locale: string) {
       const res = await fetch(
         `${apiBase}/api/requirements/${encodeURIComponent(id)}/reconfirm`,
         { method: 'POST', headers },
+      )
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async getDevelopment(id: string): Promise<RequirementDevelopment | null> {
+      const res = await fetch(`${apiBase}/api/requirements/${encodeURIComponent(id)}/development`, { headers })
+      if (res.status === 404) return null
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async startDevelopment(id: string): Promise<RequirementDevelopment> {
+      const res = await fetch(
+        `${apiBase}/api/requirements/${encodeURIComponent(id)}/development`,
+        { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({}) },
+      )
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async createDevTask(id: string, payload: { title: string; assignee?: string }): Promise<RequirementDevelopment> {
+      const res = await fetch(
+        `${apiBase}/api/requirements/${encodeURIComponent(id)}/development/tasks`,
+        { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) },
+      )
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async updateDevTask(
+      id: string,
+      taskId: string,
+      payload: { title?: string; assignee?: string; progress?: number },
+    ): Promise<RequirementDevelopment> {
+      const res = await fetch(
+        `${apiBase}/api/requirements/${encodeURIComponent(id)}/development/tasks/${encodeURIComponent(taskId)}`,
+        { method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) },
+      )
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async deleteDevTask(id: string, taskId: string): Promise<RequirementDevelopment> {
+      const res = await fetch(
+        `${apiBase}/api/requirements/${encodeURIComponent(id)}/development/tasks/${encodeURIComponent(taskId)}`,
+        { method: 'DELETE', headers },
+      )
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async devTaskAction(id: string, taskId: string, action: string): Promise<RequirementDevelopment> {
+      const res = await fetch(
+        `${apiBase}/api/requirements/${encodeURIComponent(id)}/development/tasks/${encodeURIComponent(taskId)}/${encodeURIComponent(action)}`,
+        { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) },
       )
       if (!res.ok) throw new Error(await readError(res))
       return res.json()
