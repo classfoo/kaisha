@@ -63,10 +63,9 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
     }
   }
 
-  const currentPhase = detail?.phase ?? phaseDraft
-
   const renderPhaseToolbar = () => {
-    const phase = currentPhase
+    const phase = viewPhase
+    const isPhaseActive = phase === detail?.phase
 
     // collection phase: save button
     if (phase === 'collection') {
@@ -76,7 +75,7 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
             type="button"
             className="action-btn"
             onClick={() => void onSave()}
-            disabled={busy || !dirty}
+            disabled={busy || !dirty || !isPhaseActive}
           >
             {busy ? t('ui.requirements.saving') : t('ui.requirements.save')}
           </button>
@@ -92,7 +91,7 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
             type="button"
             className="action-btn"
             onClick={() => setConfirmReviewOpen(true)}
-            disabled={busy || reviewRunning}
+            disabled={busy || reviewRunning || !isPhaseActive}
           >
             {reviewRunning ? t('ui.requirements.review.running') : t('ui.requirements.review.enter')}
           </button>
@@ -101,7 +100,7 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
               type="button"
               className="action-btn"
               onClick={() => setConfirmForceOpen(true)}
-              disabled={busy || reviewForcePassing}
+              disabled={busy || reviewForcePassing || !isPhaseActive}
             >
               {reviewForcePassing ? t('ui.requirements.review.forcePassing') : t('ui.requirements.review.forcePass')}
             </button>
@@ -193,7 +192,7 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
                 type="button"
                 className="action-btn"
                 onClick={() => setConfirmConfirmOpen(true)}
-                disabled={busy || confirming}
+                disabled={busy || confirming || !isPhaseActive}
               >
                 {confirming ? t('ui.requirements.confirm.processing') : t('ui.requirements.confirm.confirmAction')}
               </button>
@@ -201,7 +200,7 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
                 type="button"
                 className="action-btn"
                 onClick={() => setConfirmAbandonOpen(true)}
-                disabled={busy || abandoning}
+                disabled={busy || abandoning || !isPhaseActive}
               >
                 {abandoning ? t('ui.requirements.confirm.processing') : t('ui.requirements.confirm.abandonAction')}
               </button>
@@ -212,7 +211,7 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
               type="button"
               className="action-btn"
               onClick={() => setConfirmReconfirmOpen(true)}
-              disabled={busy || reconfirming}
+              disabled={busy || reconfirming || !isPhaseActive}
             >
               {reconfirming ? t('ui.requirements.confirm.processing') : t('ui.requirements.confirm.reconfirmAction')}
             </button>
@@ -334,7 +333,7 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
           type="button"
           className="action-btn"
           onClick={() => void onSave()}
-          disabled={busy || !dirty}
+          disabled={busy || !dirty || !isPhaseActive}
         >
           {busy ? t('ui.requirements.saving') : t('ui.requirements.save')}
         </button>
@@ -364,14 +363,12 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
         />
         <section className="requirement-detail__timeline-wrap">
           <RequirementPhaseTimeline
-            phase={phaseDraft}
+            phase={detail.phase}
             viewPhase={viewPhase}
             phaseLabel={phaseLabel}
             disabled={busy}
             onViewPhaseChange={(next) => {
               setViewPhase(next)
-              setPhaseDraft(next)
-              markDirty()
             }}
           />
         </section>
