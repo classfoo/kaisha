@@ -12,7 +12,7 @@ type LeftPanelProps = {
   employees: EmployeeDirectoryRecord[]
   selectedEmployeeId: string | null
   onSelectEmployee: (id: string) => void
-  onDeleteEmployee: (id: string) => void
+  onFireEmployee: (id: string) => void
   deletingEmployeeId: string | null
   activeNav: NavMenu
   creatingEmployee: boolean
@@ -21,6 +21,15 @@ type LeftPanelProps = {
   status: string
   t: (key: string) => string
   onCreateEmployee: () => void
+  showArchived: boolean
+  onToggleArchived: () => void
+  archivedEmployees: EmployeeDirectoryRecord[]
+  reinstateEmployeeId: string | null
+  onReinstateEmployee: (id: string) => void
+  handoverEmployeeId: string | null
+  onHandoverEmployee: (id: string) => void
+  hardDeletingEmployeeId: string | null
+  onHardDeleteEmployee: (id: string) => void
   onResizeMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void
   gitRepos: GitRepo[]
   selectedGitRepoId: string | null
@@ -49,7 +58,7 @@ export function LeftPanel({
   employees,
   selectedEmployeeId,
   onSelectEmployee,
-  onDeleteEmployee,
+  onFireEmployee,
   deletingEmployeeId,
   activeNav,
   creatingEmployee,
@@ -58,6 +67,15 @@ export function LeftPanel({
   status,
   t,
   onCreateEmployee,
+  showArchived,
+  onToggleArchived,
+  archivedEmployees,
+  reinstateEmployeeId,
+  onReinstateEmployee,
+  handoverEmployeeId,
+  onHandoverEmployee,
+  hardDeletingEmployeeId,
+  onHardDeleteEmployee,
   onResizeMouseDown,
   gitRepos,
   selectedGitRepoId,
@@ -83,13 +101,30 @@ export function LeftPanel({
     if (activeNav === 'chat') {
       return (
         <>
+          <div className="employee-list__toolbar">
+            <button
+              className="employee-list__toggle-btn"
+              onClick={onToggleArchived}
+              title={showArchived ? t('ui.employeeList.showActive') : t('ui.employeeList.showArchived')}
+            >
+              <i className={`iconfont ${showArchived ? 'icon-filmetoChat' : 'icon-filmetoChat'}`}></i>
+              <span>{showArchived ? t('ui.employeeList.showActive') : t('ui.employeeList.showArchived')}</span>
+            </button>
+          </div>
           <EmployeeList
-            employees={employees}
+            employees={showArchived ? archivedEmployees : employees}
             selectedEmployeeId={selectedEmployeeId}
             onSelectEmployee={onSelectEmployee}
-            onDeleteEmployee={onDeleteEmployee}
+            onFireEmployee={onFireEmployee}
             deletingEmployeeId={deletingEmployeeId}
             t={t}
+            isArchivedView={showArchived}
+            reinstateEmployeeId={reinstateEmployeeId}
+            onReinstateEmployee={onReinstateEmployee}
+            onHandoverEmployee={onHandoverEmployee}
+            onHardDeleteEmployee={onHardDeleteEmployee}
+            handoverEmployeeId={handoverEmployeeId}
+            hardDeletingEmployeeId={hardDeletingEmployeeId}
           />
           <div className="side-panel__footer">
             <div className="side-panel__toolbar">
@@ -106,10 +141,6 @@ export function LeftPanel({
               {employeeCreateError ? (
                 <div className="side-panel__error">{employeeCreateError}</div>
               ) : null}
-            </div>
-            <div className="side-panel__status">
-              <span>{t('ui.backend')}</span>
-              <span className={`status status--${status}`}>{status}</span>
             </div>
           </div>
         </>

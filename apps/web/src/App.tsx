@@ -97,6 +97,8 @@ export default function App() {
   })
   const [employeeDirectory, setEmployeeDirectory] = React.useState<EmployeeDirectoryRecord[]>([])
   const [selectedEmployeeId, setSelectedEmployeeId] = React.useState<string | null>(null)
+  const [archivedEmployees, setArchivedEmployees] = React.useState<EmployeeDirectoryRecord[]>([])
+  const [showArchived, setShowArchived] = React.useState(false)
   const [messageDraft, setMessageDraft] = React.useState('')
   const [chatIdentityDraft, setChatIdentityDraft] = React.useState<ChatIdentityDraft>(() => readChatIdentityDraft())
   const [departments, setDepartments] = React.useState<DepartmentItem[]>([])
@@ -104,6 +106,9 @@ export default function App() {
   const [creatingEmployee, setCreatingEmployee] = React.useState(false)
   const [employeeCreateError, setEmployeeCreateError] = React.useState('')
   const [deletingEmployeeId, setDeletingEmployeeId] = React.useState<string | null>(null)
+  const [reinstateEmployeeId, setReinstateEmployeeId] = React.useState<string | null>(null)
+  const [handoverEmployeeId, setHandoverEmployeeId] = React.useState<string | null>(null)
+  const [hardDeletingEmployeeId, setHardDeletingEmployeeId] = React.useState<string | null>(null)
   const [activeNav, setActiveNav] = React.useState<NavMenu>('chat')
   const [refreshTick, setRefreshTick] = React.useState(0)
   const [sidePanelWidth, setSidePanelWidth] = React.useState(260)
@@ -157,6 +162,7 @@ export default function App() {
     if (!workspace?.configured) {
       setEmployeeDirectory([])
       setSelectedEmployeeId(null)
+      setArchivedEmployees([])
       return
     }
 
@@ -191,7 +197,22 @@ export default function App() {
         })
     }
 
+    const loadArchived = () => {
+      fetch(`${API_BASE}/api/employees/archived`, { headers })
+        .then((res) => {
+          if (!res.ok) return
+          return res.json()
+        })
+        .then((json: EmployeeDirectoryRecord[]) => {
+          if (!cancelled) setArchivedEmployees(json ?? [])
+        })
+        .catch(() => {
+          // silently ignore
+        })
+    }
+
     loadEmployees()
+    loadArchived()
 
     return () => {
       cancelled = true
@@ -433,43 +454,36 @@ export default function App() {
     }
   }
 
-  const createSidebarEmployee = async () => {
-    console.debug('[employee:create] sidebar create requested', {
+  const hireEmployee = async () => {
+    console.debug('[employee:hire] sidebar hire requested', {
       workspaceConfigured: workspace?.configured ?? false,
       creatingEmployee,
       currentCount: employeeDirectory.length,
     })
     if (!workspace?.configured) {
       setEmployeeCreateError(tt('ui.employeeList.workspaceRequiredError'))
-      console.warn('[employee:create] sidebar add blocked: workspace not configured')
+      console.warn('[employee:hire] sidebar add blocked: workspace not configured')
       return
     }
     if (creatingEmployee) return
     setCreatingEmployee(true)
     setEmployeeCreateError('')
-    const headers = { 'Content-Type': 'application/json', 'x-lang': locale }
-    const requestBody = {
-      id: `employee-${Date.now()}`,
-      name: `${tt('ui.employeeList.newNamePrefix')} ${employeeDirectory.length + 1}`,
-      department: 'default',
-      role: 'default',
-    }
+    const headers = { 'x-lang': locale }
 
     try {
-      console.debug('[employee:create] sidebar POST /api/employees', requestBody)
-      const response = await fetch(`${API_BASE}/api/employees`, {
+      console.debug('[employee:hire] POST /api/employees/hire')
+      const response = await fetch(`${API_BASE}/api/employees/hire`, {
         method: 'POST',
         headers,
-        body: JSON.stringify(requestBody),
       })
-      console.debug('[employee:create] sidebar response status', response.status)
+      console.debug('[employee:hire] response status', response.status)
       if (!response.ok) {
         const text = await response.text()
-        throw new Error(text || tt('ui.employeeList.createError'))
+        throw new Error(text || tt('ui.employeeList.hireError'))
       }
 
       const created: EmployeeDirectoryRecord = await response.json()
-      console.debug('[employee:create] sidebar created', created)
+      console.debug('[employee:hire] created', created)
       setEmployeeDirectory((prev) => {
         const next = [...prev, created]
         next.sort((a, b) => a.id.localeCompare(b.id))
@@ -477,40 +491,132 @@ export default function App() {
       })
       setSelectedEmployeeId(created.id)
     } catch (err) {
-      console.error('[employee:create] sidebar failed', err)
+      console.error('[employee:hire] failed', err)
       setEmployeeCreateError(
-        err instanceof Error && err.message ? err.message : tt('ui.employeeList.createError'),
+        err instanceof Error && err.message ? err.message : tt('ui.employeeList.hireError'),
       )
     } finally {
       setCreatingEmployee(false)
     }
   }
 
-  const deleteEmployee = async (id: string) => {
+  const fireEmployee = async (id: string) => {
     if (!workspace?.configured) return
     setDeletingEmployeeId(id)
     setEmployeeCreateError('')
     const headers = { 'x-lang': locale }
 
     try {
-      const response = await fetch(`${API_BASE}/api/employees/${id}`, {
-        method: 'DELETE',
+      const response = await fetch(`${API_BASE}/api/employees/${id}/fire`, {
+        method: 'POST',
         headers,
       })
       if (!response.ok) {
         const text = await response.text()
-        throw new Error(text || tt('ui.employeeList.deleteError'))
+        throw new Error(text || tt('ui.employeeList.fireError'))
       }
 
+      const fired = employeeDirectory.find((e) => e.id === id)
       setEmployeeDirectory((prev) => prev.filter((e) => e.id !== id))
+      if (fired) setArchivedEmployees((prev) => [...prev, fired].sort((a, b) => a.id.localeCompare(b.id)))
       setSelectedEmployeeId((prev) => (prev === id ? null : prev))
     } catch (err) {
-      console.error('[employee:delete] failed', err)
+      console.error('[employee:fire] failed', err)
       setEmployeeCreateError(
-        err instanceof Error && err.message ? err.message : tt('ui.employeeList.deleteError'),
+        err instanceof Error && err.message ? err.message : tt('ui.employeeList.fireError'),
       )
     } finally {
       setDeletingEmployeeId(null)
+    }
+  }
+
+  const reinstateEmployee = async (id: string) => {
+    if (!workspace?.configured) return
+    setReinstateEmployeeId(id)
+    setEmployeeCreateError('')
+    const headers = { 'x-lang': locale }
+
+    try {
+      const response = await fetch(`${API_BASE}/api/employees/${id}/reinstate`, {
+        method: 'POST',
+        headers,
+      })
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(text || tt('ui.employeeList.reinstateError'))
+      }
+
+      const reinstated: EmployeeDirectoryRecord = await response.json()
+      setArchivedEmployees((prev) => prev.filter((e) => e.id !== id))
+      setEmployeeDirectory((prev) => {
+        const next = [...prev, reinstated]
+        next.sort((a, b) => a.id.localeCompare(b.id))
+        return next
+      })
+      setSelectedEmployeeId(reinstated.id)
+    } catch (err) {
+      console.error('[employee:reinstate] failed', err)
+      setEmployeeCreateError(
+        err instanceof Error && err.message ? err.message : tt('ui.employeeList.reinstateError'),
+      )
+    } finally {
+      setReinstateEmployeeId(null)
+    }
+  }
+
+  const handoverEmployee = async (id: string) => {
+    if (!workspace?.configured) return
+    setHandoverEmployeeId(id)
+    setEmployeeCreateError('')
+    const headers = { 'x-lang': locale }
+
+    try {
+      const response = await fetch(`${API_BASE}/api/employees/${id}/handover`, {
+        method: 'POST',
+        headers,
+      })
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(text || tt('ui.employeeList.handoverError'))
+      }
+
+      setArchivedEmployees((prev) => prev.filter((e) => e.id !== id))
+      if (selectedEmployeeId === id) setSelectedEmployeeId(null)
+    } catch (err) {
+      console.error('[employee:handover] failed', err)
+      setEmployeeCreateError(
+        err instanceof Error && err.message ? err.message : tt('ui.employeeList.handoverError'),
+      )
+    } finally {
+      setHandoverEmployeeId(null)
+    }
+  }
+
+  const hardDeleteEmployee = async (id: string) => {
+    if (!workspace?.configured) return
+    setHardDeletingEmployeeId(id)
+    setEmployeeCreateError('')
+    const headers = { 'x-lang': locale }
+
+    try {
+      const response = await fetch(`${API_BASE}/api/employees/${id}/hard-delete`, {
+        method: 'POST',
+        headers,
+      })
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(text || tt('ui.employeeList.hardDeleteError'))
+      }
+
+      setArchivedEmployees((prev) => prev.filter((e) => e.id !== id))
+      if (selectedEmployeeId === id) setSelectedEmployeeId(null)
+    } catch (err) {
+      console.error('[employee:hardDelete] failed', err)
+      setEmployeeCreateError(
+        err instanceof Error && err.message ? err.message : tt('ui.employeeList.hardDeleteError'),
+      )
+    } finally {
+      setHardDeletingEmployeeId(null)
     }
   }
 
@@ -877,7 +983,7 @@ export default function App() {
             employees={employeeDirectory}
             selectedEmployeeId={selectedEmployeeId}
             onSelectEmployee={setSelectedEmployeeId}
-            onDeleteEmployee={(id) => void deleteEmployee(id)}
+            onFireEmployee={(id) => void fireEmployee(id)}
             deletingEmployeeId={deletingEmployeeId}
             activeNav={activeNav}
             creatingEmployee={creatingEmployee}
@@ -885,7 +991,16 @@ export default function App() {
             workspaceConfigured={Boolean(workspace?.configured)}
             status={status}
             t={tt}
-            onCreateEmployee={() => void createSidebarEmployee()}
+            onCreateEmployee={() => void hireEmployee()}
+            showArchived={showArchived}
+            onToggleArchived={() => setShowArchived((v) => !v)}
+            archivedEmployees={archivedEmployees}
+            reinstateEmployeeId={reinstateEmployeeId}
+            onReinstateEmployee={(id) => void reinstateEmployee(id)}
+            handoverEmployeeId={handoverEmployeeId}
+            onHandoverEmployee={(id) => void handoverEmployee(id)}
+            hardDeletingEmployeeId={hardDeletingEmployeeId}
+            onHardDeleteEmployee={(id) => void hardDeleteEmployee(id)}
             onResizeMouseDown={startResizePanel}
             gitRepos={git.repos}
             selectedGitRepoId={git.selectedRepoId}

@@ -13,7 +13,7 @@ use application::HealthService;
 use axum::{
     extract::{Path as AxumPath, State},
     http::HeaderMap,
-    routing::{delete, get, post},
+    routing::{get, post},
     Json, Router,
 };
 use domain::{SetWorkspaceRequest, WorkspaceSource, WorkspaceStatus};
@@ -509,8 +509,28 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
             get(employee::list_employees).post(employee::create_employee),
         )
         .route(
-            "/api/employees/:id",
-            delete(employee::delete_employee),
+            "/api/employees/hire",
+            post(employee::hire_employee),
+        )
+        .route(
+            "/api/employees/archived",
+            get(employee::list_archived_employees),
+        )
+        .route(
+            "/api/employees/:id/fire",
+            post(employee::fire_employee),
+        )
+        .route(
+            "/api/employees/:id/reinstate",
+            post(employee::reinstate_employee),
+        )
+        .route(
+            "/api/employees/:id/handover",
+            post(employee::handover_employee),
+        )
+        .route(
+            "/api/employees/:id/hard-delete",
+            post(employee::hard_delete_employee),
         )
         .route(
             "/api/employees/:id/messages",
