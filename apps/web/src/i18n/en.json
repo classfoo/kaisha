@@ -42,7 +42,14 @@
       "read": "Read",
       "yesterday": "Yesterday",
       "workspaceRequiredError": "Please configure workspace before creating employees",
-      "validationError": "Please fill in employee name, department, and role"
+      "validationError": "Please fill in employee name, department, and role",
+      "delete": "Delete",
+      "deleteConfirm": "Confirm deletion",
+      "deleteEmployeeName": "Are you sure you want to delete {name}?",
+      "confirmDelete": "Confirm",
+      "cancelDelete": "Cancel",
+      "deleteError": "Failed to delete employee",
+      "deleting": "Deleting..."
     },
     "chat": {
       "emptySelection": "Select an employee to open chat",

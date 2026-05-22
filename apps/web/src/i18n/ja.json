@@ -42,7 +42,14 @@
       "read": "既読",
       "yesterday": "昨日",
       "workspaceRequiredError": "従業員を作成する前にワークディレクトリを設定してください",
-      "validationError": "従業員名・部門・職位を入力してください"
+      "validationError": "従業員名・部門・職位を入力してください",
+      "delete": "削除",
+      "deleteConfirm": "削除を確認",
+      "deleteEmployeeName": "{name} を削除してもよろしいですか？",
+      "confirmDelete": "確認",
+      "cancelDelete": "キャンセル",
+      "deleteError": "従業員の削除に失敗しました",
+      "deleting": "削除中..."
     },
     "chat": {
       "emptySelection": "従業員を選択してチャットを開始してください",

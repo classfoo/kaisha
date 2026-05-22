@@ -103,6 +103,7 @@ export default function App() {
   const [roles, setRoles] = React.useState<RoleItem[]>([])
   const [creatingEmployee, setCreatingEmployee] = React.useState(false)
   const [employeeCreateError, setEmployeeCreateError] = React.useState('')
+  const [deletingEmployeeId, setDeletingEmployeeId] = React.useState<string | null>(null)
   const [activeNav, setActiveNav] = React.useState<NavMenu>('chat')
   const [refreshTick, setRefreshTick] = React.useState(0)
   const [sidePanelWidth, setSidePanelWidth] = React.useState(260)
@@ -485,6 +486,34 @@ export default function App() {
     }
   }
 
+  const deleteEmployee = async (id: string) => {
+    if (!workspace?.configured) return
+    setDeletingEmployeeId(id)
+    setEmployeeCreateError('')
+    const headers = { 'x-lang': locale }
+
+    try {
+      const response = await fetch(`${API_BASE}/api/employees/${id}`, {
+        method: 'DELETE',
+        headers,
+      })
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(text || tt('ui.employeeList.deleteError'))
+      }
+
+      setEmployeeDirectory((prev) => prev.filter((e) => e.id !== id))
+      setSelectedEmployeeId((prev) => (prev === id ? null : prev))
+    } catch (err) {
+      console.error('[employee:delete] failed', err)
+      setEmployeeCreateError(
+        err instanceof Error && err.message ? err.message : tt('ui.employeeList.deleteError'),
+      )
+    } finally {
+      setDeletingEmployeeId(null)
+    }
+  }
+
   const handleNavMenuClick = (menu: NavMenu) => {
     setActiveNav(menu)
     setSettingsOpen(false)
@@ -848,6 +877,8 @@ export default function App() {
             employees={employeeDirectory}
             selectedEmployeeId={selectedEmployeeId}
             onSelectEmployee={setSelectedEmployeeId}
+            onDeleteEmployee={(id) => void deleteEmployee(id)}
+            deletingEmployeeId={deletingEmployeeId}
             activeNav={activeNav}
             creatingEmployee={creatingEmployee}
             employeeCreateError={employeeCreateError}

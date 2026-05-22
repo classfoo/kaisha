@@ -12,6 +12,8 @@ type LeftPanelProps = {
   employees: EmployeeDirectoryRecord[]
   selectedEmployeeId: string | null
   onSelectEmployee: (id: string) => void
+  onDeleteEmployee: (id: string) => void
+  deletingEmployeeId: string | null
   activeNav: NavMenu
   creatingEmployee: boolean
   employeeCreateError: string
@@ -47,6 +49,8 @@ export function LeftPanel({
   employees,
   selectedEmployeeId,
   onSelectEmployee,
+  onDeleteEmployee,
+  deletingEmployeeId,
   activeNav,
   creatingEmployee,
   employeeCreateError,
@@ -83,6 +87,8 @@ export function LeftPanel({
             employees={employees}
             selectedEmployeeId={selectedEmployeeId}
             onSelectEmployee={onSelectEmployee}
+            onDeleteEmployee={onDeleteEmployee}
+            deletingEmployeeId={deletingEmployeeId}
             t={t}
           />
           <div className="side-panel__footer">

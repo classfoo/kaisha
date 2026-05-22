@@ -229,6 +229,49 @@ pub(super) async fn list_employees(
     Ok(Json(items))
 }
 
+/// Removes the employee directory and all associated opinion files across requirements.
+pub(super) async fn delete_employee(
+    headers: HeaderMap,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    State(state): State<AppState>,
+) -> Result<(axum::http::StatusCode, Json<serde_json::Value>), (axum::http::StatusCode, String)> {
+    let Some(workspace) = workspace_root(&state) else {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            i18n::msg(&headers, "workspace_not_configured"),
+        ));
+    };
+    let root = employee_root(&workspace);
+    let employee_dir = root.join(&id);
+    if !employee_dir.exists() {
+        return Err((
+            axum::http::StatusCode::NOT_FOUND,
+            i18n::msg(&headers, "employee_not_found"),
+        ));
+    }
+
+    // Clean up opinion files across all requirements
+    let requirements_root = workspace.join("requirements");
+    if requirements_root.exists() {
+        if let Ok(entries) = fs::read_dir(&requirements_root) {
+            for entry in entries.flatten() {
+                let req_dir = entry.path();
+                if !req_dir.is_dir() {
+                    continue;
+                }
+                let opinion_path = req_dir.join("review").join("opinions").join(format!("{id}.md"));
+                if opinion_path.exists() {
+                    let _ = fs::remove_file(&opinion_path);
+                }
+            }
+        }
+    }
+
+    fs::remove_dir_all(&employee_dir)
+        .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    Ok((axum::http::StatusCode::NO_CONTENT, Json(serde_json::json!({}))))
+}
+
 pub(super) async fn create_employee(
     headers: HeaderMap,
     State(state): State<AppState>,
