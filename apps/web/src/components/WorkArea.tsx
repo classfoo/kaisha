@@ -71,7 +71,7 @@ export function WorkArea({
 }: WorkAreaProps) {
   const needsWorkspaceSetup = workspaceConfigured === false
   const usesSplitLayout = splitPane !== null
-  const showChatPanel = activeNav === 'chat' || activeNav === 'build' || activeNav === 'test'
+  const showChatPanel = activeNav === 'chat'
   const showGitPanel = activeNav === 'git'
   const showRequirementsPanel = activeNav === 'requirements'
   const [searchQuery, setSearchQuery] = React.useState('')
@@ -85,7 +85,7 @@ export function WorkArea({
 
   const actionKeys: string[] = (() => {
     if (activeNav === 'home') return ['ui.actions.settings']
-    if (activeNav === 'produce' || activeNav === 'git' || activeNav === 'requirements') {
+    if (activeNav === 'git' || activeNav === 'requirements') {
       return ['ui.actions.share', 'ui.actions.settings']
     }
     return ['ui.actions.run', 'ui.actions.share', 'ui.actions.settings']

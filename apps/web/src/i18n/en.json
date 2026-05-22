@@ -4,9 +4,6 @@
     "nav": {
       "home": "Home",
       "chat": "Chat",
-      "build": "Build",
-      "test": "Test",
-      "produce": "Produce",
       "git": "Git",
       "requirements": "Requirements"
     },
@@ -71,25 +68,6 @@
     "leftPanel": {
       "home": {
         "empty": "Home menu is ready."
-      },
-      "build": {
-        "title": "Build Chain",
-        "items": {
-          "resolve": "Resolve dependencies",
-          "bundle": "Bundle artifacts",
-          "package": "Package release output"
-        }
-      },
-      "test": {
-        "title": "Test Chain",
-        "items": {
-          "unit": "Run unit tests",
-          "integration": "Run integration tests",
-          "e2e": "Run end-to-end tests"
-        }
-      },
-      "produce": {
-        "empty": "Produce menu is ready."
       }
     },
     "settings": {

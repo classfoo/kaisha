@@ -44,6 +44,7 @@ impl DevTaskStatus {
         }
     }
 
+    #[allow(dead_code)]
     pub fn next_status(&self) -> Option<Self> {
         match self {
             Self::BranchCreated => Some(Self::InDevelopment),

@@ -4,9 +4,6 @@
     "nav": {
       "home": "首页",
       "chat": "对话",
-      "build": "构建",
-      "test": "测试",
-      "produce": "产品",
       "git": "Git",
       "requirements": "需求"
     },
@@ -71,25 +68,6 @@
     "leftPanel": {
       "home": {
         "empty": "首页菜单已就绪。"
-      },
-      "build": {
-        "title": "构建链路",
-        "items": {
-          "resolve": "解析依赖",
-          "bundle": "打包产物",
-          "package": "生成发布包"
-        }
-      },
-      "test": {
-        "title": "测试链路",
-        "items": {
-          "unit": "执行单元测试",
-          "integration": "执行集成测试",
-          "e2e": "执行端到端测试"
-        }
-      },
-      "produce": {
-        "empty": "产品菜单已就绪。"
       }
     },
     "settings": {

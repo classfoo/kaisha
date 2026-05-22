@@ -177,30 +177,9 @@ export function LeftPanel({
       )
     }
 
-    if (activeNav === 'build' || activeNav === 'test') {
-      const chainItems =
-        activeNav === 'build'
-          ? ['ui.leftPanel.build.items.resolve', 'ui.leftPanel.build.items.bundle', 'ui.leftPanel.build.items.package']
-          : ['ui.leftPanel.test.items.unit', 'ui.leftPanel.test.items.integration', 'ui.leftPanel.test.items.e2e']
-      return (
-        <>
-          <div className="side-panel__section-title">
-            {activeNav === 'build' ? t('ui.leftPanel.build.title') : t('ui.leftPanel.test.title')}
-          </div>
-          <div className="settings-list">
-            {chainItems.map((key) => (
-              <div key={key} className="settings-list__row">
-                <div>{t(key)}</div>
-              </div>
-            ))}
-          </div>
-        </>
-      )
-    }
-
     return (
       <div className="employee-list__empty">
-        {activeNav === 'home' ? t('ui.leftPanel.home.empty') : t('ui.leftPanel.produce.empty')}
+        {t('ui.leftPanel.home.empty')}
       </div>
     )
   }

@@ -120,9 +120,6 @@ export default function App() {
   const topNavItems: { id: NavMenu; labelKey: string }[] = [
     { id: 'home', labelKey: 'ui.nav.home' },
     { id: 'chat', labelKey: 'ui.nav.chat' },
-    { id: 'build', labelKey: 'ui.nav.build' },
-    { id: 'test', labelKey: 'ui.nav.test' },
-    { id: 'produce', labelKey: 'ui.nav.produce' },
     { id: 'git', labelKey: 'ui.nav.git' },
     { id: 'requirements', labelKey: 'ui.nav.requirements' },
   ]
@@ -827,8 +824,6 @@ export default function App() {
 
   const usesSplitWorkArea =
     activeNav === 'chat' ||
-    activeNav === 'build' ||
-    activeNav === 'test' ||
     activeNav === 'git' ||
     activeNav === 'requirements'
 
