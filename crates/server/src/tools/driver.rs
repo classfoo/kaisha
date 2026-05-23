@@ -195,3 +195,36 @@ fn estimate_tokens(messages: &[ToolChatMessage]) -> u64 {
         .sum();
     ((chars as f64) / 4.0).ceil() as u64
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn join_chat_prompt_formats_roles() {
+        let messages = vec![
+            ToolChatMessage {
+                role: "system".into(),
+                content: "rules".into(),
+            },
+            ToolChatMessage {
+                role: "user".into(),
+                content: "hello".into(),
+            },
+        ];
+        assert_eq!(join_chat_prompt(&messages), "system: rules\nuser: hello");
+    }
+
+    #[test]
+    fn merge_shell_output_omits_stderr_when_empty() {
+        assert_eq!(merge_shell_output("out", "  \n"), "out");
+    }
+
+    #[test]
+    fn merge_shell_output_appends_stderr_section() {
+        let merged = merge_shell_output("out", "warn");
+        assert!(merged.contains("out"));
+        assert!(merged.contains("--- stderr ---"));
+        assert!(merged.contains("warn"));
+    }
+}

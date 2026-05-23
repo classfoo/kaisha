@@ -1,6 +1,19 @@
 import { EmployeeDirectoryRecord } from '../../components/EmployeeList'
+import { Direction } from './engine/direction'
 
 export type RpgZoneType = 'desk' | 'meeting' | 'lounge' | 'reception'
+
+export type RpgFurnitureKind = 'workstation' | 'boss_desk' | 'sofa' | 'office_chair'
+
+export type RpgFurniture = {
+  id: string
+  kind: RpgFurnitureKind
+  x: number
+  y: number
+  width: number
+  height: number
+  facing?: Direction
+}
 
 export type GridPoint = { x: number; y: number }
 
@@ -31,6 +44,7 @@ export type RpgOfficeScene = {
   tileSize: number
   zones: RpgZone[]
   walls: GridPoint[]
+  furniture: RpgFurniture[]
 }
 
 export type RpgHomeSnapshot = {

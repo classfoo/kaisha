@@ -710,4 +710,42 @@ mod tests {
         assert!(m.sender_name.is_none());
         assert!(m.sender_avatar_url.is_none());
     }
+
+    #[test]
+    fn normalize_optional_text_trims_and_drops_empty() {
+        assert_eq!(normalize_optional_text(Some("  hi  ".into())), Some("hi".into()));
+        assert_eq!(normalize_optional_text(Some("   ".into())), None);
+        assert_eq!(normalize_optional_text(None), None);
+    }
+
+    #[test]
+    fn map_process_error_maps_known_codes() {
+        assert_eq!(map_process_error("chat_tool_missing".into()), "chat_tool_missing");
+        assert_eq!(map_process_error("employee_not_found".into()), "employee_not_found");
+        assert_eq!(map_process_error("something else".into()), "chat_tool_run_failed");
+    }
+
+    #[test]
+    fn format_review_assistant_reply_includes_conclusion_and_summary() {
+        let review = crate::requirement_review::RequirementReviewWire {
+            requirement_id: "req-1".into(),
+            status: crate::requirement_review::ReviewStatus::Completed,
+            started_at_ms: 0,
+            completed_at_ms: Some(1),
+            conclusion: Some(crate::requirement_review::ReviewConclusion::Adopt),
+            participants: vec![],
+            opinions: vec![],
+            summary: Some("All good".into()),
+            passed_count: 1,
+            failed_count: 0,
+            pending_count: 0,
+            undecided_count: 0,
+            abandoned_count: 0,
+            overall_passed: true,
+        };
+        let text = format_review_assistant_reply(&review);
+        assert!(text.contains("req-1"));
+        assert!(text.contains("adopt"));
+        assert!(text.contains("All good"));
+    }
 }

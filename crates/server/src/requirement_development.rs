@@ -623,3 +623,80 @@ fn map_dev_err(
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn temp_workspace() -> std::path::PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        std::env::temp_dir().join(format!("kaisha-dev-test-{unique}"))
+    }
+
+    #[test]
+    fn dev_task_status_next_follows_pipeline() {
+        assert_eq!(
+            DevTaskStatus::BranchCreated.next_status(),
+            Some(DevTaskStatus::InDevelopment)
+        );
+        assert_eq!(
+            DevTaskStatus::InDevelopment.next_status(),
+            Some(DevTaskStatus::DevComplete)
+        );
+        assert_eq!(DevTaskStatus::Merged.next_status(), None);
+    }
+
+    #[test]
+    fn dev_task_status_as_str_matches_serde_names() {
+        assert_eq!(DevTaskStatus::InReview.as_str(), "in_review");
+    }
+
+    #[test]
+    fn dev_state_save_and_load_roundtrip() {
+        let workspace = temp_workspace();
+        fs::create_dir_all(&workspace).unwrap();
+        let state = DevStateFile {
+            requirement_id: "feat-a".into(),
+            feature_branch: "feat-feat-a".into(),
+            feature_branch_created: true,
+            tasks: vec![DevTask {
+                id: "task-001".into(),
+                title: "Implement API".into(),
+                assignee: Some("alice".into()),
+                branch: "feat-feat-a-task-001".into(),
+                status: DevTaskStatus::BranchCreated,
+                progress: 0,
+                created_at_ms: 1,
+                updated_at_ms: 2,
+            }],
+            current_task_id: Some("task-001".into()),
+        };
+        save_dev_state(&workspace, "feat-a", &state).unwrap();
+        let loaded = load_dev_state(&workspace, "feat-a").unwrap();
+        assert_eq!(loaded.requirement_id, "feat-a");
+        assert_eq!(loaded.tasks.len(), 1);
+        assert_eq!(loaded.tasks[0].title, "Implement API");
+        let wire = wire_state(&loaded);
+        assert_eq!(wire.tasks[0].status, "branch_created");
+        let _ = fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn save_task_content_writes_markdown_file() {
+        let workspace = temp_workspace();
+        fs::create_dir_all(&workspace).unwrap();
+        save_task_content(&workspace, "feat-a", "task-001", "# Title\n").unwrap();
+        let path = task_file_path(&workspace, "feat-a", "task-001");
+        assert!(path.exists());
+        let raw = fs::read_to_string(path).unwrap();
+        assert!(raw.contains("# Title"));
+        let _ = fs::remove_dir_all(&workspace);
+    }
+}

@@ -225,6 +225,9 @@ fn save_state(workspace: &Path, state: &ReviewStateFile) -> anyhow::Result<()> {
 }
 
 pub fn parse_opinion_passed(content: &str) -> Option<bool> {
+    if let Some(v) = parse_recommendation_block_verdict(content) {
+        return Some(v);
+    }
     let lower = content.to_lowercase();
     if lower.contains("recommendation: needs change")
         || lower.contains("recommendation:needs change")
@@ -248,6 +251,33 @@ pub fn parse_opinion_passed(content: &str) -> Option<bool> {
         || (lower.contains("采纳") && !lower.contains("不采纳"))
     {
         return Some(true);
+    }
+    None
+}
+
+fn parse_recommendation_block_verdict(content: &str) -> Option<bool> {
+    let lines: Vec<String> = content.lines().map(|l| l.trim().to_lowercase()).collect();
+    for (i, line) in lines.iter().enumerate() {
+        let is_rec_header = line.contains("recommendation") && !line.contains(':');
+        if !is_rec_header {
+            continue;
+        }
+        for rest in lines.iter().skip(i + 1) {
+            if rest.is_empty() {
+                continue;
+            }
+            if rest == "approve" || rest.starts_with("approve ") {
+                return Some(true);
+            }
+            if rest.contains("needs change")
+                || rest.contains("need change")
+                || rest.contains("reject")
+                || rest == "supplement"
+            {
+                return Some(false);
+            }
+            break;
+        }
     }
     None
 }
@@ -1318,6 +1348,28 @@ mod tests {
             parse_opinion_passed("Recommendation: needs change"),
             Some(false)
         );
+    }
+
+    #[test]
+    fn parses_recommendation_block_with_reject_line() {
+        assert_eq!(
+            parse_opinion_passed("## Recommendation\nreject"),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn detects_review_intent_without_explicit_id_when_only_one() {
+        let ids = vec!["only-req".to_string()];
+        let id = detect_review_start_intent("开始需求评审", &ids);
+        assert_eq!(id.as_deref(), Some("only-req"));
+    }
+
+    #[test]
+    fn detects_english_review_trigger() {
+        let ids = vec!["feat-x".to_string()];
+        let id = detect_review_start_intent("run requirement review for feat-x", &ids);
+        assert_eq!(id.as_deref(), Some("feat-x"));
     }
 
     #[test]

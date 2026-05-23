@@ -135,3 +135,119 @@ pub fn truncate_preview(text: &str, max: usize) -> String {
     let truncated: String = text.chars().take(max).collect();
     format!("{truncated}…")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tools::{
+        driver::{ToolExecutionResult, ToolUsage},
+        model::{ToolInstance, ToolKind},
+    };
+
+    fn sample_params() -> CodeAgentTaskParams {
+        CodeAgentTaskParams {
+            kind: TaskKind::RequirementAgent,
+            content: "do work".into(),
+            workdir: std::path::PathBuf::from("/tmp/ws/requirements"),
+            messages: vec![],
+            executor_id: Some("alice".into()),
+            parent_task_id: Some("parent-1".into()),
+            context: serde_json::json!({ "requirement_id": "r1" }),
+        }
+    }
+
+    fn sample_instance() -> ToolInstance {
+        ToolInstance {
+            id: "tool_1".into(),
+            kind: ToolKind::ClaudeCode,
+            name: "Claude".into(),
+            enabled: true,
+            version: 1,
+            config: serde_json::json!({}),
+        }
+    }
+
+    fn sample_result(exit_code: i32, output: &str) -> ToolExecutionResult {
+        ToolExecutionResult {
+            output: output.to_string(),
+            exit_code,
+            usage: ToolUsage {
+                model: "test-model".into(),
+                prompt_tokens: 10,
+                completion_tokens: 20,
+                total_tokens: 30,
+            },
+        }
+    }
+
+    #[test]
+    fn new_task_starts_pending_with_fields_from_params() {
+        let params = sample_params();
+        let task = AgentTaskRecord::new(&params, "task_abc".into(), 1000);
+        assert_eq!(task.id, "task_abc");
+        assert_eq!(task.kind, TaskKind::RequirementAgent);
+        assert_eq!(task.status, TaskStatus::Pending);
+        assert_eq!(task.executor_id.as_deref(), Some("alice"));
+        assert_eq!(task.parent_task_id.as_deref(), Some("parent-1"));
+        assert_eq!(task.workdir, "/tmp/ws/requirements");
+    }
+
+    #[test]
+    fn mark_running_sets_status_and_timestamp() {
+        let mut task = AgentTaskRecord::new(&sample_params(), "t1".into(), 1);
+        task.mark_running(500);
+        assert_eq!(task.status, TaskStatus::Running);
+        assert_eq!(task.started_at_ms, Some(500));
+    }
+
+    #[test]
+    fn complete_with_result_records_tool_metadata() {
+        let mut task = AgentTaskRecord::new(&sample_params(), "t1".into(), 1);
+        let instance = sample_instance();
+        let result = sample_result(0, "hello output");
+        task.complete_with_result(&instance, &result, 900);
+        assert_eq!(task.status, TaskStatus::Completed);
+        assert_eq!(task.tool_instance_id.as_deref(), Some("tool_1"));
+        assert_eq!(task.tool_name.as_deref(), Some("Claude"));
+        assert_eq!(task.tool_kind, Some(ToolKind::ClaudeCode));
+        assert_eq!(task.exit_code, Some(0));
+        assert_eq!(task.output_preview.as_deref(), Some("hello output"));
+        assert_eq!(task.model.as_deref(), Some("test-model"));
+        assert_eq!(task.total_tokens, 30);
+        assert!(task.error.is_none());
+    }
+
+    #[test]
+    fn non_zero_exit_marks_failed_with_error_code() {
+        let mut task = AgentTaskRecord::new(&sample_params(), "t1".into(), 1);
+        task.complete_with_result(&sample_instance(), &sample_result(2, "err"), 900);
+        assert_eq!(task.status, TaskStatus::Failed);
+        assert_eq!(task.error.as_deref(), Some("tool_exit_code_2"));
+    }
+
+    #[test]
+    fn fail_sets_failed_status_and_error_message() {
+        let mut task = AgentTaskRecord::new(&sample_params(), "t1".into(), 1);
+        task.fail("no_enabled_coding_tool".into(), 800);
+        assert_eq!(task.status, TaskStatus::Failed);
+        assert_eq!(task.error.as_deref(), Some("no_enabled_coding_tool"));
+        assert_eq!(task.ended_at_ms, Some(800));
+    }
+
+    #[test]
+    fn truncate_preview_keeps_short_text_unchanged() {
+        assert_eq!(truncate_preview("hello", 10), "hello");
+    }
+
+    #[test]
+    fn task_record_json_roundtrip() {
+        let mut task = AgentTaskRecord::new(&sample_params(), "t1".into(), 1);
+        task.mark_running(2);
+        task.complete_with_result(&sample_instance(), &sample_result(0, "ok"), 3);
+        let json = serde_json::to_string(&task).unwrap();
+        let parsed: AgentTaskRecord = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.id, task.id);
+        assert_eq!(parsed.status, TaskStatus::Completed);
+        assert_eq!(parsed.tool_kind, Some(ToolKind::ClaudeCode));
+    }
+}

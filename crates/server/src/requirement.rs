@@ -813,4 +813,33 @@ mod tests {
             assert!(parsed.is_ok());
         }
     }
+
+    #[test]
+    fn normalize_requirement_id_trims_and_lowercases() {
+        assert_eq!(normalize_requirement_id("  SSO-Login  ").unwrap(), "sso-login");
+    }
+
+    #[test]
+    fn normalize_requirement_id_rejects_empty() {
+        assert_eq!(
+            normalize_requirement_id("  ").unwrap_err().to_string(),
+            "requirement_id_empty"
+        );
+    }
+
+    #[test]
+    fn normalize_requirement_id_rejects_invalid_chars() {
+        assert!(normalize_requirement_id("bad/id").is_err());
+    }
+
+    #[test]
+    fn derive_requirement_id_from_title() {
+        assert_eq!(derive_requirement_id("User Auth Flow").unwrap(), "user-auth-flow");
+    }
+
+    #[test]
+    fn phase_in_progress_excludes_release() {
+        assert!(phase_in_progress(&RequirementPhase::Development));
+        assert!(!phase_in_progress(&RequirementPhase::Release));
+    }
 }

@@ -1,10 +1,9 @@
-enum Direction {
-  Up = 'up',
-  Down = 'down',
-  Left = 'left',
-  Right = 'right',
-}
+import { BOSS_CHAIR, furnitureBlockedTiles } from '../scene/officeFurniture'
 import { RpgHomeSnapshot } from '../types'
+import { drawCharacter } from './characterRenderer'
+import { Direction } from './direction'
+import { drawWorkstationChairsOnly, drawWorkstationDesksOnly } from './furnitureRenderer'
+import { createMotionState, MotionState, updatePlayerMotion } from './playerMotion'
 
 type RuntimeOptions = {
   container: HTMLElement
@@ -12,10 +11,20 @@ type RuntimeOptions = {
   onInteractEmployee: (employeeActorId: string | null) => void
 }
 
-const PLAYER_COLOR = '#6ca8ff'
-const EMPLOYEE_COLOR = '#7fdca5'
 const WALL_COLOR = '#2b3242'
 const GRID_COLOR = '#202736'
+
+type EmployeeVisual = {
+  id: string
+  pixelX: number
+  pixelY: number
+  direction: Direction
+  variant: number
+  idleFrame: number
+  idleTimerMs: number
+  sitFrame: number
+  sitTimerMs: number
+}
 
 export class RpgRuntime {
   private readonly container: HTMLElement
@@ -27,7 +36,10 @@ export class RpgRuntime {
   private animationId: number | null = null
   private readonly keydownListener: (event: KeyboardEvent) => void
   private readonly keyupListener: (event: KeyboardEvent) => void
-  private player: { x: number; y: number }
+  private readonly blockedTiles: Array<{ x: number; y: number }>
+  private playerMotion: MotionState
+  private employeeVisuals: EmployeeVisual[]
+  private lastFrameTime = 0
 
   constructor(options: RuntimeOptions) {
     this.container = options.container
@@ -40,7 +52,24 @@ export class RpgRuntime {
     this.context = this.canvas.getContext('2d') as CanvasRenderingContext2D
     this.keydownListener = (event) => this.handleKeyDown(event)
     this.keyupListener = (event) => this.handleKeyUp(event)
-    this.player = { ...this.snapshot.player.position }
+    this.blockedTiles = [
+      ...this.snapshot.scene.walls,
+      ...furnitureBlockedTiles(this.snapshot.scene.furniture),
+    ]
+    const { tileSize } = this.snapshot.scene
+    const start = this.snapshot.player.position
+    this.playerMotion = createMotionState(start.x, start.y, tileSize)
+    this.employeeVisuals = this.snapshot.employees.map((employee, index) => ({
+      id: employee.id,
+      pixelX: employee.position.x * tileSize + tileSize / 2,
+      pixelY: employee.position.y * tileSize + tileSize / 2,
+      direction: Direction.Down,
+      variant: index,
+      idleFrame: index % 2,
+      idleTimerMs: index * 120,
+      sitFrame: 0,
+      sitTimerMs: index * 80,
+    }))
   }
 
   mount() {
@@ -48,7 +77,8 @@ export class RpgRuntime {
     this.container.appendChild(this.canvas)
     window.addEventListener('keydown', this.keydownListener)
     window.addEventListener('keyup', this.keyupListener)
-    this.loop()
+    this.lastFrameTime = performance.now()
+    this.loop(this.lastFrameTime)
   }
 
   destroy() {
@@ -71,8 +101,10 @@ export class RpgRuntime {
     this.pressed.delete(event.key.toLowerCase())
   }
 
-  private loop = () => {
-    this.updatePlayer()
+  private loop = (time: number) => {
+    const deltaMs = Math.min(time - this.lastFrameTime, 48)
+    this.lastFrameTime = time
+    this.update(deltaMs)
     this.draw()
     this.animationId = window.requestAnimationFrame(this.loop)
   }
@@ -85,26 +117,43 @@ export class RpgRuntime {
     return null
   }
 
-  private updatePlayer() {
-    const direction = this.directionFromInput()
-    if (direction === null) return
-    const next = { ...this.player }
-    if (direction === Direction.Up) next.y -= 1
-    if (direction === Direction.Down) next.y += 1
-    if (direction === Direction.Left) next.x -= 1
-    if (direction === Direction.Right) next.x += 1
+  private isBlocked(x: number, y: number): boolean {
+    return this.blockedTiles.some((tile) => tile.x === x && tile.y === y)
+  }
 
-    const blocked = this.snapshot.scene.walls.some((wall) => wall.x === next.x && wall.y === next.y)
-    if (!blocked) {
-      this.player = next
-    }
+  private update(deltaMs: number) {
+    const { tileSize } = this.snapshot.scene
+    this.playerMotion = updatePlayerMotion(
+      this.playerMotion,
+      this.directionFromInput(),
+      (x, y) => !this.isBlocked(x, y),
+      tileSize,
+      deltaMs,
+    )
+
+    this.employeeVisuals = this.employeeVisuals.map((employee) => {
+      const next = {
+        ...employee,
+        idleTimerMs: employee.idleTimerMs + deltaMs,
+        sitTimerMs: employee.sitTimerMs + deltaMs,
+      }
+      if (next.idleTimerMs >= 700) {
+        next.idleFrame = (next.idleFrame + 1) % 2
+        next.idleTimerMs = 0
+      }
+      if (next.sitTimerMs >= 320) {
+        next.sitFrame = (next.sitFrame + 1) % 4
+        next.sitTimerMs = 0
+      }
+      return next
+    })
   }
 
   private tryInteract() {
+    const { gridX, gridY } = this.playerMotion
     const target = this.snapshot.employees.find(
       (employee) =>
-        Math.abs(employee.position.x - this.player.x) <= 1 &&
-        Math.abs(employee.position.y - this.player.y) <= 1,
+        Math.abs(employee.position.x - gridX) <= 1 && Math.abs(employee.position.y - gridY) <= 1,
     )
     this.onInteractEmployee(target?.id ?? null)
   }
@@ -149,19 +198,44 @@ export class RpgRuntime {
       this.context.fillRect(wall.x * tileSize, wall.y * tileSize, tileSize, tileSize)
     })
 
-    this.drawActor(this.player.x, this.player.y, PLAYER_COLOR)
-    this.snapshot.employees.forEach((employee) => {
-      this.drawActor(employee.position.x, employee.position.y, EMPLOYEE_COLOR)
+    drawWorkstationDesksOnly(this.context, this.snapshot.scene.furniture, tileSize)
+    drawWorkstationChairsOnly(this.context, this.snapshot.scene.furniture, tileSize)
+
+    this.employeeVisuals.forEach((employee) => {
+      drawCharacter({
+        ctx: this.context,
+        centerX: employee.pixelX,
+        centerY: employee.pixelY,
+        tileSize,
+        kind: 'employee',
+        direction: employee.direction,
+        isWalking: false,
+        walkFrame: 0,
+        idleFrame: employee.idleFrame,
+        variant: employee.variant,
+        pose: 'sitting',
+        sitFrame: employee.sitFrame,
+      })
+    })
+
+    drawCharacter({
+      ctx: this.context,
+      centerX: this.playerMotion.pixelX,
+      centerY: this.playerMotion.pixelY,
+      tileSize,
+      kind: 'president',
+      direction:
+        this.isPresidentSitting() ? Direction.Down : this.playerMotion.facing,
+      isWalking: this.playerMotion.isMoving,
+      walkFrame: this.playerMotion.walkFrame,
+      idleFrame: this.playerMotion.idleFrame,
+      pose: this.isPresidentSitting() ? 'sitting' : 'standing',
+      sitFrame: this.playerMotion.idleFrame,
     })
   }
 
-  private drawActor(x: number, y: number, color: string) {
-    const size = this.snapshot.scene.tileSize
-    const centerX = x * size + size / 2
-    const centerY = y * size + size / 2
-    this.context.beginPath()
-    this.context.fillStyle = color
-    this.context.arc(centerX, centerY, size * 0.33, 0, Math.PI * 2)
-    this.context.fill()
+  private isPresidentSitting(): boolean {
+    const { gridX, gridY, isMoving } = this.playerMotion
+    return !isMoving && gridX === BOSS_CHAIR.x && gridY === BOSS_CHAIR.y
   }
 }

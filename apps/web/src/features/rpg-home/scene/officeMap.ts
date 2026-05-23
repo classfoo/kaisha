@@ -1,4 +1,5 @@
 import { RpgOfficeScene } from '../types'
+import { buildOfficeFurniture } from './officeFurniture'
 
 const wall = (x: number, y: number) => ({ x, y })
 
@@ -17,8 +18,6 @@ export const officeScene: RpgOfficeScene = {
     ...Array.from({ length: 28 }, (_, x) => wall(x, 17)),
     ...Array.from({ length: 18 }, (_, y) => wall(0, y)),
     ...Array.from({ length: 18 }, (_, y) => wall(27, y)),
-    ...Array.from({ length: 8 }, (_, y) => wall(8, y + 1)),
-    ...Array.from({ length: 8 }, (_, y) => wall(12, y + 7)),
-    ...Array.from({ length: 10 }, (_, x) => wall(x + 13, 10)),
   ],
+  furniture: buildOfficeFurniture(),
 }

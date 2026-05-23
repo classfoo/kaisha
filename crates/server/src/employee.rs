@@ -678,3 +678,63 @@ pub(super) async fn create_employee(
         memory_file: format!("shachiku/{employee_id}/memory.md"),
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_agent_output_from_json_line() {
+        let output = r#"Some intro
+{"name": "Jane Doe", "department": "engineering", "role": "Backend Engineer"}"#;
+        let profile = parse_agent_employee_output(output).expect("profile");
+        assert_eq!(profile.name, "Jane Doe");
+        assert_eq!(profile.department, "engineering");
+        assert_eq!(profile.role, "Backend Engineer");
+    }
+
+    #[test]
+    fn parse_agent_output_from_whole_json() {
+        let output = r#"{"name":"Bob","department":"qa","role":"QA Lead"}"#;
+        let profile = parse_agent_employee_output(output).expect("profile");
+        assert_eq!(profile.name, "Bob");
+    }
+
+    #[test]
+    fn parse_agent_output_from_key_value_fallback() {
+        let output = "Name: Carol\nDepartment: design\nRole: UX Designer";
+        let profile = parse_agent_employee_output(output).expect("profile");
+        assert_eq!(profile.name, "Carol");
+        assert_eq!(profile.department, "design");
+        assert_eq!(profile.role, "UX Designer");
+    }
+
+    #[test]
+    fn parse_agent_output_rejects_incomplete_json() {
+        let output = r#"{"name":"Only Name"}"#;
+        assert!(parse_agent_employee_output(output).is_none());
+    }
+
+    #[test]
+    fn derive_employee_id_slugifies_name() {
+        let id = derive_employee_id("Jane O'Connor").unwrap();
+        assert_eq!(id, "jane-o-connor");
+    }
+
+    #[test]
+    fn normalize_employee_id_lowercases_and_trims() {
+        assert_eq!(normalize_employee_id("  Alice-Smith  ").unwrap(), "alice-smith");
+    }
+
+    #[test]
+    fn normalize_employee_id_rejects_invalid_chars() {
+        assert!(normalize_employee_id("bad id!").is_err());
+    }
+
+    #[test]
+    fn build_hire_prompt_includes_existing_count() {
+        let prompt = build_hire_employee_prompt(7);
+        assert!(prompt.contains("7 employees"));
+        assert!(prompt.contains("JSON"));
+    }
+}

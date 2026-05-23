@@ -46,3 +46,51 @@ impl ToolStore {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tools::model::{ToolInstance, ToolKind};
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn temp_workspace() -> std::path::PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        std::env::temp_dir().join(format!("kaisha-tool-store-{unique}"))
+    }
+
+    #[test]
+    fn load_returns_empty_without_workspace() {
+        let store = ToolStore::new(None).unwrap();
+        assert!(store.load().unwrap().is_empty());
+    }
+
+    #[test]
+    fn save_and_load_roundtrip() {
+        let workspace = temp_workspace();
+        fs::create_dir_all(&workspace).unwrap();
+        let store = ToolStore::new(Some(&workspace)).unwrap();
+        let mut instances = BTreeMap::new();
+        instances.insert(
+            "tool_1".into(),
+            ToolInstance {
+                id: "tool_1".into(),
+                kind: ToolKind::ClaudeCode,
+                name: "Claude".into(),
+                enabled: true,
+                version: 1,
+                config: serde_json::json!({}),
+            },
+        );
+        store.save(&instances).unwrap();
+        let loaded = store.load().unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded.get("tool_1").unwrap().name, "Claude");
+        let _ = fs::remove_dir_all(&workspace);
+    }
+}

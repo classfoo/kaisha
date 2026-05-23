@@ -152,3 +152,113 @@ pub fn review_pipeline_content(requirement_id: &str) -> String {
 pub fn review_context(requirement_id: &str) -> serde_json::Value {
     json!({ "requirement_id": requirement_id })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tasks::model::{CodeAgentTaskParams, TaskKind, TaskStatus};
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn temp_workspace() -> std::path::PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        std::env::temp_dir().join(format!("kaisha-task-runner-{unique}"))
+    }
+
+    #[test]
+    fn helper_content_builders_include_ids() {
+        assert!(hire_task_content().contains("employee"));
+        assert!(review_opinion_content("req-1", "Alice").contains("req-1"));
+        assert!(review_opinion_content("req-1", "Alice").contains("Alice"));
+        assert!(review_revision_content("req-1", "Bob").contains("Revise"));
+        assert!(review_summary_content("req-1").contains("req-1"));
+        assert!(review_pipeline_content("req-1").contains("req-1"));
+        assert_eq!(review_context("req-1")["requirement_id"], "req-1");
+    }
+
+    #[test]
+    fn task_content_from_user_input_trims_and_truncates() {
+        let long = "x".repeat(600);
+        let preview = task_content_from_user_input(&format!("  {long}  "));
+        assert!(preview.chars().count() <= 501);
+        assert!(!preview.starts_with(' '));
+    }
+
+    #[test]
+    fn create_and_complete_parent_task() {
+        let workspace = temp_workspace();
+        fs::create_dir_all(&workspace).unwrap();
+        let runner = TaskRunner::new(&workspace);
+        let mut parent = runner
+            .create_parent_task(
+                TaskKind::ReviewPipeline,
+                "pipeline",
+                &workspace,
+                None,
+                review_context("r1"),
+            )
+            .unwrap();
+        assert_eq!(parent.status, TaskStatus::Running);
+        assert!(parent.started_at_ms.is_some());
+        runner.complete_parent_task(&mut parent).unwrap();
+        assert_eq!(parent.status, TaskStatus::Completed);
+        assert!(parent.ended_at_ms.is_some());
+        let loaded = TaskStore::new(&workspace).load(&parent.id).unwrap();
+        assert_eq!(loaded.status, TaskStatus::Completed);
+        let _ = fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn fail_parent_task_persists_error() {
+        let workspace = temp_workspace();
+        fs::create_dir_all(&workspace).unwrap();
+        let runner = TaskRunner::new(&workspace);
+        let mut parent = runner
+            .create_parent_task(
+                TaskKind::ReviewPipeline,
+                "pipeline",
+                &workspace,
+                None,
+                serde_json::json!({}),
+            )
+            .unwrap();
+        runner
+            .fail_parent_task(&mut parent, "review_failed".into())
+            .unwrap();
+        assert_eq!(parent.status, TaskStatus::Failed);
+        assert_eq!(parent.error.as_deref(), Some("review_failed"));
+        let _ = fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn run_code_chat_without_tool_marks_task_failed() {
+        let workspace = temp_workspace();
+        fs::create_dir_all(&workspace).unwrap();
+        let tools = ToolManager::new(Some(&workspace)).unwrap();
+        let runner = TaskRunner::new(&workspace);
+        let params = CodeAgentTaskParams {
+            kind: TaskKind::RequirementAgent,
+            content: "hello".into(),
+            workdir: workspace.clone(),
+            messages: vec![crate::tools::driver::ToolChatMessage {
+                role: "user".into(),
+                content: "hi".into(),
+            }],
+            executor_id: Some("emp-1".into()),
+            parent_task_id: None,
+            context: serde_json::json!({}),
+        };
+        let err = runner.run_code_chat(&tools, params).unwrap_err();
+        assert!(err.to_string().contains("no_enabled_coding_tool"));
+        let tasks = TaskStore::new(&workspace).list().unwrap();
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].status, TaskStatus::Failed);
+        assert_eq!(tasks[0].executor_id.as_deref(), Some("emp-1"));
+        let _ = fs::remove_dir_all(&workspace);
+    }
+}
