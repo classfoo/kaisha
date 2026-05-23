@@ -586,6 +586,18 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
             axum::routing::post(requirement::reconfirm_requirement),
         )
         .route(
+            "/api/requirements/archived",
+            get(requirement::list_archived_requirements),
+        )
+        .route(
+            "/api/requirements/:id/reinstate",
+            post(requirement::reinstate_requirement),
+        )
+        .route(
+            "/api/requirements/:id/hard-delete",
+            post(requirement::hard_delete_requirement),
+        )
+        .route(
             "/api/requirements/:id/development",
             axum::routing::get(requirement_development::get_development)
                 .post(requirement_development::start_development),

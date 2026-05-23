@@ -207,6 +207,29 @@ export function createRequirementsApi(apiBase: string, locale: string) {
       return res.json()
     },
 
+    async listArchived(): Promise<RequirementSummary[]> {
+      const res = await fetch(`${apiBase}/api/requirements/archived`, { headers })
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async reinstate(id: string): Promise<RequirementDetail> {
+      const res = await fetch(
+        `${apiBase}/api/requirements/${encodeURIComponent(id)}/reinstate`,
+        { method: 'POST', headers },
+      )
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async hardDelete(id: string): Promise<void> {
+      const res = await fetch(
+        `${apiBase}/api/requirements/${encodeURIComponent(id)}/hard-delete`,
+        { method: 'POST', headers },
+      )
+      if (!res.ok) throw new Error(await readError(res))
+    },
+
     async getDevelopment(id: string): Promise<RequirementDevelopment | null> {
       const res = await fetch(`${apiBase}/api/requirements/${encodeURIComponent(id)}/development`, { headers })
       if (res.status === 404) return null

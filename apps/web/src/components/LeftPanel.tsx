@@ -50,6 +50,15 @@ type LeftPanelProps = {
   requirementsError: string | null
   requirementsLoading: boolean
   requirementPhaseLabel: (phase: RequirementPhase) => string
+  showRequirementsArchived: boolean
+  onToggleRequirementsArchived: () => void
+  archivedRequirements: RequirementSummary[]
+  onAbandonRequirement: (id: string) => void
+  onReinstateRequirement: (id: string) => void
+  onHardDeleteRequirement: (id: string) => void
+  abandoningRequirementId: string | null
+  reinstatingRequirementId: string | null
+  hardDeletingRequirementId: string | null
 }
 
 export function LeftPanel({
@@ -96,6 +105,15 @@ export function LeftPanel({
   requirementsError,
   requirementsLoading,
   requirementPhaseLabel,
+  showRequirementsArchived,
+  onToggleRequirementsArchived,
+  archivedRequirements,
+  onAbandonRequirement,
+  onReinstateRequirement,
+  onHardDeleteRequirement,
+  abandoningRequirementId,
+  reinstatingRequirementId,
+  hardDeletingRequirementId,
 }: LeftPanelProps) {
   const renderPanelBody = () => {
     if (activeNav === 'chat') {
@@ -150,12 +168,29 @@ export function LeftPanel({
     if (activeNav === 'requirements') {
       return (
         <>
+          <div className="employee-list__toolbar">
+            <button
+              className="employee-list__toggle-btn"
+              onClick={onToggleRequirementsArchived}
+              title={showRequirementsArchived ? t('ui.requirements.showActive') : t('ui.requirements.showArchived')}
+            >
+              <i className={`iconfont ${showRequirementsArchived ? 'icon-filmetoChat' : 'icon-filmetoChat'}`}></i>
+              <span>{showRequirementsArchived ? t('ui.requirements.showActive') : t('ui.requirements.showArchived')}</span>
+            </button>
+          </div>
           <RequirementList
-            items={requirements}
+            items={showRequirementsArchived ? archivedRequirements : requirements}
             selectedId={selectedRequirementId}
             onSelect={onSelectRequirement}
             phaseLabel={requirementPhaseLabel}
             t={t}
+            isArchivedView={showRequirementsArchived}
+            onAbandonRequirement={onAbandonRequirement}
+            onReinstateRequirement={onReinstateRequirement}
+            onHardDeleteRequirement={onHardDeleteRequirement}
+            abandoningId={abandoningRequirementId}
+            reinstatingId={reinstatingRequirementId}
+            hardDeletingId={hardDeletingRequirementId}
           />
           <div className="side-panel__footer">
             <div className="side-panel__toolbar">

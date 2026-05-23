@@ -1029,6 +1029,15 @@ export default function App() {
             requirementsError={requirements.error}
             requirementsLoading={requirements.loading}
             requirementPhaseLabel={requirementPhaseLabel}
+            showRequirementsArchived={requirements.showArchived}
+            onToggleRequirementsArchived={() => requirements.setShowArchived((v: boolean) => !v)}
+            archivedRequirements={requirements.archivedItems}
+            onAbandonRequirement={(id) => void requirements.abandonRequirement(id)}
+            onReinstateRequirement={(id) => void requirements.reinstateRequirement(id)}
+            onHardDeleteRequirement={(id) => void requirements.hardDeleteRequirement(id)}
+            abandoningRequirementId={requirements.abandoningId}
+            reinstatingRequirementId={requirements.reinstatingId}
+            hardDeletingRequirementId={requirements.hardDeletingId}
           />
         ) : null}
         workspaceConfigured={Boolean(workspace?.configured)}

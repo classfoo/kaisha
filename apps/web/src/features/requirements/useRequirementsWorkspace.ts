@@ -31,6 +31,11 @@ export function useRequirementsWorkspace(
   const [confirming, setConfirming] = React.useState(false)
   const [abandoning, setAbandoning] = React.useState(false)
   const [reconfirming, setReconfirming] = React.useState(false)
+  const [archivedItems, setArchivedItems] = React.useState<RequirementSummary[]>([])
+  const [showArchived, setShowArchived] = React.useState(false)
+  const [abandoningId, setAbandoningId] = React.useState<string | null>(null)
+  const [reinstatingId, setReinstatingId] = React.useState<string | null>(null)
+  const [hardDeletingId, setHardDeletingId] = React.useState<string | null>(null)
   const [development, setDevelopment] = React.useState<RequirementDevelopment | null>(null)
   const [devLoading, setDevLoading] = React.useState(false)
   const [devActionKey, setDevActionKey] = React.useState<string | null>(null)
@@ -293,26 +298,30 @@ export function useRequirementsWorkspace(
 
   const abandonRequirement = React.useCallback(
     async (id: string) => {
+      setAbandoningId(id)
       setAbandoning(true)
       setError(null)
       try {
         const updated = await api.abandon(id)
-        setDetail(updated)
-        setItems((prev) =>
-          prev.map((item) =>
-            item.id === updated.id
-              ? {
-                  id: updated.id,
-                  title: updated.title,
-                  phase: updated.phase,
-                  confirm_status: updated.confirm_status,
-                  created_at_ms: updated.created_at_ms,
-                  updated_at_ms: updated.updated_at_ms,
-                  dir_path: updated.dir_path,
-                }
-              : item,
-          ),
-        )
+        setItems((prev) => prev.filter((r) => r.id !== id))
+        setArchivedItems((prev) => {
+          const summary: RequirementSummary = {
+            id: updated.id,
+            title: updated.title,
+            phase: updated.phase,
+            confirm_status: updated.confirm_status,
+            created_at_ms: updated.created_at_ms,
+            updated_at_ms: updated.updated_at_ms,
+            dir_path: updated.dir_path,
+          }
+          const next = [...prev, summary]
+          next.sort((a, b) => b.updated_at_ms - a.updated_at_ms)
+          return next
+        })
+        if (selectedIdRef.current === id) {
+          setSelectedId(null)
+          setDetail(null)
+        }
         return updated
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
@@ -320,6 +329,7 @@ export function useRequirementsWorkspace(
         throw e
       } finally {
         setAbandoning(false)
+        setAbandoningId(null)
       }
     },
     [api],
@@ -474,6 +484,79 @@ export function useRequirementsWorkspace(
     [api, loadDetail],
   )
 
+  // Load archived requirements
+  React.useEffect(() => {
+    if (!workspaceConfigured) {
+      setArchivedItems([])
+      return
+    }
+    let cancelled = false
+    const headers = { 'x-lang': locale }
+    api.listArchived()
+      .then((list) => {
+        if (!cancelled) setArchivedItems(list)
+      })
+      .catch(() => {
+        if (!cancelled) setArchivedItems([])
+      })
+    return () => { cancelled = true }
+  }, [api, locale, workspaceConfigured, refreshTick])
+
+  const reinstateRequirement = React.useCallback(
+    async (id: string) => {
+      setReinstatingId(id)
+      setError(null)
+      try {
+        const updated = await api.reinstate(id)
+        setArchivedItems((prev) => prev.filter((r) => r.id !== id))
+        setItems((prev) => {
+          const summary: RequirementSummary = {
+            id: updated.id,
+            title: updated.title,
+            phase: updated.phase,
+            confirm_status: updated.confirm_status,
+            created_at_ms: updated.created_at_ms,
+            updated_at_ms: updated.updated_at_ms,
+            dir_path: updated.dir_path,
+          }
+          const next = [...prev, summary]
+          next.sort((a, b) => b.updated_at_ms - a.updated_at_ms)
+          return next
+        })
+        return updated
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        throw e
+      } finally {
+        setReinstatingId(null)
+      }
+    },
+    [api],
+  )
+
+  const hardDeleteRequirement = React.useCallback(
+    async (id: string) => {
+      setHardDeletingId(id)
+      setError(null)
+      try {
+        await api.hardDelete(id)
+        setArchivedItems((prev) => prev.filter((r) => r.id !== id))
+        if (selectedIdRef.current === id) {
+          setSelectedId(null)
+          setDetail(null)
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        throw e
+      } finally {
+        setHardDeletingId(null)
+      }
+    },
+    [api],
+  )
+
   return {
     items,
     selectedId,
@@ -489,6 +572,12 @@ export function useRequirementsWorkspace(
     confirming,
     abandoning,
     reconfirming,
+    archivedItems,
+    showArchived,
+    setShowArchived,
+    abandoningId,
+    reinstatingId,
+    hardDeletingId,
     devLoading,
     devActionKey,
     devStarting,
@@ -504,6 +593,8 @@ export function useRequirementsWorkspace(
     confirmRequirement,
     abandonRequirement,
     reconfirmRequirement,
+    reinstateRequirement,
+    hardDeleteRequirement,
     loadDevelopment,
     startDevelopmentAction,
     createDevTaskAction,
