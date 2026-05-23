@@ -70,6 +70,28 @@
       "cancelHardDelete": "取消",
       "hardDeleteError": "删除员工失败"
     },
+    "employeeTasks": {
+      "title": "任务",
+      "listTitle": "员工任务列表",
+      "noSelection": "请选择员工以查看任务",
+      "empty": "{name} 暂无任务",
+      "loading": "加载任务中…",
+      "kind": {
+        "employee_hire": "雇佣员工",
+        "requirement_agent": "需求代理",
+        "review_opinion": "评审意见",
+        "review_revision": "评审修订",
+        "review_summary": "评审总结",
+        "review_pipeline": "评审流程"
+      },
+      "status": {
+        "pending": "待处理",
+        "running": "进行中",
+        "completed": "已完成",
+        "failed": "失败",
+        "cancelled": "已取消"
+      }
+    },
     "chat": {
       "emptySelection": "请选择一个员工以打开对话",
       "placeholder": "给 {name} 发送消息...",

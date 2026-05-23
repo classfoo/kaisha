@@ -481,12 +481,6 @@ pub async fn confirm_requirement(
                 i18n::msg(&headers, "requirement_parse_failed"),
             )
         })?;
-    if !matches!(meta.phase, RequirementPhase::Confirm) {
-        return Err((
-            axum::http::StatusCode::BAD_REQUEST,
-            i18n::msg(&headers, "requirement_phase_invalid"),
-        ));
-    }
     meta.confirm_status = Some(RequirementConfirmStatus::Confirmed);
     meta.phase = RequirementPhase::Development;
     meta.updated_at_ms = now_ms();
@@ -841,5 +835,24 @@ mod tests {
     fn phase_in_progress_excludes_release() {
         assert!(phase_in_progress(&RequirementPhase::Development));
         assert!(!phase_in_progress(&RequirementPhase::Release));
+    }
+
+    #[test]
+    fn confirm_may_advance_from_any_phase() {
+        let mut meta = RequirementMeta {
+            id: "feat-a".to_string(),
+            title: "Feature".to_string(),
+            phase: RequirementPhase::Collection,
+            confirm_status: None,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        };
+        meta.confirm_status = Some(RequirementConfirmStatus::Confirmed);
+        meta.phase = RequirementPhase::Development;
+        assert_eq!(meta.phase, RequirementPhase::Development);
+        assert_eq!(
+            meta.confirm_status,
+            Some(RequirementConfirmStatus::Confirmed)
+        );
     }
 }

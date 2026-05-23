@@ -70,6 +70,28 @@
       "cancelHardDelete": "Cancel",
       "hardDeleteError": "Failed to delete employee"
     },
+    "employeeTasks": {
+      "title": "Tasks",
+      "listTitle": "Employee task list",
+      "noSelection": "Select an employee to view tasks",
+      "empty": "No tasks for {name} yet",
+      "loading": "Loading tasks…",
+      "kind": {
+        "employee_hire": "Hire employee",
+        "requirement_agent": "Requirement agent",
+        "review_opinion": "Review opinion",
+        "review_revision": "Review revision",
+        "review_summary": "Review summary",
+        "review_pipeline": "Review pipeline"
+      },
+      "status": {
+        "pending": "Pending",
+        "running": "Running",
+        "completed": "Completed",
+        "failed": "Failed",
+        "cancelled": "Cancelled"
+      }
+    },
     "chat": {
       "emptySelection": "Select an employee to open chat",
       "placeholder": "Write a message to {name}...",

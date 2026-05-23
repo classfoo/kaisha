@@ -30,6 +30,7 @@ type WorkAreaProps = {
   git: ReturnType<typeof useGitWorkspace>
   requirements: ReturnType<typeof useRequirementsWorkspace>
   requirementPhaseLabel: (phase: RequirementPhase) => string
+  onEmployeeTasksRefresh?: () => void
   t: (key: string) => string
   onOpenSettings: () => void
   onSetWorkspaceInput: (value: string) => void
@@ -60,6 +61,7 @@ export function WorkArea({
   git,
   requirements,
   requirementPhaseLabel,
+  onEmployeeTasksRefresh,
   t,
   onOpenSettings,
   onSetWorkspaceInput,
@@ -159,6 +161,7 @@ export function WorkArea({
           messageDraft={messageDraft}
           onMessageDraftChange={onMessageDraftChange}
           chatSenderProfile={chatSenderProfile}
+          onEmployeeTasksRefresh={onEmployeeTasksRefresh}
           t={t}
         />
       )

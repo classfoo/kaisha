@@ -143,15 +143,20 @@ select,
   grid-template-columns: minmax(0, 1fr) 6px;
   min-width: 220px;
   max-width: 520px;
+  height: 100%;
+  min-height: 0;
   border-right: 1px solid #262b37;
 }
 
 .side-panel {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
   padding: 0 14px 18px 14px;
   background: #171b24;
   -webkit-app-region: drag;
+  overflow: hidden;
 }
 
 .side-panel-resizer {
@@ -362,9 +367,141 @@ select,
 
 .employee-list__toolbar {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-top: 6px;
-  padding-bottom: 4px;
+  padding: 0 2px 4px;
+  -webkit-app-region: no-drag;
+}
+
+.employee-list__toolbar-error {
+  padding: 0 2px 4px;
+}
+
+.employee-list__hire-btn {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  background: #3b6ea5;
+  border: 1px solid #4a82bc;
+  color: #f2f4f8;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.employee-list__hire-btn:hover:not(:disabled) {
+  background: #4a82bc;
+  border-color: #5a96d4;
+}
+
+.employee-list__hire-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.side-panel__chat-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  -webkit-app-region: no-drag;
+}
+
+.side-panel__employees {
+  flex: 0 1 auto;
+  max-height: 42%;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.side-panel__employee-tasks {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid #2a3040;
+  margin-top: 10px;
+  padding-top: 8px;
+}
+
+.side-panel__section-heading {
+  margin: 0 0 6px;
+  padding: 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #9ba7be;
+  letter-spacing: 0.02em;
+}
+
+.employee-task-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  -webkit-app-region: no-drag;
+}
+
+.employee-task-item {
+  border: 1px solid #2a3243;
+  border-radius: 8px;
+  background: #131a26;
+  padding: 8px 10px;
+}
+
+.employee-task-item__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.employee-task-item__kind {
+  font-size: 11px;
+  font-weight: 600;
+  color: #c5d0e4;
+}
+
+.employee-task-item__status {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #2a3243;
+  color: #9ba7be;
+}
+
+.employee-task-item__status--running {
+  background: #2a3d5c;
+  color: #8ec5ff;
+}
+
+.employee-task-item__status--completed {
+  background: #1f3d2a;
+  color: #7bc67e;
+}
+
+.employee-task-item__status--failed {
+  background: #3d2222;
+  color: #ff8f8f;
+}
+
+.employee-task-item__content {
+  font-size: 12px;
+  color: #9ba7be;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.employee-task-item__meta {
+  margin-top: 4px;
+  font-size: 10px;
+  color: #6d7a92;
 }
 
 .employee-list__toggle-btn {

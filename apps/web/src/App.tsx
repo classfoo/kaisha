@@ -6,6 +6,7 @@ import { useGitWorkspace } from './features/git/useGitWorkspace'
 import { useRequirementsWorkspace } from './features/requirements/useRequirementsWorkspace'
 import type { RequirementPhase } from './features/requirements/requirementsApi'
 import { LeftPanel } from './components/LeftPanel'
+import { useEmployeeTasks } from './features/employee-tasks/useEmployeeTasks'
 import { WorkArea } from './components/WorkArea'
 import { WorkRulesSettings } from './components/WorkRulesSettings'
 
@@ -134,6 +135,13 @@ export default function App() {
   ]
   const git = useGitWorkspace(API_BASE, locale, Boolean(workspace?.configured), refreshTick)
   const requirements = useRequirementsWorkspace(API_BASE, locale, Boolean(workspace?.configured), refreshTick)
+  const employeeTasks = useEmployeeTasks(
+    API_BASE,
+    locale,
+    Boolean(workspace?.configured),
+    selectedEmployeeId,
+    refreshTick,
+  )
   const [newGitRepoName, setNewGitRepoName] = React.useState('')
   const [newRequirementTitle, setNewRequirementTitle] = React.useState('')
   const requirementPhaseLabel = React.useCallback(
@@ -490,6 +498,7 @@ export default function App() {
         return next
       })
       setSelectedEmployeeId(created.id)
+      void employeeTasks.refresh()
     } catch (err) {
       console.error('[employee:hire] failed', err)
       setEmployeeCreateError(
@@ -1038,6 +1047,10 @@ export default function App() {
             abandoningRequirementId={requirements.abandoningId}
             reinstatingRequirementId={requirements.reinstatingId}
             hardDeletingRequirementId={requirements.hardDeletingId}
+            employeeTasks={employeeTasks.tasks}
+            employeeTasksLoading={employeeTasks.loading}
+            employeeTasksError={employeeTasks.error}
+            locale={locale}
           />
         ) : null}
         workspaceConfigured={Boolean(workspace?.configured)}
@@ -1056,6 +1069,7 @@ export default function App() {
         git={git}
         requirements={requirements}
         requirementPhaseLabel={requirementPhaseLabel}
+        onEmployeeTasksRefresh={() => void employeeTasks.refresh()}
         t={tt}
         onOpenSettings={() => setSettingsOpen(true)}
         onSetWorkspaceInput={setWorkspaceInput}

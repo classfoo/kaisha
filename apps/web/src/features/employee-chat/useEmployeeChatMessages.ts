@@ -51,6 +51,7 @@ export function useEmployeeChatMessages(
   locale: string,
   employeeId: string | null,
   senderProfile: ChatSenderProfile,
+  onStreamDone?: () => void,
 ) {
   const [serverMessages, setServerMessages] = React.useState<ChatWireMessage[]>([])
   const [optimisticUser, setOptimisticUser] = React.useState<ChatWireMessage | null>(null)
@@ -154,6 +155,7 @@ export function useEmployeeChatMessages(
               setLastResult(data.last_result ?? null)
               setStreamingAssistantText('')
               setOptimisticUser(null)
+              onStreamDone?.()
             } else if (ev.event === 'error') {
               let msg = ev.data
               try {
@@ -188,7 +190,7 @@ export function useEmployeeChatMessages(
         setStreamingAssistantText('')
       }
     },
-    [apiBase, employeeId, headers, senderProfile.name, senderProfile.avatarUrl],
+    [apiBase, employeeId, headers, onStreamDone, senderProfile.name, senderProfile.avatarUrl],
   )
 
   return {

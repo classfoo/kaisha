@@ -30,6 +30,7 @@ type EmployeeChatPanelProps = {
   messageDraft: string
   onMessageDraftChange: (value: string) => void
   chatSenderProfile: ChatSenderProfile
+  onEmployeeTasksRefresh?: () => void
   t: (key: string) => string
 }
 
@@ -110,12 +111,13 @@ export function EmployeeChatPanel({
   messageDraft,
   onMessageDraftChange,
   chatSenderProfile,
+  onEmployeeTasksRefresh,
   t,
 }: EmployeeChatPanelProps) {
   const selectedEmployee = employees.find((item) => item.id === selectedEmployeeId) ?? null
   const imeEnterGuardRef = React.useRef(createImeEnterGuardState())
   const { serverMessages, optimisticUser, streamingAssistantText, loading, sending, error, lastResult, sendMessage } =
-    useEmployeeChatMessages(apiBase, locale, selectedEmployeeId, chatSenderProfile)
+    useEmployeeChatMessages(apiBase, locale, selectedEmployeeId, chatSenderProfile, onEmployeeTasksRefresh)
 
   const historyRef = React.useRef<HTMLDivElement>(null)
 

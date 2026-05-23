@@ -70,6 +70,28 @@
       "cancelHardDelete": "キャンセル",
       "hardDeleteError": "従業員の削除に失敗しました"
     },
+    "employeeTasks": {
+      "title": "タスク",
+      "listTitle": "従業員タスク一覧",
+      "noSelection": "タスクを表示するには従業員を選択してください",
+      "empty": "{name} のタスクはまだありません",
+      "loading": "タスクを読み込み中…",
+      "kind": {
+        "employee_hire": "従業員雇用",
+        "requirement_agent": "要件エージェント",
+        "review_opinion": "レビュー意見",
+        "review_revision": "レビュー改訂",
+        "review_summary": "レビュー要約",
+        "review_pipeline": "レビューパイプライン"
+      },
+      "status": {
+        "pending": "待機中",
+        "running": "実行中",
+        "completed": "完了",
+        "failed": "失敗",
+        "cancelled": "キャンセル"
+      }
+    },
     "chat": {
       "emptySelection": "従業員を選択してチャットを開始してください",
       "placeholder": "{name} へメッセージを入力...",

@@ -1,6 +1,8 @@
 import React from 'react'
 import type { GitRepo } from '../features/git/gitApi'
 import { EmployeeDirectoryRecord, EmployeeList } from './EmployeeList'
+import { EmployeeTaskList } from './EmployeeTaskList'
+import type { AgentTaskRecord } from '../features/employee-tasks/employeeTasksApi'
 import { GitRepoList } from './GitRepoList'
 import type { RequirementPhase, RequirementSummary } from '../features/requirements/requirementsApi'
 import { RequirementList } from './RequirementList'
@@ -59,6 +61,10 @@ type LeftPanelProps = {
   abandoningRequirementId: string | null
   reinstatingRequirementId: string | null
   hardDeletingRequirementId: string | null
+  employeeTasks: AgentTaskRecord[]
+  employeeTasksLoading: boolean
+  employeeTasksError: string | null
+  locale: string
 }
 
 export function LeftPanel({
@@ -114,13 +120,35 @@ export function LeftPanel({
   abandoningRequirementId,
   reinstatingRequirementId,
   hardDeletingRequirementId,
+  employeeTasks,
+  employeeTasksLoading,
+  employeeTasksError,
+  locale,
 }: LeftPanelProps) {
+  const selectedEmployeeName = React.useMemo(() => {
+    if (!selectedEmployeeId) return null
+    const pool = showArchived ? archivedEmployees : employees
+    return pool.find((e) => e.id === selectedEmployeeId)?.name ?? null
+  }, [selectedEmployeeId, showArchived, archivedEmployees, employees])
+
   const renderPanelBody = () => {
     if (activeNav === 'chat') {
       return (
         <>
           <div className="employee-list__toolbar">
             <button
+              type="button"
+              className="employee-list__hire-btn"
+              onClick={() => {
+                console.debug('[employee:create] sidebar button clicked')
+                onCreateEmployee()
+              }}
+              disabled={creatingEmployee}
+            >
+              {creatingEmployee ? t('ui.employeeList.creating') : t('ui.employeeList.create')}
+            </button>
+            <button
+              type="button"
               className="employee-list__toggle-btn"
               onClick={onToggleArchived}
               title={showArchived ? t('ui.employeeList.showActive') : t('ui.employeeList.showArchived')}
@@ -129,37 +157,39 @@ export function LeftPanel({
               <span>{showArchived ? t('ui.employeeList.showActive') : t('ui.employeeList.showArchived')}</span>
             </button>
           </div>
-          <EmployeeList
-            employees={showArchived ? archivedEmployees : employees}
-            selectedEmployeeId={selectedEmployeeId}
-            onSelectEmployee={onSelectEmployee}
-            onFireEmployee={onFireEmployee}
-            deletingEmployeeId={deletingEmployeeId}
-            t={t}
-            isArchivedView={showArchived}
-            reinstateEmployeeId={reinstateEmployeeId}
-            onReinstateEmployee={onReinstateEmployee}
-            onHandoverEmployee={onHandoverEmployee}
-            onHardDeleteEmployee={onHardDeleteEmployee}
-            handoverEmployeeId={handoverEmployeeId}
-            hardDeletingEmployeeId={hardDeletingEmployeeId}
-          />
-          <div className="side-panel__footer">
-            <div className="side-panel__toolbar">
-              <button
-                className="action-btn side-panel__add-employee"
-                onClick={() => {
-                  console.debug('[employee:create] sidebar button clicked')
-                  onCreateEmployee()
-                }}
-                disabled={creatingEmployee}
-              >
-                {creatingEmployee ? t('ui.employeeList.creating') : t('ui.employeeList.create')}
-              </button>
-              {employeeCreateError ? (
-                <div className="side-panel__error">{employeeCreateError}</div>
-              ) : null}
+          {employeeCreateError ? (
+            <div className="side-panel__error employee-list__toolbar-error">{employeeCreateError}</div>
+          ) : null}
+          <div className="side-panel__chat-body">
+            <div className="side-panel__employees">
+              <EmployeeList
+                employees={showArchived ? archivedEmployees : employees}
+                selectedEmployeeId={selectedEmployeeId}
+                onSelectEmployee={onSelectEmployee}
+                onFireEmployee={onFireEmployee}
+                deletingEmployeeId={deletingEmployeeId}
+                t={t}
+                isArchivedView={showArchived}
+                reinstateEmployeeId={reinstateEmployeeId}
+                onReinstateEmployee={onReinstateEmployee}
+                onHandoverEmployee={onHandoverEmployee}
+                onHardDeleteEmployee={onHardDeleteEmployee}
+                handoverEmployeeId={handoverEmployeeId}
+                hardDeletingEmployeeId={hardDeletingEmployeeId}
+              />
             </div>
+            <section className="side-panel__employee-tasks" aria-label={t('ui.employeeTasks.listTitle')}>
+              <h4 className="side-panel__section-heading">{t('ui.employeeTasks.title')}</h4>
+              <EmployeeTaskList
+                tasks={employeeTasks}
+                loading={employeeTasksLoading}
+                error={employeeTasksError}
+                selectedEmployeeId={selectedEmployeeId}
+                selectedEmployeeName={selectedEmployeeName}
+                locale={locale}
+                t={t}
+              />
+            </section>
           </div>
         </>
       )

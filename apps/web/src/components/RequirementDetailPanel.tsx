@@ -69,7 +69,6 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
 
   const renderPhaseToolbar = () => {
     const phase = viewPhase
-    const isPhaseActive = phase === detail?.phase
 
     // collection phase: save button
     if (phase === 'collection') {
@@ -79,7 +78,7 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
             type="button"
             className="action-btn"
             onClick={() => void onSave()}
-            disabled={busy || !dirty || !isPhaseActive}
+            disabled={busy || !dirty}
           >
             {busy ? t('ui.requirements.saving') : t('ui.requirements.save')}
           </button>
@@ -95,7 +94,7 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
             type="button"
             className="action-btn"
             onClick={() => setConfirmReviewOpen(true)}
-            disabled={busy || reviewRunning || !isPhaseActive}
+            disabled={busy || reviewRunning}
           >
             {reviewRunning ? t('ui.requirements.review.running') : t('ui.requirements.review.enter')}
           </button>
@@ -104,7 +103,7 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
               type="button"
               className="action-btn"
               onClick={() => setConfirmForceOpen(true)}
-              disabled={busy || reviewForcePassing || !isPhaseActive}
+              disabled={busy || reviewForcePassing}
             >
               {reviewForcePassing ? t('ui.requirements.review.forcePassing') : t('ui.requirements.review.forcePass')}
             </button>
@@ -196,7 +195,7 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
                 type="button"
                 className="action-btn"
                 onClick={() => setConfirmConfirmOpen(true)}
-                disabled={busy || confirming || !isPhaseActive}
+                disabled={busy || confirming}
               >
                 {confirming ? t('ui.requirements.confirm.processing') : t('ui.requirements.confirm.confirmAction')}
               </button>
@@ -204,7 +203,7 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
                 type="button"
                 className="action-btn"
                 onClick={() => setConfirmAbandonOpen(true)}
-                disabled={busy || abandoning || !isPhaseActive}
+                disabled={busy || abandoning}
               >
                 {abandoning ? t('ui.requirements.confirm.processing') : t('ui.requirements.confirm.abandonAction')}
               </button>
@@ -215,7 +214,7 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
               type="button"
               className="action-btn"
               onClick={() => setConfirmReconfirmOpen(true)}
-              disabled={busy || reconfirming || !isPhaseActive}
+              disabled={busy || reconfirming}
             >
               {reconfirming ? t('ui.requirements.confirm.processing') : t('ui.requirements.confirm.reconfirmAction')}
             </button>
@@ -419,7 +418,7 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
           type="button"
           className="action-btn"
           onClick={() => void onSave()}
-          disabled={busy || !dirty || !isPhaseActive}
+          disabled={busy || !dirty}
         >
           {busy ? t('ui.requirements.saving') : t('ui.requirements.save')}
         </button>
@@ -455,9 +454,23 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
             disabled={busy}
             onViewPhaseChange={(next) => {
               setViewPhase(next)
+              setPhaseDraft(next)
+              markDirty()
             }}
           />
         </section>
+        {dirty ? (
+          <div className="requirement-phase-toolbar requirement-phase-toolbar--save">
+            <button
+              type="button"
+              className="action-btn"
+              onClick={() => void onSave()}
+              disabled={busy}
+            >
+              {busy ? t('ui.requirements.saving') : t('ui.requirements.save')}
+            </button>
+          </div>
+        ) : null}
         {renderPhaseToolbar()}
         {error || saveError ? (
           <p className="workspace-setup__error">{saveError || error}</p>

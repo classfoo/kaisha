@@ -1,7 +1,7 @@
 use crate::{
     i18n,
     requirement::{
-        load_requirement_detail, normalize_requirement_id, requirement_dir, RequirementPhase,
+        load_requirement_detail, normalize_requirement_id, requirement_dir,
     },
     AppState,
 };
@@ -257,14 +257,8 @@ pub async fn start_development(
             i18n::msg(&headers, "requirement_not_found"),
         ));
     }
-    let detail = load_requirement_detail(&workspace, &id)
+    let _detail = load_requirement_detail(&workspace, &id)
         .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    if !matches!(detail.phase, RequirementPhase::Development) {
-        return Err((
-            axum::http::StatusCode::BAD_REQUEST,
-            i18n::msg(&headers, "requirement_phase_invalid"),
-        ));
-    }
     let feature_branch = format!("feat-{}", id);
     let state_path = dev_state_path(&workspace, &id);
     let state = if state_path.exists() {
