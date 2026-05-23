@@ -6,6 +6,7 @@ mod i18n;
 mod requirement;
 mod requirement_development;
 mod requirement_review;
+mod tasks;
 mod tools;
 mod work_rules;
 
@@ -619,6 +620,8 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
             "/api/work-rules",
             get(work_rules::get_work_rules).put(work_rules::put_work_rules),
         )
+        .route("/api/tasks", get(tasks::list_tasks))
+        .route("/api/tasks/:id", get(tasks::get_task))
         .layer(cors)
         .with_state(AppState {
             health: HealthService,

@@ -6,6 +6,9 @@ use crate::{
     i18n,
     requirement::list_requirement_summaries,
     requirement_review::{detect_review_start_intent, run_requirement_review},
+    tasks::{
+        task_content_from_user_input, CodeAgentTaskParams, TaskKind, TaskRunner,
+    },
     tools::manager::ToolManager,
     AppState,
 };
@@ -90,6 +93,8 @@ pub struct PostMessageResultMeta {
     pub prompt_tokens: u64,
     pub completion_tokens: u64,
     pub total_tokens: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -207,9 +212,10 @@ fn run_review_turn(
 fn run_requirement_agent_turn(
     tools: &ToolManager,
     workspace: &Path,
+    employee_id: &str,
     user_input: &str,
     conv_messages: &[StoredMessage],
-) -> Result<(crate::tools::model::ToolInstance, crate::tools::driver::ToolExecutionResult), String> {
+) -> Result<(crate::tools::model::ToolInstance, crate::tools::driver::ToolExecutionResult, Option<String>), String> {
     let workdir = requirement_agent_workdir(workspace).map_err(|e| e.to_string())?;
     let prior_rows: Vec<(String, String, u64)> = conv_messages
         .iter()
@@ -218,15 +224,30 @@ fn run_requirement_agent_turn(
     let prior = prior_conversation_context(&prior_rows);
     let tool_messages =
         build_requirement_agent_messages(workspace, user_input, &prior).map_err(|e| e.to_string())?;
-    tools.execute_code_chat(&workdir, &tool_messages).map_err(|e| {
-        let msg = e.root_cause().to_string();
-        if msg == "no_enabled_coding_tool" {
-            "chat_tool_missing".to_string()
-        } else {
-            tracing::warn!(error = %e, "requirement agent execution failed");
-            msg
-        }
-    })
+    let runner = TaskRunner::new(workspace);
+    runner
+        .run_code_chat(
+            tools,
+            CodeAgentTaskParams {
+                kind: TaskKind::RequirementAgent,
+                content: task_content_from_user_input(user_input),
+                workdir: workdir.clone(),
+                messages: tool_messages,
+                executor_id: Some(employee_id.to_string()),
+                parent_task_id: None,
+                context: serde_json::json!({ "employee_id": employee_id }),
+            },
+        )
+        .map(|(task, instance, result)| (instance, result, Some(task.id)))
+        .map_err(|e| {
+            let msg = e.root_cause().to_string();
+            if msg == "no_enabled_coding_tool" {
+                "chat_tool_missing".to_string()
+            } else {
+                tracing::warn!(error = %e, "requirement agent execution failed");
+                msg
+            }
+        })
 }
 
 fn map_process_error(err: String) -> &'static str {
@@ -275,10 +296,11 @@ fn process_post_message(
 
     let summaries = list_requirement_summaries(&workspace).map_err(|e| e.to_string())?;
     let ids: Vec<String> = summaries.iter().map(|s| s.id.clone()).collect();
-    let (instance, exec_result) = if detect_review_start_intent(&trimmed, &ids).is_some() {
-        run_review_turn(&tools, &workspace, &trimmed)?
+    let (instance, exec_result, task_id) = if detect_review_start_intent(&trimmed, &ids).is_some() {
+        let (inst, res) = run_review_turn(&tools, &workspace, &trimmed)?;
+        (inst, res, None)
     } else {
-        run_requirement_agent_turn(&tools, &workspace, &trimmed, &conv.messages)?
+        run_requirement_agent_turn(&tools, &workspace, &employee_id, &trimmed, &conv.messages)?
     };
 
     let assistant_now = SystemTime::now()
@@ -304,6 +326,7 @@ fn process_post_message(
         prompt_tokens: exec_result.usage.prompt_tokens,
         completion_tokens: exec_result.usage.completion_tokens,
         total_tokens: exec_result.usage.total_tokens,
+        task_id,
     };
 
     Ok(PostMessageResponse {
@@ -473,7 +496,7 @@ async fn run_stream_turn_inner(
     let ids: Vec<String> = summaries.iter().map(|s| s.id.clone()).collect();
     let review_intent = detect_review_start_intent(&trimmed, &ids);
 
-    let (instance, tool_result) = if review_intent.is_some() {
+    let (instance, tool_result, task_id) = if review_intent.is_some() {
         let result = tokio::task::spawn_blocking({
             let tools = tools.clone();
             let workspace = workspace.clone();
@@ -491,7 +514,7 @@ async fn run_stream_turn_inner(
         let _ = sse_tx
             .send(Ok(Event::default().event("delta").data(payload)))
             .await;
-        result
+        (result.0, result.1, None)
     } else {
         let workdir = requirement_agent_workdir(&workspace).map_err(|e| e.to_string())?;
         let prior_rows: Vec<(String, String, u64)> = conv
@@ -506,8 +529,21 @@ async fn run_stream_turn_inner(
         let (delta_tx, delta_rx) = tokio::sync::mpsc::channel::<String>(64);
         let forward = tokio::spawn(forward_sse_deltas(delta_rx, sse_tx.clone()));
 
-        let result = tools
-            .execute_code_chat_streaming(&workdir, &tool_messages, delta_tx)
+        let runner = TaskRunner::new(&workspace);
+        let result = runner
+            .run_code_chat_streaming(
+                &tools,
+                CodeAgentTaskParams {
+                    kind: TaskKind::RequirementAgent,
+                    content: task_content_from_user_input(&trimmed),
+                    workdir: workdir.clone(),
+                    messages: tool_messages,
+                    executor_id: Some(employee_id.clone()),
+                    parent_task_id: None,
+                    context: serde_json::json!({ "employee_id": employee_id }),
+                },
+                delta_tx,
+            )
             .await
             .map_err(|e| {
                 let msg = e.root_cause().to_string();
@@ -519,7 +555,10 @@ async fn run_stream_turn_inner(
                 }
             });
         match result {
-            Ok(v) => v,
+            Ok((task, instance, tool_result)) => {
+                let _ = forward.await;
+                (instance, tool_result, Some(task.id))
+            }
             Err(raw) => {
                 forward.abort();
                 return Err(raw);
@@ -549,6 +588,7 @@ async fn run_stream_turn_inner(
         prompt_tokens: tool_result.usage.prompt_tokens,
         completion_tokens: tool_result.usage.completion_tokens,
         total_tokens: tool_result.usage.total_tokens,
+        task_id,
     };
     let resp = PostMessageResponse {
         messages: conv.messages.iter().map(WireMessage::from).collect(),

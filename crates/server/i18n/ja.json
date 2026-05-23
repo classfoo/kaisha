@@ -51,5 +51,6 @@
   "review_already_completed": "この要件のレビューは既に完了しています",
   "review_opinion_busy": "別のレビュータスクが実行中です。しばらくしてから再試行してください",
   "review_opinion_not_participant": "この従業員はレビュー参加者ではありません",
-  "review_opinion_invalid_action": "無効なレビュー操作です"
+  "review_opinion_invalid_action": "無効なレビュー操作です",
+  "task_not_found": "タスクが見つかりません"
 }

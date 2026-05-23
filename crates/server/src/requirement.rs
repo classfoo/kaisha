@@ -809,7 +809,8 @@ mod tests {
     #[test]
     fn all_phases_are_valid_strings() {
         for phase_str in PHASES {
-            assert!(RequirementPhase::from_str(phase_str).is_some());
+            let parsed: Result<RequirementPhase, _> = serde_json::from_str(&format!("\"{phase_str}\""));
+            assert!(parsed.is_ok());
         }
     }
 }

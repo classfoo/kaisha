@@ -5,6 +5,10 @@ use crate::{
         load_requirement_detail, normalize_requirement_id, requirement_dir, RequirementPhase,
         REQUIREMENT_FILE,
     },
+    tasks::{
+        review_context, review_opinion_content, review_pipeline_content, review_revision_content,
+        review_summary_content, CodeAgentTaskParams, TaskKind, TaskRunner,
+    },
     tools::{driver::ToolChatMessage, manager::ToolManager},
     work_rules::{duty_for_phase, load_work_rules, resolve_role_key, WorkRulesFile},
     AppState,
@@ -721,9 +725,12 @@ pub fn apply_opinion_user_action(
             let workdir = requirement_workdir(workspace, &id);
             let rules = load_work_rules(workspace)?;
             let mut state = load_state(workspace, &id)?;
+            let runner = TaskRunner::new(workspace);
             run_employee_review(
                 workspace,
                 tools,
+                &runner,
+                None,
                 &rules,
                 &mut state,
                 employee,
@@ -758,6 +765,8 @@ pub fn apply_opinion_user_action(
 fn run_employee_review(
     workspace: &Path,
     tools: &ToolManager,
+    runner: &TaskRunner,
+    parent_task_id: Option<&str>,
     rules: &WorkRulesFile,
     state: &mut ReviewStateFile,
     employee: &EmployeeRecord,
@@ -779,7 +788,18 @@ fn run_employee_review(
         title,
         content,
     );
-    let (_instance, result) = tools.execute_code_chat(workdir, &messages)?;
+    let (_task, _instance, result) = runner.run_code_chat(
+        tools,
+        CodeAgentTaskParams {
+            kind: TaskKind::ReviewOpinion,
+            content: review_opinion_content(requirement_id, &employee.name),
+            workdir: workdir.to_path_buf(),
+            messages,
+            executor_id: Some(employee.id.clone()),
+            parent_task_id: parent_task_id.map(str::to_string),
+            context: review_context(requirement_id),
+        },
+    )?;
     let opinion = ensure_opinion_file(workspace, requirement_id, &employee.id, &result.output)?;
 
     state.current_reviewer_id = None;
@@ -799,6 +819,8 @@ fn run_employee_review(
 fn run_employee_revision(
     workspace: &Path,
     tools: &ToolManager,
+    runner: &TaskRunner,
+    parent_task_id: Option<&str>,
     rules: &WorkRulesFile,
     state: &mut ReviewStateFile,
     employee: &EmployeeRecord,
@@ -820,7 +842,18 @@ fn run_employee_revision(
         title,
         prior_opinion,
     );
-    let (_instance, result) = tools.execute_code_chat(workdir, &messages)?;
+    let (_task, _instance, result) = runner.run_code_chat(
+        tools,
+        CodeAgentTaskParams {
+            kind: TaskKind::ReviewRevision,
+            content: review_revision_content(requirement_id, &employee.name),
+            workdir: workdir.to_path_buf(),
+            messages,
+            executor_id: Some(employee.id.clone()),
+            parent_task_id: parent_task_id.map(str::to_string),
+            context: review_context(requirement_id),
+        },
+    )?;
     let _ = ensure_opinion_file(workspace, requirement_id, &employee.id, &result.output)?;
 
     state.current_reviewer_id = None;
@@ -866,101 +899,137 @@ pub fn run_requirement_review(
     let mut detail = load_requirement_detail(workspace, &id)?;
     let workdir = requirement_workdir(workspace, &id);
     let employees = list_employee_records(workspace)?;
+    let runner = TaskRunner::new(workspace);
+    let mut parent_task = runner.create_parent_task(
+        TaskKind::ReviewPipeline,
+        &review_pipeline_content(&id),
+        &workdir,
+        None,
+        review_context(&id),
+    )?;
 
-    for employee in &employees {
-        if !employee_needs_initial_review(workspace, &id, &employee.id) {
-            continue;
-        }
-        run_employee_review(
-            workspace,
-            tools,
-            &rules,
-            &mut state,
-            employee,
-            &id,
-            &detail.title,
-            &detail.content,
-            &workdir,
-        )?;
-    }
-
-    for _round in 0..MAX_REVISION_ROUNDS {
-        state = load_state(workspace, &id)?;
-        let opinions = load_opinions(workspace, &id, &state, &employees);
-        if all_reviewers_passed(&opinions, &state) {
-            break;
-        }
-        let failed_ids = failed_participant_ids(&opinions);
-        if failed_ids.is_empty() {
-            break;
-        }
-        detail = load_requirement_detail(workspace, &id)?;
+    let pipeline_result = (|| -> anyhow::Result<RequirementReviewWire> {
         for employee in &employees {
-            if !failed_ids.iter().any(|fid| fid == &employee.id) {
+            if !employee_needs_initial_review(workspace, &id, &employee.id) {
                 continue;
             }
-            let prior = read_opinion_content(workspace, &id, &employee.id)
-                .unwrap_or_else(|| "(no prior opinion)".to_string());
-            run_employee_revision(
+            run_employee_review(
                 workspace,
                 tools,
+                &runner,
+                Some(parent_task.id.as_str()),
                 &rules,
                 &mut state,
                 employee,
                 &id,
                 &detail.title,
-                &prior,
+                &detail.content,
                 &workdir,
             )?;
         }
-    }
 
-    state = load_state(workspace, &id)?;
-    detail = load_requirement_detail(workspace, &id)?;
-    let opinions = load_opinions(workspace, &id, &state, &employees);
-    let summary_messages = build_summary_messages(&id, &detail.title, &opinions);
-    let (_summary_inst, summary_result) = tools.execute_code_chat(&workdir, &summary_messages)?;
-    let summary_text = if summary_path(workspace, &id).exists() {
-        fs::read_to_string(summary_path(workspace, &id))?
-    } else {
-        let t = summary_result.output.clone();
-        fs::write(summary_path(workspace, &id), &t)?;
-        t
-    };
+        for _round in 0..MAX_REVISION_ROUNDS {
+            state = load_state(workspace, &id)?;
+            let opinions = load_opinions(workspace, &id, &state, &employees);
+            if all_reviewers_passed(&opinions, &state) {
+                break;
+            }
+            let failed_ids = failed_participant_ids(&opinions);
+            if failed_ids.is_empty() {
+                break;
+            }
+            detail = load_requirement_detail(workspace, &id)?;
+            for employee in &employees {
+                if !failed_ids.iter().any(|fid| fid == &employee.id) {
+                    continue;
+                }
+                let prior = read_opinion_content(workspace, &id, &employee.id)
+                    .unwrap_or_else(|| "(no prior opinion)".to_string());
+                run_employee_revision(
+                    workspace,
+                    tools,
+                    &runner,
+                    Some(parent_task.id.as_str()),
+                    &rules,
+                    &mut state,
+                    employee,
+                    &id,
+                    &detail.title,
+                    &prior,
+                    &workdir,
+                )?;
+            }
+        }
 
-    let conclusion = derive_review_conclusion(&opinions, &state)
-        .or_else(|| parse_conclusion(&summary_text))
-        .or_else(|| parse_conclusion(&summary_result.output))
-        .unwrap_or(ReviewConclusion::Supplement);
-
-    let next_phase = match conclusion {
-        ReviewConclusion::Adopt => RequirementPhase::Confirm,
-        ReviewConclusion::Supplement => RequirementPhase::Collection,
-    };
-    set_requirement_phase(workspace, &id, next_phase)?;
-
-    state = load_state(workspace, &id)?;
-    state.status = ReviewStatus::Completed;
-    state.completed_at_ms = Some(now_ms());
-    state.conclusion = Some(conclusion);
-    state.current_reviewer_id = None;
-    state.current_task = None;
-    save_state(workspace, &state)?;
-
-    let memory_body = format!(
-        "Review completed.\n\nConclusion: {:?}\n\n{summary_text}",
-        state.conclusion
-    );
-    for employee in &employees {
-        append_employee_memory(
-            workspace,
-            &employee.id,
-            &format!("Review summary — {}", now_ms()),
-            &memory_section_review(&id, &detail.title, &memory_body),
+        state = load_state(workspace, &id)?;
+        detail = load_requirement_detail(workspace, &id)?;
+        let opinions = load_opinions(workspace, &id, &state, &employees);
+        let summary_messages = build_summary_messages(&id, &detail.title, &opinions);
+        let (_summary_task, _summary_inst, summary_result) = runner.run_code_chat(
+            tools,
+            CodeAgentTaskParams {
+                kind: TaskKind::ReviewSummary,
+                content: review_summary_content(&id),
+                workdir: workdir.clone(),
+                messages: summary_messages,
+                executor_id: None,
+                parent_task_id: Some(parent_task.id.clone()),
+                context: review_context(&id),
+            },
         )?;
-    }
+        let summary_text = if summary_path(workspace, &id).exists() {
+            fs::read_to_string(summary_path(workspace, &id))?
+        } else {
+            let t = summary_result.output.clone();
+            fs::write(summary_path(workspace, &id), &t)?;
+            t
+        };
 
-    load_review_wire(workspace, &id)
+        let conclusion = derive_review_conclusion(&opinions, &state)
+            .or_else(|| parse_conclusion(&summary_text))
+            .or_else(|| parse_conclusion(&summary_result.output))
+            .unwrap_or(ReviewConclusion::Supplement);
+
+        let next_phase = match conclusion {
+            ReviewConclusion::Adopt => RequirementPhase::Confirm,
+            ReviewConclusion::Supplement => RequirementPhase::Collection,
+        };
+        set_requirement_phase(workspace, &id, next_phase)?;
+
+        state = load_state(workspace, &id)?;
+        state.status = ReviewStatus::Completed;
+        state.completed_at_ms = Some(now_ms());
+        state.conclusion = Some(conclusion);
+        state.current_reviewer_id = None;
+        state.current_task = None;
+        save_state(workspace, &state)?;
+
+        let memory_body = format!(
+            "Review completed.\n\nConclusion: {:?}\n\n{summary_text}",
+            state.conclusion
+        );
+        for employee in &employees {
+            append_employee_memory(
+                workspace,
+                &employee.id,
+                &format!("Review summary — {}", now_ms()),
+                &memory_section_review(&id, &detail.title, &memory_body),
+            )?;
+        }
+
+        load_review_wire(workspace, &id)
+    })();
+
+    match pipeline_result {
+        Ok(wire) => {
+            runner.complete_parent_task(&mut parent_task)?;
+            Ok(wire)
+        }
+        Err(err) => {
+            let _ = runner.fail_parent_task(&mut parent_task, err.to_string());
+            Err(err)
+        }
+    }
 }
 
 fn workspace_root(state: &AppState) -> Option<PathBuf> {
@@ -1098,9 +1167,12 @@ pub async fn opinion_action_handler(
                 return;
             };
             let workdir = requirement_workdir(&workspace_path, &run_req_id);
+            let runner = TaskRunner::new(&workspace_path);
             let _ = run_employee_review(
                 &workspace_path,
                 &tools,
+                &runner,
+                None,
                 &rules,
                 &mut st,
                 employee,
@@ -1259,6 +1331,7 @@ mod tests {
             participants: vec!["e1".into(), "e2".into()],
             current_reviewer_id: Some("e2".into()),
             current_task: Some(ReviewTask::Opinion),
+            abandoned_participants: vec![],
         };
         assert_eq!(
             opinion_item_status(&state, "e1", true),
@@ -1285,6 +1358,7 @@ mod tests {
             participants: vec!["e1".into()],
             current_reviewer_id: Some("e1".into()),
             current_task: Some(ReviewTask::Revise),
+            abandoned_participants: vec![],
         };
         assert_eq!(
             opinion_item_status(&state, "e1", true),

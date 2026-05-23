@@ -1,4 +1,4 @@
-use crate::{i18n, AppState};
+use crate::{i18n, tasks::{CodeAgentTaskParams, TaskKind, TaskRunner, hire_task_content}, AppState};
 use axum::{
     extract::State,
     http::HeaderMap,
@@ -113,6 +113,7 @@ pub(super) async fn hire_employee(
 
     // Invoke the code agent to generate employee profile
     let tools = state.tools.read().expect("tools lock poisoned").clone();
+    let task_runner = TaskRunner::new(&workspace);
 
     let messages = vec![
         ToolChatMessage {
@@ -125,8 +126,19 @@ pub(super) async fn hire_employee(
         },
     ];
 
-    let (_instance, result) = tools
-        .execute_code_chat(&workspace, &messages)
+    let (_task, _instance, result) = task_runner
+        .run_code_chat(
+            &tools,
+            CodeAgentTaskParams {
+                kind: TaskKind::EmployeeHire,
+                content: hire_task_content(),
+                workdir: workspace.clone(),
+                messages,
+                executor_id: None,
+                parent_task_id: None,
+                context: serde_json::json!({ "existing_employee_count": existing_count }),
+            },
+        )
         .map_err(|e| (axum::http::StatusCode::BAD_GATEWAY, format!("agent_failed: {}", e)))?;
 
     if result.exit_code != 0 {

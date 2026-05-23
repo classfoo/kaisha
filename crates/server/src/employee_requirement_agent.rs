@@ -160,6 +160,7 @@ mod tests {
             id: id.to_string(),
             title: format!("Title {id}"),
             phase,
+            confirm_status: None,
             created_at_ms: 1,
             updated_at_ms: 2,
         }
