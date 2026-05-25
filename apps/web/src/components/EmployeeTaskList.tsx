@@ -63,17 +63,10 @@ export function EmployeeTaskList({
 }: EmployeeTaskListProps) {
   const exploreDisabled = exploring || loading || isEmployeeBusy(tasks)
 
-  if (!selectedEmployeeId) {
-    return (
-      <div className="employee-task-list-wrap">
-        <div className="employee-list__empty">{t('ui.employeeTasks.noSelection')}</div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="employee-task-list-wrap">
-      <div className="employee-task-list__toolbar">
+  const toolbar = (
+    <div className="employee-task-list__toolbar">
+      <h4 className="employee-task-list__title">{t('ui.employeeTasks.title')}</h4>
+      {selectedEmployeeId ? (
         <button
           type="button"
           className="employee-task-list__tool-btn"
@@ -85,7 +78,22 @@ export function EmployeeTaskList({
           <i className="iconfont icon-filmetotaosuo" aria-hidden="true" />
           <span>{exploring ? t('ui.employeeTasks.exploring') : t('ui.employeeTasks.explore')}</span>
         </button>
+      ) : null}
+    </div>
+  )
+
+  if (!selectedEmployeeId) {
+    return (
+      <div className="employee-task-list-wrap">
+        {toolbar}
+        <div className="employee-list__empty">{t('ui.employeeTasks.noSelection')}</div>
       </div>
+    )
+  }
+
+  return (
+    <div className="employee-task-list-wrap">
+      {toolbar}
       {error ? <div className="side-panel__error">{error}</div> : null}
       <div className="employee-task-list" role="list" aria-label={t('ui.employeeTasks.listTitle')}>
         {loading ? (

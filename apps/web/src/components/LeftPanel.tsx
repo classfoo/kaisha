@@ -183,7 +183,6 @@ export function LeftPanel({
               />
             </div>
             <section className="side-panel__employee-tasks" aria-label={t('ui.employeeTasks.listTitle')}>
-              <h4 className="side-panel__section-heading">{t('ui.employeeTasks.title')}</h4>
               <EmployeeTaskList
                 tasks={employeeTasks}
                 loading={employeeTasksLoading}

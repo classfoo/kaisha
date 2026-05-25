@@ -182,9 +182,15 @@ select,
   margin-top: 8px;
   display: grid;
   gap: 8px;
-  overflow: visible;
+  flex: 1;
   min-height: 0;
+  overflow-y: auto;
+  align-content: start;
   -webkit-app-region: no-drag;
+}
+
+.employee-list:has(.employee-item--menu-open) {
+  overflow: visible;
 }
 
 .employee-list__empty {
@@ -422,17 +428,27 @@ select,
 }
 
 .side-panel__employees {
-  flex: 0 1 auto;
-  max-height: 42%;
-  overflow-y: auto;
-  min-height: 0;
-}
-
-.side-panel__employee-tasks {
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
+  z-index: 2;
+  overflow: hidden;
+}
+
+.side-panel__employees:has(.employee-item--menu-open) {
+  overflow: visible;
+  z-index: 20;
+}
+
+.side-panel__employee-tasks {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 1;
   border-top: 1px solid #2a3040;
   margin-top: 10px;
   padding-top: 8px;
@@ -458,11 +474,19 @@ select,
 .employee-task-list__toolbar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 8px;
   margin-bottom: 6px;
   padding: 0 2px;
   flex-shrink: 0;
+}
+
+.employee-task-list__title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #9ba7be;
+  letter-spacing: 0.02em;
 }
 
 .employee-task-list__tool-btn {
@@ -501,6 +525,12 @@ select,
   display: grid;
   gap: 6px;
   align-content: start;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.employee-task-list::-webkit-scrollbar {
+  display: none;
 }
 
 .employee-task-item {
