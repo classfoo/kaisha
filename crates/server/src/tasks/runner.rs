@@ -189,6 +189,31 @@ pub fn review_context(requirement_id: &str) -> serde_json::Value {
     json!({ "requirement_id": requirement_id })
 }
 
+pub fn can_rerun_task(task: &AgentTaskRecord) -> bool {
+    matches!(
+        task.status,
+        TaskStatus::Completed | TaskStatus::Failed | TaskStatus::Cancelled
+    )
+}
+
+pub fn build_rerun_params(task: &AgentTaskRecord) -> CodeAgentTaskParams {
+    use crate::tools::driver::ToolChatMessage;
+    use std::path::PathBuf;
+
+    CodeAgentTaskParams {
+        kind: task.kind,
+        content: task.content.clone(),
+        workdir: PathBuf::from(&task.workdir),
+        messages: vec![ToolChatMessage {
+            role: "user".into(),
+            content: task.content.clone(),
+        }],
+        executor_id: task.executor_id.clone(),
+        parent_task_id: Some(task.id.clone()),
+        context: task.context.clone(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -269,6 +294,55 @@ mod tests {
         assert_eq!(parent.status, TaskStatus::Failed);
         assert_eq!(parent.error.as_deref(), Some("review_failed"));
         let _ = fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn can_rerun_only_terminal_tasks() {
+        let params = CodeAgentTaskParams {
+            kind: TaskKind::RequirementAgent,
+            content: "hello".into(),
+            workdir: std::path::PathBuf::from("/tmp"),
+            messages: vec![],
+            executor_id: Some("emp-1".into()),
+            parent_task_id: None,
+            context: serde_json::json!({}),
+        };
+        for status in [
+            TaskStatus::Completed,
+            TaskStatus::Failed,
+            TaskStatus::Cancelled,
+        ] {
+            let mut task = AgentTaskRecord::new(&params, "t1".into(), 1);
+            task.status = status;
+            assert!(can_rerun_task(&task));
+        }
+        for status in [TaskStatus::Pending, TaskStatus::Running] {
+            let mut task = AgentTaskRecord::new(&params, "t1".into(), 1);
+            task.status = status;
+            assert!(!can_rerun_task(&task));
+        }
+    }
+
+    #[test]
+    fn build_rerun_params_links_parent_and_preserves_fields() {
+        let params = CodeAgentTaskParams {
+            kind: TaskKind::AutonomyExplore,
+            content: "explore workspace".into(),
+            workdir: std::path::PathBuf::from("/tmp/ws"),
+            messages: vec![],
+            executor_id: Some("alice".into()),
+            parent_task_id: None,
+            context: serde_json::json!({ "employee_id": "alice" }),
+        };
+        let source = AgentTaskRecord::new(&params, "task_old".into(), 100);
+        let rerun = build_rerun_params(&source);
+        assert_eq!(rerun.kind, TaskKind::AutonomyExplore);
+        assert_eq!(rerun.content, "explore workspace");
+        assert_eq!(rerun.workdir, std::path::PathBuf::from("/tmp/ws"));
+        assert_eq!(rerun.executor_id.as_deref(), Some("alice"));
+        assert_eq!(rerun.parent_task_id.as_deref(), Some("task_old"));
+        assert_eq!(rerun.messages.len(), 1);
+        assert_eq!(rerun.messages[0].content, "explore workspace");
     }
 
     #[test]

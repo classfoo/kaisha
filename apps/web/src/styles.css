@@ -258,7 +258,8 @@ select,
 }
 
 .employee-item:hover .employee-item__menu,
-.employee-item__menu--open {
+.employee-item__menu--open,
+.employee-task-item:hover .employee-item__menu {
   opacity: 1;
 }
 
@@ -533,11 +534,34 @@ select,
   display: none;
 }
 
+.employee-task-list:has(.employee-task-item--menu-open) {
+  overflow: visible;
+}
+
 .employee-task-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  position: relative;
+  z-index: 1;
   border: 1px solid #2a3243;
   border-radius: 8px;
   background: #131a26;
-  padding: 8px 10px;
+  padding: 6px 8px;
+}
+
+.employee-task-item--menu-open {
+  z-index: 10;
+}
+
+.employee-task-item__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.side-panel__employee-tasks:has(.employee-task-item--menu-open) {
+  overflow: visible;
+  z-index: 20;
 }
 
 .employee-task-item__header {

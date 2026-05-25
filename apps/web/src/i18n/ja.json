@@ -95,7 +95,11 @@
       },
       "explore": "探索",
       "exploring": "探索中…",
-      "exploreError": "探索の開始に失敗しました"
+      "exploreError": "探索の開始に失敗しました",
+      "menu": "タスクメニュー",
+      "rerun": "再実行",
+      "rerunning": "再実行中…",
+      "rerunError": "タスクの再実行に失敗しました"
     },
     "chat": {
       "emptySelection": "従業員を選択してチャットを開始してください",

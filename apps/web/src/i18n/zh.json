@@ -95,7 +95,11 @@
       },
       "explore": "探索",
       "exploring": "探索中…",
-      "exploreError": "启动探索失败"
+      "exploreError": "启动探索失败",
+      "menu": "任务菜单",
+      "rerun": "重跑",
+      "rerunning": "重跑中…",
+      "rerunError": "重跑任务失败"
     },
     "chat": {
       "emptySelection": "请选择一个员工以打开对话",

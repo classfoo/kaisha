@@ -59,5 +59,14 @@ export function createEmployeeTasksApi(apiBase: string, locale: string) {
       })
       if (!res.ok) throw new Error(await readError(res))
     },
+
+    async rerun(taskId: string): Promise<AgentTaskRecord> {
+      const res = await fetch(`${apiBase}/api/tasks/${encodeURIComponent(taskId)}/rerun`, {
+        method: 'POST',
+        headers,
+      })
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
   }
 }

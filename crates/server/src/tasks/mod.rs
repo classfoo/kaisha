@@ -6,9 +6,9 @@ pub use model::{
     AgentTaskRecord, CodeAgentTaskParams, TaskKind, TaskStatus,
 };
 pub use runner::{
-    autonomy_execute_content, autonomy_explore_content, hire_task_content, review_context,
-    review_opinion_content, review_pipeline_content, review_revision_content,
-    review_summary_content, task_content_from_user_input, TaskRunner,
+    autonomy_execute_content, autonomy_explore_content, build_rerun_params, can_rerun_task,
+    hire_task_content, review_context, review_opinion_content, review_pipeline_content,
+    review_revision_content, review_summary_content, task_content_from_user_input, TaskRunner,
 };
 pub use store::{filter_tasks, TaskListFilter, TaskStore};
 
@@ -93,6 +93,67 @@ pub async fn get_task(
             )
         }
     })
+}
+
+pub async fn rerun_task(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+) -> Result<Json<AgentTaskRecord>, (axum::http::StatusCode, String)> {
+    let Some(workspace) = workspace_root(&state) else {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            i18n::msg(&headers, "workspace_not_configured"),
+        ));
+    };
+    let store = TaskStore::new(&workspace);
+    let source = store.load(&task_id).map_err(|err| {
+        let key = err.to_string();
+        if key == "task_not_found" {
+            (
+                axum::http::StatusCode::NOT_FOUND,
+                i18n::msg(&headers, "task_not_found"),
+            )
+        } else {
+            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, key)
+        }
+    })?;
+
+    if !can_rerun_task(&source) {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            i18n::msg(&headers, "task_cannot_rerun"),
+        ));
+    }
+
+    if let Some(executor_id) = &source.executor_id {
+        let tasks = store.list().map_err(|err| {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                err.to_string(),
+            )
+        })?;
+        if crate::autonomy::is_employee_busy(&tasks, executor_id) {
+            return Err((
+                axum::http::StatusCode::CONFLICT,
+                i18n::msg(&headers, "employee_busy_cannot_rerun"),
+            ));
+        }
+    }
+
+    let params = build_rerun_params(&source);
+    let tools = state.tools.read().expect("tools lock poisoned").clone();
+    let workspace_bg = workspace.clone();
+
+    let (task, _, _) = tokio::task::spawn_blocking(move || {
+        let runner = TaskRunner::new(&workspace_bg);
+        runner.run_code_chat(&tools, params)
+    })
+    .await
+    .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
+    .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+
+    Ok(Json(task))
 }
 
 #[cfg(test)]

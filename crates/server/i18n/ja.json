@@ -55,5 +55,7 @@
   "task_not_found": "タスクが見つかりません",
   "autonomy_not_enabled": "従業員の自律機能が有効になっていません",
   "todo_not_found": "ToDo項目が見つかりません",
-  "employee_busy_cannot_explore": "従業員は別のタスクを実行中のため探索できません"
+  "employee_busy_cannot_explore": "従業員は別のタスクを実行中のため探索できません",
+  "task_cannot_rerun": "保留中または実行中のタスクは再実行できません",
+  "employee_busy_cannot_rerun": "従業員は別のタスクを実行中のため、このタスクを再実行できません"
 }

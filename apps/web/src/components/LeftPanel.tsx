@@ -66,6 +66,8 @@ type LeftPanelProps = {
   employeeTasksError: string | null
   employeeTasksExploring: boolean
   onEmployeeTasksExplore: () => void
+  rerunningTaskId: string | null
+  onRerunEmployeeTask: (taskId: string) => void
   locale: string
 }
 
@@ -127,6 +129,8 @@ export function LeftPanel({
   employeeTasksError,
   employeeTasksExploring,
   onEmployeeTasksExplore,
+  rerunningTaskId,
+  onRerunEmployeeTask,
   locale,
 }: LeftPanelProps) {
   const selectedEmployeeName = React.useMemo(() => {
@@ -192,6 +196,8 @@ export function LeftPanel({
                 locale={locale}
                 exploring={employeeTasksExploring}
                 onExplore={onEmployeeTasksExplore}
+                rerunningTaskId={rerunningTaskId}
+                onRerunTask={onRerunEmployeeTask}
                 t={t}
               />
             </section>

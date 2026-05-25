@@ -95,7 +95,11 @@
       },
       "explore": "Explore",
       "exploring": "Exploring…",
-      "exploreError": "Failed to start exploration"
+      "exploreError": "Failed to start exploration",
+      "menu": "Task menu",
+      "rerun": "Rerun",
+      "rerunning": "Rerunning…",
+      "rerunError": "Failed to rerun task"
     },
     "chat": {
       "emptySelection": "Select an employee to open chat",

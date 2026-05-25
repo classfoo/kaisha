@@ -150,9 +150,12 @@ export default function App() {
   )
   const [employeeTasksExploring, setEmployeeTasksExploring] = React.useState(false)
   const [employeeTasksExploreError, setEmployeeTasksExploreError] = React.useState<string | null>(null)
+  const [rerunningTaskId, setRerunningTaskId] = React.useState<string | null>(null)
+  const [employeeTaskRerunError, setEmployeeTaskRerunError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     setEmployeeTasksExploreError(null)
+    setEmployeeTaskRerunError(null)
   }, [selectedEmployeeId])
 
   const runEmployeeExplore = React.useCallback(async () => {
@@ -177,6 +180,23 @@ export default function App() {
     employeeTasks.refresh,
     tt,
   ])
+
+  const rerunEmployeeTask = React.useCallback(async (taskId: string) => {
+    if (!workspace?.configured || rerunningTaskId) return
+    setRerunningTaskId(taskId)
+    setEmployeeTaskRerunError(null)
+    try {
+      await employeeTasksApi.rerun(taskId)
+      void employeeTasks.refresh()
+    } catch (err) {
+      setEmployeeTaskRerunError(
+        err instanceof Error && err.message ? err.message : tt('ui.employeeTasks.rerunError'),
+      )
+    } finally {
+      setRerunningTaskId(null)
+    }
+  }, [workspace?.configured, rerunningTaskId, employeeTasksApi, employeeTasks.refresh, tt])
+
   const [newGitRepoName, setNewGitRepoName] = React.useState('')
   const [newRequirementTitle, setNewRequirementTitle] = React.useState('')
   const requirementPhaseLabel = React.useCallback(
@@ -1115,9 +1135,11 @@ export default function App() {
             hardDeletingRequirementId={requirements.hardDeletingId}
             employeeTasks={employeeTasks.tasks}
             employeeTasksLoading={employeeTasks.loading}
-            employeeTasksError={employeeTasksExploreError ?? employeeTasks.error}
+            employeeTasksError={employeeTasksExploreError ?? employeeTaskRerunError ?? employeeTasks.error}
             employeeTasksExploring={employeeTasksExploring}
             onEmployeeTasksExplore={() => void runEmployeeExplore()}
+            rerunningTaskId={rerunningTaskId}
+            onRerunEmployeeTask={(taskId) => void rerunEmployeeTask(taskId)}
             locale={locale}
           />
         ) : null}

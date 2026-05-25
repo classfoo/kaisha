@@ -55,5 +55,7 @@
   "task_not_found": "Task not found",
   "autonomy_not_enabled": "Employee autonomy is not enabled",
   "todo_not_found": "Todo item not found",
-  "employee_busy_cannot_explore": "Employee is busy with another task"
+  "employee_busy_cannot_explore": "Employee is busy with another task",
+  "task_cannot_rerun": "This task cannot be rerun while it is pending or running",
+  "employee_busy_cannot_rerun": "Employee is busy with another task and cannot rerun this task"
 }

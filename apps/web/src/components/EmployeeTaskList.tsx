@@ -10,6 +10,8 @@ type EmployeeTaskListProps = {
   locale: string
   exploring: boolean
   onExplore: () => void
+  rerunningTaskId: string | null
+  onRerunTask: (taskId: string) => void
   t: (key: string) => string
 }
 
@@ -50,6 +52,10 @@ function isEmployeeBusy(tasks: AgentTaskRecord[]): boolean {
   return tasks.some((task) => task.status === 'pending' || task.status === 'running')
 }
 
+function canRerunTask(task: AgentTaskRecord): boolean {
+  return task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled'
+}
+
 export function EmployeeTaskList({
   tasks,
   loading,
@@ -59,8 +65,11 @@ export function EmployeeTaskList({
   locale,
   exploring,
   onExplore,
+  rerunningTaskId,
+  onRerunTask,
   t,
 }: EmployeeTaskListProps) {
+  const [openMenuId, setOpenMenuId] = React.useState<string | null>(null)
   const exploreDisabled = exploring || loading || isEmployeeBusy(tasks)
 
   const toolbar = (
@@ -106,21 +115,57 @@ export function EmployeeTaskList({
           tasks.map((task) => {
             const kindLabel = t(taskKindKey(task.kind))
             const statusLabel = t(taskStatusKey(task.status))
+            const menuOpen = openMenuId === task.id
+            const isRerunning = rerunningTaskId === task.id
+            const rerunEnabled = canRerunTask(task) && !isRerunning
             return (
               <div
                 key={task.id}
-                className={`employee-task-item employee-task-item--${task.status}`}
+                className={`employee-task-item employee-task-item--${task.status} ${menuOpen ? 'employee-task-item--menu-open' : ''}`}
                 role="listitem"
               >
-                <div className="employee-task-item__header">
-                  <span className="employee-task-item__kind">{kindLabel}</span>
-                  <span className={`employee-task-item__status employee-task-item__status--${task.status}`}>
-                    {statusLabel}
-                  </span>
+                <div className="employee-task-item__body">
+                  <div className="employee-task-item__header">
+                    <span className="employee-task-item__kind">{kindLabel}</span>
+                    <span className={`employee-task-item__status employee-task-item__status--${task.status}`}>
+                      {statusLabel}
+                    </span>
+                  </div>
+                  <div className="employee-task-item__content">{truncateContent(task.content)}</div>
+                  <div className="employee-task-item__meta">
+                    {formatTaskTime(task.created_at_ms, locale)}
+                  </div>
                 </div>
-                <div className="employee-task-item__content">{truncateContent(task.content)}</div>
-                <div className="employee-task-item__meta">
-                  {formatTaskTime(task.created_at_ms, locale)}
+                <div className={`employee-item__menu ${menuOpen ? 'employee-item__menu--open' : ''}`}>
+                  <button
+                    type="button"
+                    className="employee-item__menu-btn"
+                    title={t('ui.employeeTasks.menu')}
+                    aria-label={t('ui.employeeTasks.menu')}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setOpenMenuId(menuOpen ? null : task.id)
+                    }}
+                    disabled={isRerunning}
+                  >
+                    <i className="iconfont icon-filmetomore" aria-hidden="true" />
+                  </button>
+                  {menuOpen ? (
+                    <div className="employee-item__menu-dropdown">
+                      <button
+                        type="button"
+                        className="employee-item__menu-dropdown-item"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setOpenMenuId(null)
+                          if (rerunEnabled) onRerunTask(task.id)
+                        }}
+                        disabled={!rerunEnabled}
+                      >
+                        {isRerunning ? t('ui.employeeTasks.rerunning') : t('ui.employeeTasks.rerun')}
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             )
