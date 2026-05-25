@@ -1,6 +1,9 @@
 mod employee;
 mod employee_chat;
 mod employee_requirement_agent;
+mod employee_todo;
+mod autonomy;
+mod autonomy_trigger;
 mod git;
 mod i18n;
 mod requirement;
@@ -42,6 +45,7 @@ struct AppState {
     workspace: Arc<RwLock<WorkspaceState>>,
     settings: Arc<RwLock<SettingsState>>,
     tools: Arc<RwLock<ToolManager>>,
+    autonomy: Option<Arc<autonomy::AutonomyCoordinator>>,
 }
 
 async fn health(State(state): State<AppState>) -> Json<domain::HealthStatus> {
@@ -61,7 +65,7 @@ struct WorkspaceConfigFile {
 }
 
 #[derive(Clone)]
-struct WorkspaceState {
+pub(crate) struct WorkspaceState {
     source: WorkspaceSource,
     path: Option<PathBuf>,
     config_file: PathBuf,
@@ -622,16 +626,37 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
         )
         .route("/api/tasks", get(tasks::list_tasks))
         .route("/api/tasks/:id", get(tasks::get_task))
+        .route("/api/autonomy/status", get(autonomy::get_autonomy_status))
+        .route("/api/autonomy/tick", post(autonomy::run_autonomy_tick_handler))
+        .route(
+            "/api/employees/:id/todos",
+            get(autonomy::list_employee_todos_handler),
+        )
+        .route(
+            "/api/employees/:id/autonomy/run",
+            post(autonomy::run_employee_autonomy_handler),
+        )
         .layer(cors)
-        .with_state(AppState {
-            health: HealthService,
-            workspace: Arc::new(RwLock::new(WorkspaceState {
+        .with_state({
+            let workspace = Arc::new(RwLock::new(WorkspaceState {
                 source: workspace_init.source,
                 path: workspace_init.path,
                 config_file: workspace_init.config_file,
-            })),
-            settings: Arc::new(RwLock::new(settings_state)),
-            tools: Arc::new(RwLock::new(tools_manager)),
+            }));
+            let settings = Arc::new(RwLock::new(settings_state));
+            let tools = Arc::new(RwLock::new(tools_manager));
+            let coordinator = Arc::new(autonomy::AutonomyCoordinator::new(
+                workspace.clone(),
+                tools.clone(),
+            ));
+            tokio::spawn(coordinator.clone().run_loop());
+            AppState {
+                health: HealthService,
+                workspace,
+                settings,
+                tools,
+                autonomy: Some(coordinator),
+            }
         });
 
     let listener = tokio::net::TcpListener::bind(addr).await?;

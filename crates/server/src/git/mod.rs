@@ -1,6 +1,8 @@
 mod registry;
 mod service;
 
+pub(crate) use registry::{list_repos, repo_dir, MAIN_REPO_ID};
+
 use crate::{i18n, AppState};
 use axum::{
     extract::{Path as AxumPath, State},
@@ -8,8 +10,8 @@ use axum::{
     Json,
 };
 use registry::{
-    add_repo, ensure_main_repo, find_repo, list_repos, repo_dir, validate_repo_id, validate_repo_name,
-    GitRepoRecord, MAIN_REPO_ID,
+    add_repo, ensure_main_repo, find_repo, validate_repo_id, validate_repo_name,
+    GitRepoRecord,
 };
 use serde::{Deserialize, Serialize};
 use service::{execute_operation, repo_status, GitCommandOutput, GitOperation, GitRepoStatus};

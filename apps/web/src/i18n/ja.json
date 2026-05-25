@@ -82,7 +82,9 @@
         "review_opinion": "レビュー意見",
         "review_revision": "レビュー改訂",
         "review_summary": "レビュー要約",
-        "review_pipeline": "レビューパイプライン"
+        "review_pipeline": "レビューパイプライン",
+        "autonomy_explore": "自律探索",
+        "autonomy_execute": "自律実行"
       },
       "status": {
         "pending": "待機中",

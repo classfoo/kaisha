@@ -35,6 +35,10 @@ impl TaskStore {
         }
     }
 
+    pub fn workspace(&self) -> &Path {
+        &self.workspace
+    }
+
     pub fn save(&self, task: &AgentTaskRecord) -> anyhow::Result<()> {
         let root = tasks_root(&self.workspace);
         fs::create_dir_all(&root)?;

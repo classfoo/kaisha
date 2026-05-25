@@ -1,3 +1,4 @@
+use crate::autonomy_trigger::mark_employee_for_autonomy;
 use super::{
     model::{AgentTaskRecord, CodeAgentTaskParams, TaskKind, TaskStatus},
     store::{new_task_id, now_ms, TaskStore},
@@ -81,11 +82,13 @@ impl TaskRunner {
             Ok((instance, result)) => {
                 task.complete_with_result(&instance, &result, now_ms());
                 self.store.save(&task)?;
+                self.notify_autonomy_if_needed(&params.kind, &task);
                 Ok((task, instance, result))
             }
             Err(err) => {
                 task.fail(err.to_string(), now_ms());
                 self.store.save(&task)?;
+                self.notify_autonomy_if_needed(&params.kind, &task);
                 Err(err)
             }
         }
@@ -113,13 +116,24 @@ impl TaskRunner {
             Ok((instance, result)) => {
                 task.complete_with_result(&instance, &result, now_ms());
                 self.store.save(&task)?;
+                self.notify_autonomy_if_needed(&params.kind, &task);
                 Ok((task, instance, result))
             }
             Err(err) => {
                 task.fail(err.to_string(), now_ms());
                 self.store.save(&task)?;
+                self.notify_autonomy_if_needed(&params.kind, &task);
                 Err(err)
             }
+        }
+    }
+
+    fn notify_autonomy_if_needed(&self, kind: &TaskKind, task: &AgentTaskRecord) {
+        if matches!(kind, TaskKind::AutonomyExplore) {
+            return;
+        }
+        if let Some(employee_id) = task.executor_id.as_deref() {
+            let _ = mark_employee_for_autonomy(self.store.workspace(), employee_id);
         }
     }
 }
@@ -147,6 +161,14 @@ pub fn hire_task_content() -> String {
 
 pub fn review_pipeline_content(requirement_id: &str) -> String {
     format!("Run requirement review pipeline for `{requirement_id}`")
+}
+
+pub fn autonomy_explore_content(employee_id: &str, mode: &str) -> String {
+    format!("Autonomy exploration for employee `{employee_id}` ({mode})")
+}
+
+pub fn autonomy_execute_content(employee_id: &str, todo_title: &str) -> String {
+    format!("Execute todo `{todo_title}` for employee `{employee_id}`")
 }
 
 pub fn review_context(requirement_id: &str) -> serde_json::Value {

@@ -82,7 +82,9 @@
         "review_opinion": "评审意见",
         "review_revision": "评审修订",
         "review_summary": "评审总结",
-        "review_pipeline": "评审流程"
+        "review_pipeline": "评审流程",
+        "autonomy_explore": "自主性探索",
+        "autonomy_execute": "自主性执行"
       },
       "status": {
         "pending": "待处理",

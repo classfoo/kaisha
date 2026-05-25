@@ -82,7 +82,9 @@
         "review_opinion": "Review opinion",
         "review_revision": "Review revision",
         "review_summary": "Review summary",
-        "review_pipeline": "Review pipeline"
+        "review_pipeline": "Review pipeline",
+        "autonomy_explore": "Autonomy exploration",
+        "autonomy_execute": "Autonomy execution"
       },
       "status": {
         "pending": "Pending",

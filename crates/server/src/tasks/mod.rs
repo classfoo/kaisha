@@ -6,8 +6,9 @@ pub use model::{
     AgentTaskRecord, CodeAgentTaskParams, TaskKind, TaskStatus,
 };
 pub use runner::{
-    hire_task_content, review_context, review_opinion_content, review_pipeline_content,
-    review_revision_content, review_summary_content, task_content_from_user_input, TaskRunner,
+    autonomy_execute_content, autonomy_explore_content, hire_task_content, review_context,
+    review_opinion_content, review_pipeline_content, review_revision_content,
+    review_summary_content, task_content_from_user_input, TaskRunner,
 };
 pub use store::{filter_tasks, TaskListFilter, TaskStore};
 
