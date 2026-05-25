@@ -92,7 +92,10 @@
         "completed": "完了",
         "failed": "失敗",
         "cancelled": "キャンセル"
-      }
+      },
+      "explore": "探索",
+      "exploring": "探索中…",
+      "exploreError": "探索の開始に失敗しました"
     },
     "chat": {
       "emptySelection": "従業員を選択してチャットを開始してください",
@@ -113,7 +116,15 @@
       "senderDefaultName": "自分",
       "avatarAlt": "{name}のアバター",
       "systemSenderLabel": "システム",
-      "userSenderCaption": "ユーザー"
+      "userSenderCaption": "ユーザー",
+      "taskResult": {
+        "title": "タスク結果",
+        "success": "成功",
+        "failed": "失敗",
+        "tool": "ツール",
+        "tokens": "トークン使用量",
+        "outputPreview": "出力プレビュー"
+      }
     },
     "leftPanel": {
       "home": {
@@ -365,6 +376,12 @@
         "lounge": "休憩室",
         "reception": "社長室"
       }
+    },
+    "shop": {
+      "open": "営業中",
+      "closed": "休業中",
+      "toggleOpen": "クリックして休業",
+      "toggleClosed": "クリックして営業"
     }
   }
 }

@@ -92,7 +92,10 @@
         "completed": "已完成",
         "failed": "失败",
         "cancelled": "已取消"
-      }
+      },
+      "explore": "探索",
+      "exploring": "探索中…",
+      "exploreError": "启动探索失败"
     },
     "chat": {
       "emptySelection": "请选择一个员工以打开对话",
@@ -113,7 +116,15 @@
       "senderDefaultName": "用户",
       "avatarAlt": "{name} 的头像",
       "systemSenderLabel": "系统",
-      "userSenderCaption": "用户"
+      "userSenderCaption": "用户",
+      "taskResult": {
+        "title": "任务结果",
+        "success": "成功",
+        "failed": "失败",
+        "tool": "工具",
+        "tokens": "Token 用量",
+        "outputPreview": "输出预览"
+      }
     },
     "leftPanel": {
       "home": {
@@ -417,6 +428,12 @@
         "lounge": "休息室",
         "reception": "总裁办公室"
       }
+    },
+    "shop": {
+      "open": "营业中",
+      "closed": "已停业",
+      "toggleOpen": "点击停业",
+      "toggleClosed": "点击开业"
     }
   }
 }

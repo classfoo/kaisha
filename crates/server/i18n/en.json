@@ -54,5 +54,6 @@
   "review_opinion_invalid_action": "Invalid review action",
   "task_not_found": "Task not found",
   "autonomy_not_enabled": "Employee autonomy is not enabled",
-  "todo_not_found": "Todo item not found"
+  "todo_not_found": "Todo item not found",
+  "employee_busy_cannot_explore": "Employee is busy with another task"
 }

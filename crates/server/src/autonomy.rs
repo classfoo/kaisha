@@ -118,8 +118,29 @@ pub fn should_run_autonomy(
     now_ms: u64,
     trigger: AutonomyTriggerKind,
 ) -> bool {
+    should_start_autonomy_exploration(
+        incomplete_todos,
+        employee_busy,
+        last_autonomy_run_ms,
+        now_ms,
+        trigger,
+        false,
+    )
+}
+
+pub fn should_start_autonomy_exploration(
+    incomplete_todos: usize,
+    employee_busy: bool,
+    last_autonomy_run_ms: Option<u64>,
+    now_ms: u64,
+    trigger: AutonomyTriggerKind,
+    force: bool,
+) -> bool {
     if employee_busy {
         return false;
+    }
+    if force {
+        return true;
     }
     match trigger {
         AutonomyTriggerKind::TaskCompleted | AutonomyTriggerKind::Manual => {
@@ -432,18 +453,20 @@ pub fn run_autonomy_exploration(
     tools: &crate::tools::manager::ToolManager,
     employee: &EmployeeRecord,
     trigger: AutonomyTriggerKind,
+    force: bool,
 ) -> anyhow::Result<()> {
     let summaries = list_requirement_summaries(workspace)?;
     let mode = select_exploration_mode(&summaries);
     let todos = load_todos(workspace, &employee.id)?;
     let tasks = TaskStore::new(workspace).list()?;
     let busy = is_employee_busy(&tasks, &employee.id);
-    if !should_run_autonomy(
+    if !should_start_autonomy_exploration(
         count_incomplete_todos(&todos),
         busy,
         todos.last_autonomy_run_ms,
         now_ms(),
         trigger,
+        force,
     ) {
         return Ok(());
     }
@@ -556,7 +579,7 @@ pub fn process_employee_autonomy(
             now_ms(),
             trigger,
         ) {
-            run_autonomy_exploration(workspace, tools, employee, trigger)?;
+            run_autonomy_exploration(workspace, tools, employee, trigger, false)?;
         }
     }
 
@@ -576,7 +599,7 @@ pub fn process_employee_autonomy(
             trigger,
         )
     {
-        run_autonomy_exploration(workspace, tools, employee, trigger)?;
+        run_autonomy_exploration(workspace, tools, employee, trigger, false)?;
     }
     Ok(())
 }
@@ -585,6 +608,13 @@ pub fn process_autonomy_tick(
     workspace: &Path,
     tools: &crate::tools::manager::ToolManager,
 ) -> anyhow::Result<()> {
+    // Check shop status - skip autonomy when closed
+    if let Ok(status) = crate::shop_status::load_shop_status(workspace) {
+        if !status.is_open {
+            tracing::info!("shop is closed, skipping autonomy tick");
+            return Ok(());
+        }
+    }
     let employees = list_employee_records(workspace)?;
     let pending = list_pending_autonomy_employees(workspace)?;
     for employee in employees {
@@ -771,6 +801,60 @@ pub async fn run_employee_autonomy_handler(
         .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
+pub async fn run_employee_autonomy_explore_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    AxumPath(employee_id): AxumPath<String>,
+) -> Result<Json<crate::employee_todo::EmployeeTodoFile>, (axum::http::StatusCode, String)> {
+    let Some(workspace) = workspace_root(&state) else {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            crate::i18n::msg(&headers, "workspace_not_configured"),
+        ));
+    };
+    let employees = list_employee_records(&workspace).map_err(|e| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            e.to_string(),
+        )
+    })?;
+    let Some(employee) = employees.into_iter().find(|e| e.id == employee_id) else {
+        return Err((
+            axum::http::StatusCode::NOT_FOUND,
+            crate::i18n::msg(&headers, "employee_not_found"),
+        ));
+    };
+    let tasks = TaskStore::new(&workspace).list().map_err(|e| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            e.to_string(),
+        )
+    })?;
+    if is_employee_busy(&tasks, &employee_id) {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            crate::i18n::msg(&headers, "employee_busy_cannot_explore"),
+        ));
+    }
+    let tools = state.tools.read().expect("tools lock poisoned").clone();
+    let workspace_for_load = workspace.clone();
+    tokio::task::spawn_blocking(move || {
+        run_autonomy_exploration(
+            &workspace,
+            &tools,
+            &employee,
+            AutonomyTriggerKind::Manual,
+            true,
+        )
+    })
+    .await
+    .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    load_todos(&workspace_for_load, &employee_id)
+        .map(Json)
+        .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -918,5 +1002,27 @@ mod tests {
             .join("requirements/ux-nav-contrast/requirement.md")
             .exists());
         let _ = std::fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn forced_manual_exploration_bypasses_debounce() {
+        let now = 10_000u64;
+        let last = Some(9_000u64);
+        assert!(!should_start_autonomy_exploration(
+            0,
+            false,
+            last,
+            now,
+            AutonomyTriggerKind::Manual,
+            false,
+        ));
+        assert!(should_start_autonomy_exploration(
+            0,
+            false,
+            last,
+            now,
+            AutonomyTriggerKind::Manual,
+            true,
+        ));
     }
 }

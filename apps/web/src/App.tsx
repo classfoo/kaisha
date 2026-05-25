@@ -7,6 +7,7 @@ import { useRequirementsWorkspace } from './features/requirements/useRequirement
 import type { RequirementPhase } from './features/requirements/requirementsApi'
 import { LeftPanel } from './components/LeftPanel'
 import { useEmployeeTasks } from './features/employee-tasks/useEmployeeTasks'
+import { createEmployeeTasksApi } from './features/employee-tasks/employeeTasksApi'
 import { WorkArea } from './components/WorkArea'
 import { WorkRulesSettings } from './components/WorkRulesSettings'
 
@@ -78,6 +79,7 @@ export default function App() {
   const [workspaceError, setWorkspaceError] = React.useState('')
   const [savingWorkspace, setSavingWorkspace] = React.useState(false)
   const [settingsOpen, setSettingsOpen] = React.useState(false)
+  const [shopOpen, setShopOpen] = React.useState(true)
   const [settingsSection, setSettingsSection] = React.useState<SettingsSection>('tools')
   const [toolCatalog, setToolCatalog] = React.useState<ToolCatalogItem[]>([])
   const [toolInstances, setToolInstances] = React.useState<ToolInstance[]>([])
@@ -142,6 +144,39 @@ export default function App() {
     selectedEmployeeId,
     refreshTick,
   )
+  const employeeTasksApi = React.useMemo(
+    () => createEmployeeTasksApi(API_BASE, locale),
+    [locale],
+  )
+  const [employeeTasksExploring, setEmployeeTasksExploring] = React.useState(false)
+  const [employeeTasksExploreError, setEmployeeTasksExploreError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    setEmployeeTasksExploreError(null)
+  }, [selectedEmployeeId])
+
+  const runEmployeeExplore = React.useCallback(async () => {
+    if (!workspace?.configured || !selectedEmployeeId || employeeTasksExploring) return
+    setEmployeeTasksExploring(true)
+    setEmployeeTasksExploreError(null)
+    try {
+      await employeeTasksApi.triggerExplore(selectedEmployeeId)
+      void employeeTasks.refresh()
+    } catch (err) {
+      setEmployeeTasksExploreError(
+        err instanceof Error && err.message ? err.message : tt('ui.employeeTasks.exploreError'),
+      )
+    } finally {
+      setEmployeeTasksExploring(false)
+    }
+  }, [
+    workspace?.configured,
+    selectedEmployeeId,
+    employeeTasksExploring,
+    employeeTasksApi,
+    employeeTasks.refresh,
+    tt,
+  ])
   const [newGitRepoName, setNewGitRepoName] = React.useState('')
   const [newRequirementTitle, setNewRequirementTitle] = React.useState('')
   const requirementPhaseLabel = React.useCallback(
@@ -281,6 +316,22 @@ export default function App() {
 
   React.useEffect(() => {
     window.localStorage.setItem('kaisha.locale', locale)
+  }, [locale])
+
+  React.useEffect(() => {
+    // Fetch shop status on mount
+    fetch(`${API_BASE}/api/shop/status`, {
+      headers: { 'x-lang': locale },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && typeof data.is_open === 'boolean') {
+          setShopOpen(data.is_open)
+        }
+      })
+      .catch(() => {
+        // ignore network errors
+      })
   }, [locale])
 
   React.useEffect(() => {
@@ -978,9 +1029,24 @@ export default function App() {
         topNavItems={topNavItems}
         bottomNavItems={bottomNavItems}
         settingsOpen={settingsOpen}
+        shopOpen={shopOpen}
         t={tt}
         onMenuClick={handleNavMenuClick}
         onSettingsClick={() => setSettingsOpen(true)}
+        onShopToggle={async () => {
+          try {
+            const res = await fetch(`${API_BASE}/api/shop/toggle`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-lang': locale },
+            })
+            if (res.ok) {
+              const data = await res.json()
+              setShopOpen(data.is_open)
+            }
+          } catch {
+            // ignore network errors
+          }
+        }}
       />
       <WorkArea
         workAreaKey={`work-area-${activeNav}-${refreshTick}`}
@@ -1049,7 +1115,9 @@ export default function App() {
             hardDeletingRequirementId={requirements.hardDeletingId}
             employeeTasks={employeeTasks.tasks}
             employeeTasksLoading={employeeTasks.loading}
-            employeeTasksError={employeeTasks.error}
+            employeeTasksError={employeeTasksExploreError ?? employeeTasks.error}
+            employeeTasksExploring={employeeTasksExploring}
+            onEmployeeTasksExplore={() => void runEmployeeExplore()}
             locale={locale}
           />
         ) : null}

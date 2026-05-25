@@ -9,6 +9,7 @@ mod i18n;
 mod requirement;
 mod requirement_development;
 mod requirement_review;
+mod shop_status;
 mod tasks;
 mod tools;
 mod work_rules;
@@ -46,10 +47,42 @@ struct AppState {
     settings: Arc<RwLock<SettingsState>>,
     tools: Arc<RwLock<ToolManager>>,
     autonomy: Option<Arc<autonomy::AutonomyCoordinator>>,
+    shop_status: Arc<RwLock<shop_status::ShopStatus>>,
 }
 
 async fn health(State(state): State<AppState>) -> Json<domain::HealthStatus> {
     Json(state.health.get_status())
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ShopStatusResponse {
+    pub is_open: bool,
+}
+
+async fn get_shop_status(State(state): State<AppState>) -> Json<ShopStatusResponse> {
+    let status = state.shop_status.read().expect("shop_status lock poisoned");
+    Json(ShopStatusResponse {
+        is_open: status.is_open,
+    })
+}
+
+async fn toggle_shop_status(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<Json<ShopStatusResponse>, (axum::http::StatusCode, String)> {
+    let Some(workspace) = state.workspace.read().expect("workspace lock poisoned").path.clone() else {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            i18n::msg(&headers, "workspace_not_configured"),
+        ));
+    };
+    let status = shop_status::toggle_shop_status(&workspace)
+        .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let mut state_status = state.shop_status.write().expect("shop_status lock poisoned");
+    *state_status = status.clone();
+    Ok(Json(ShopStatusResponse {
+        is_open: status.is_open,
+    }))
 }
 
 #[derive(Clone)]
@@ -636,15 +669,27 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
             "/api/employees/:id/autonomy/run",
             post(autonomy::run_employee_autonomy_handler),
         )
+        .route(
+            "/api/employees/:id/autonomy/explore",
+            post(autonomy::run_employee_autonomy_explore_handler),
+        )
+        .route("/api/shop/status", get(get_shop_status))
+        .route("/api/shop/toggle", post(toggle_shop_status))
         .layer(cors)
         .with_state({
             let workspace = Arc::new(RwLock::new(WorkspaceState {
                 source: workspace_init.source,
-                path: workspace_init.path,
+                path: workspace_init.path.clone(),
                 config_file: workspace_init.config_file,
             }));
             let settings = Arc::new(RwLock::new(settings_state));
             let tools = Arc::new(RwLock::new(tools_manager));
+            let shop_status_value = if let Some(wp) = &workspace_init.path {
+                shop_status::load_shop_status(wp).unwrap_or_default()
+            } else {
+                shop_status::ShopStatus::default()
+            };
+            let shop_status = Arc::new(RwLock::new(shop_status_value));
             let coordinator = Arc::new(autonomy::AutonomyCoordinator::new(
                 workspace.clone(),
                 tools.clone(),
@@ -656,6 +701,7 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
                 settings,
                 tools,
                 autonomy: Some(coordinator),
+                shop_status,
             }
         });
 

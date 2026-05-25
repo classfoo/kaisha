@@ -8,9 +8,11 @@ type LeftSidebarProps = {
   topNavItems: { id: NavMenu; labelKey: string }[]
   bottomNavItems: { id: 'settings'; labelKey: string }[]
   settingsOpen: boolean
+  shopOpen: boolean
   t: (key: string) => string
   onMenuClick: (menu: NavMenu) => void
   onSettingsClick: () => void
+  onShopToggle: () => void
 }
 
 function SidebarIcon({ menu }: { menu: NavMenu }) {
@@ -64,9 +66,11 @@ export function LeftSidebar({
   topNavItems,
   bottomNavItems,
   settingsOpen,
+  shopOpen,
   t,
   onMenuClick,
   onSettingsClick,
+  onShopToggle,
 }: LeftSidebarProps) {
   return (
     <aside className="left-rail" data-tauri-drag-region>
@@ -111,6 +115,36 @@ export function LeftSidebar({
             </span>
           </button>
         ))}
+        <button
+          type="button"
+          className={`left-rail__btn shop-toggle ${shopOpen ? 'shop-open' : 'shop-closed'}`}
+          aria-label={shopOpen ? t('ui.shop.open') : t('ui.shop.closed')}
+          title={shopOpen ? t('ui.shop.toggleOpen') : t('ui.shop.toggleClosed')}
+          onClick={onShopToggle}
+        >
+          <span className="left-rail__icon">
+            {shopOpen ? (
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="left-rail__icon-svg">
+                <path
+                  d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                />
+                <circle cx="12" cy="12" r="4" fill="currentColor" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="left-rail__icon-svg">
+                <path
+                  d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm-3-11l6 6m-6 0l6-6"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                />
+              </svg>
+            )}
+          </span>
+        </button>
       </nav>
     </aside>
   )

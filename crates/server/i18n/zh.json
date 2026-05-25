@@ -54,5 +54,6 @@
   "review_opinion_invalid_action": "无效的评审操作",
   "task_not_found": "任务不存在",
   "autonomy_not_enabled": "员工自主性未启用",
-  "todo_not_found": "待办事项不存在"
+  "todo_not_found": "待办事项不存在",
+  "employee_busy_cannot_explore": "员工正在执行其他任务，无法探索"
 }

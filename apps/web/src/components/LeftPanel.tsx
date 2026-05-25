@@ -64,6 +64,8 @@ type LeftPanelProps = {
   employeeTasks: AgentTaskRecord[]
   employeeTasksLoading: boolean
   employeeTasksError: string | null
+  employeeTasksExploring: boolean
+  onEmployeeTasksExplore: () => void
   locale: string
 }
 
@@ -123,6 +125,8 @@ export function LeftPanel({
   employeeTasks,
   employeeTasksLoading,
   employeeTasksError,
+  employeeTasksExploring,
+  onEmployeeTasksExplore,
   locale,
 }: LeftPanelProps) {
   const selectedEmployeeName = React.useMemo(() => {
@@ -187,6 +191,8 @@ export function LeftPanel({
                 selectedEmployeeId={selectedEmployeeId}
                 selectedEmployeeName={selectedEmployeeName}
                 locale={locale}
+                exploring={employeeTasksExploring}
+                onExplore={onEmployeeTasksExplore}
                 t={t}
               />
             </section>

@@ -51,5 +51,13 @@ export function createEmployeeTasksApi(apiBase: string, locale: string) {
       if (!res.ok) throw new Error(await readError(res))
       return res.json()
     },
+
+    async triggerExplore(employeeId: string): Promise<void> {
+      const res = await fetch(`${apiBase}/api/employees/${encodeURIComponent(employeeId)}/autonomy/explore`, {
+        method: 'POST',
+        headers,
+      })
+      if (!res.ok) throw new Error(await readError(res))
+    },
   }
 }

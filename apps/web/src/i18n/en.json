@@ -92,7 +92,10 @@
         "completed": "Completed",
         "failed": "Failed",
         "cancelled": "Cancelled"
-      }
+      },
+      "explore": "Explore",
+      "exploring": "Exploring…",
+      "exploreError": "Failed to start exploration"
     },
     "chat": {
       "emptySelection": "Select an employee to open chat",
@@ -113,7 +116,15 @@
       "senderDefaultName": "You",
       "avatarAlt": "Avatar of {name}",
       "systemSenderLabel": "System",
-      "userSenderCaption": "User"
+      "userSenderCaption": "User",
+      "taskResult": {
+        "title": "Task Result",
+        "success": "Success",
+        "failed": "Failed",
+        "tool": "Tool",
+        "tokens": "Tokens",
+        "outputPreview": "Output Preview"
+      }
     },
     "leftPanel": {
       "home": {
@@ -415,6 +426,12 @@
         "lounge": "Lounge",
         "reception": "Boss Office"
       }
+    },
+    "shop": {
+      "open": "Shop is open",
+      "closed": "Shop is closed",
+      "toggleOpen": "Click to close shop",
+      "toggleClosed": "Click to open shop"
     }
   }
 }

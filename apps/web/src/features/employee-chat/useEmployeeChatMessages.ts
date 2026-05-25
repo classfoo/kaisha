@@ -22,6 +22,8 @@ export type ChatResultMeta = {
   prompt_tokens: number
   completion_tokens: number
   total_tokens: number
+  task_id?: string | null
+  output_preview?: string | null
 }
 
 type MessagesResponse = { messages: ChatWireMessage[] }

@@ -95,6 +95,8 @@ pub struct PostMessageResultMeta {
     pub total_tokens: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub task_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_preview: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -215,7 +217,7 @@ fn run_requirement_agent_turn(
     employee_id: &str,
     user_input: &str,
     conv_messages: &[StoredMessage],
-) -> Result<(crate::tools::model::ToolInstance, crate::tools::driver::ToolExecutionResult, Option<String>), String> {
+) -> Result<(crate::tools::model::ToolInstance, crate::tools::driver::ToolExecutionResult, Option<String>, Option<String>), String> {
     let workdir = requirement_agent_workdir(workspace).map_err(|e| e.to_string())?;
     let prior_rows: Vec<(String, String, u64)> = conv_messages
         .iter()
@@ -238,7 +240,7 @@ fn run_requirement_agent_turn(
                 context: serde_json::json!({ "employee_id": employee_id }),
             },
         )
-        .map(|(task, instance, result)| (instance, result, Some(task.id)))
+        .map(|(task, instance, result)| (instance, result, Some(task.id), task.output_preview.clone()))
         .map_err(|e| {
             let msg = e.root_cause().to_string();
             if msg == "no_enabled_coding_tool" {
@@ -296,9 +298,9 @@ fn process_post_message(
 
     let summaries = list_requirement_summaries(&workspace).map_err(|e| e.to_string())?;
     let ids: Vec<String> = summaries.iter().map(|s| s.id.clone()).collect();
-    let (instance, exec_result, task_id) = if detect_review_start_intent(&trimmed, &ids).is_some() {
+    let (instance, exec_result, task_id, output_preview) = if detect_review_start_intent(&trimmed, &ids).is_some() {
         let (inst, res) = run_review_turn(&tools, &workspace, &trimmed)?;
-        (inst, res, None)
+        (inst, res, None, None)
     } else {
         run_requirement_agent_turn(&tools, &workspace, &employee_id, &trimmed, &conv.messages)?
     };
@@ -327,6 +329,7 @@ fn process_post_message(
         completion_tokens: exec_result.usage.completion_tokens,
         total_tokens: exec_result.usage.total_tokens,
         task_id,
+        output_preview,
     };
 
     Ok(PostMessageResponse {
@@ -496,7 +499,7 @@ async fn run_stream_turn_inner(
     let ids: Vec<String> = summaries.iter().map(|s| s.id.clone()).collect();
     let review_intent = detect_review_start_intent(&trimmed, &ids);
 
-    let (instance, tool_result, task_id) = if review_intent.is_some() {
+    let (instance, tool_result, task_id, output_preview) = if review_intent.is_some() {
         let result = tokio::task::spawn_blocking({
             let tools = tools.clone();
             let workspace = workspace.clone();
@@ -514,7 +517,7 @@ async fn run_stream_turn_inner(
         let _ = sse_tx
             .send(Ok(Event::default().event("delta").data(payload)))
             .await;
-        (result.0, result.1, None)
+        (result.0, result.1, None, None)
     } else {
         let workdir = requirement_agent_workdir(&workspace).map_err(|e| e.to_string())?;
         let prior_rows: Vec<(String, String, u64)> = conv
@@ -557,7 +560,7 @@ async fn run_stream_turn_inner(
         match result {
             Ok((task, instance, tool_result)) => {
                 let _ = forward.await;
-                (instance, tool_result, Some(task.id))
+                (instance, tool_result, Some(task.id), task.output_preview.clone())
             }
             Err(raw) => {
                 forward.abort();
@@ -589,6 +592,7 @@ async fn run_stream_turn_inner(
         completion_tokens: tool_result.usage.completion_tokens,
         total_tokens: tool_result.usage.total_tokens,
         task_id,
+        output_preview,
     };
     let resp = PostMessageResponse {
         messages: conv.messages.iter().map(WireMessage::from).collect(),

@@ -54,5 +54,6 @@
   "review_opinion_invalid_action": "無効なレビュー操作です",
   "task_not_found": "タスクが見つかりません",
   "autonomy_not_enabled": "従業員の自律機能が有効になっていません",
-  "todo_not_found": "ToDo項目が見つかりません"
+  "todo_not_found": "ToDo項目が見つかりません",
+  "employee_busy_cannot_explore": "従業員は別のタスクを実行中のため探索できません"
 }

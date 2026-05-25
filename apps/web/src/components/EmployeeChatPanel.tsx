@@ -9,6 +9,7 @@ import {
   useEmployeeChatMessages,
   type ChatSenderProfile,
   type ChatWireMessage,
+  type ChatResultMeta,
 } from '../features/employee-chat/useEmployeeChatMessages'
 import { EmployeeDirectoryRecord } from './EmployeeList'
 
@@ -101,6 +102,33 @@ function wireToDisplay(m: ChatWireMessage): DisplayMessage {
     senderName: m.sender_name ?? undefined,
     senderAvatarUrl: m.sender_avatar_url ?? undefined,
   }
+}
+
+function TaskResultPanel({ result, t }: { result: ChatResultMeta | null; t: (key: string) => string }) {
+  if (!result) return null
+  const isSuccess = result.exit_code === 0
+  return (
+    <div className={`task-result-panel task-result-panel--${isSuccess ? 'success' : 'error'}`}>
+      <div className="task-result-panel__header">
+        <span className="task-result-panel__title">{t('ui.chat.taskResult.title')}</span>
+        <span className={`task-result-panel__status task-result-panel__status--${isSuccess ? 'success' : 'error'}`}>
+          {isSuccess ? t('ui.chat.taskResult.success') : t('ui.chat.taskResult.failed')}
+        </span>
+      </div>
+      <div className="task-result-panel__meta">
+        <span className="task-result-panel__tool">{t('ui.chat.taskResult.tool')}: {result.tool_kind}</span>
+        <span className="task-result-panel__tokens">
+          {t('ui.chat.taskResult.tokens')}: {result.prompt_tokens.toLocaleString()} / {result.completion_tokens.toLocaleString()}
+        </span>
+      </div>
+      {result.output_preview && (
+        <details className="task-result-panel__details">
+          <summary className="task-result-panel__summary">{t('ui.chat.taskResult.outputPreview')}</summary>
+          <pre className="task-result-panel__output">{result.output_preview}</pre>
+        </details>
+      )}
+    </div>
+  )
 }
 
 export function EmployeeChatPanel({
@@ -216,10 +244,8 @@ export function EmployeeChatPanel({
         <>
           <div className="chat-history" ref={historyRef}>
             {loading ? <div className="chat-history__status">{t('ui.chat.loadingHistory')}</div> : null}
-            {!loading && lastResult && lastResult.exit_code !== 0 ? (
-              <div className="chat-history__warn">
-                {t('ui.chat.toolExitWarning').replace('{code}', String(lastResult.exit_code))}
-              </div>
+            {!loading && lastResult ? (
+              <TaskResultPanel result={lastResult} t={t} />
             ) : null}
             {displayMessages.map((message) => {
               const isMe = message.side === 'me'

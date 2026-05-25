@@ -69,6 +69,13 @@ impl TaskRunner {
         tools: &ToolManager,
         params: CodeAgentTaskParams,
     ) -> anyhow::Result<(AgentTaskRecord, ToolInstance, ToolExecutionResult)> {
+        // Check shop status - skip execution when closed
+        if let Ok(status) = crate::shop_status::load_shop_status(self.store.workspace()) {
+            if !status.is_open {
+                return Err(anyhow::anyhow!("shop_is_closed"));
+            }
+        }
+
         let created = now_ms();
         let id = new_task_id();
         let mut task = AgentTaskRecord::new(&params, id, created);
@@ -100,6 +107,13 @@ impl TaskRunner {
         params: CodeAgentTaskParams,
         delta_tx: tokio::sync::mpsc::Sender<String>,
     ) -> anyhow::Result<(AgentTaskRecord, ToolInstance, ToolExecutionResult)> {
+        // Check shop status - skip execution when closed
+        if let Ok(status) = crate::shop_status::load_shop_status(self.store.workspace()) {
+            if !status.is_open {
+                return Err(anyhow::anyhow!("shop_is_closed"));
+            }
+        }
+
         let created = now_ms();
         let id = new_task_id();
         let mut task = AgentTaskRecord::new(&params, id, created);
