@@ -150,21 +150,7 @@ impl ToolManager {
         ))
     }
 
-    /// Runs a single code-chat turn using workspace as the subprocess working directory.
-    pub fn execute_code_chat(
-        &self,
-        workspace: &Path,
-        messages: &[ToolChatMessage],
-    ) -> anyhow::Result<(ToolInstance, ToolExecutionResult)> {
-        let (instance, driver) = self
-            .pick_enabled_chat_driver()
-            .ok_or_else(|| anyhow::anyhow!("no_enabled_coding_tool"))?;
-        let session: ToolSession = driver.create_session(&instance.config)?;
-        let result = driver.run_chat_for_code(&instance.config, &session, messages, Some(workspace))?;
-        Ok((instance, result))
-    }
-
-    /// Same as [`execute_code_chat`], but streams stdout chunks through `delta_tx` while the tool runs.
+    /// Streams stdout chunks through `delta_tx` while the tool runs.
     pub async fn execute_code_chat_streaming(
         &self,
         workspace: &Path,

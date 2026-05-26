@@ -4,7 +4,7 @@ mod runner;
 mod runtime;
 mod store;
 
-pub use detail::{build_task_detail, AgentTaskDetail, AgentTaskExecutionInfo};
+pub use detail::{build_task_detail, AgentTaskDetail};
 
 pub use model::{
     AgentTaskRecord, CodeAgentTaskParams, TaskKind, TaskStatus,

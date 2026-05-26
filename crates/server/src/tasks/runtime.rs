@@ -23,10 +23,6 @@ pub fn task_runtime_handle() -> Arc<TaskRuntimeRegistry> {
         .clone()
 }
 
-pub fn init_task_runtime(runtime: Arc<TaskRuntimeRegistry>) {
-    let _ = TASK_RUNTIME.set(runtime);
-}
-
 struct TaskRuntimeHandle {
     cancelled: AtomicBool,
     child: Mutex<Option<Child>>,
