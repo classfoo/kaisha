@@ -1,5 +1,6 @@
 import React from 'react'
-import type { AgentTaskKind, AgentTaskRecord, AgentTaskStatus } from '../features/employee-tasks/employeeTasksApi'
+import type { AgentTaskDetail, AgentTaskKind, AgentTaskRecord, AgentTaskStatus } from '../features/employee-tasks/employeeTasksApi'
+import { EmployeeTaskDetailDialog } from './EmployeeTaskDetailDialog'
 
 type EmployeeTaskListProps = {
   tasks: AgentTaskRecord[]
@@ -12,6 +13,9 @@ type EmployeeTaskListProps = {
   onExplore: () => void
   rerunningTaskId: string | null
   onRerunTask: (taskId: string) => void
+  stoppingTaskId: string | null
+  onStopTask: (taskId: string) => void
+  onFetchTaskDetail: (taskId: string) => Promise<AgentTaskDetail>
   t: (key: string) => string
 }
 
@@ -53,7 +57,22 @@ function isEmployeeBusy(tasks: AgentTaskRecord[]): boolean {
 }
 
 function canRerunTask(task: AgentTaskRecord): boolean {
-  return task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled'
+  return (
+    task.status === 'pending' ||
+    task.status === 'running' ||
+    task.status === 'completed' ||
+    task.status === 'failed' ||
+    task.status === 'cancelled' ||
+    task.status === 'queued_rerun'
+  )
+}
+
+function canStopTask(task: AgentTaskRecord): boolean {
+  return task.status === 'pending' || task.status === 'running'
+}
+
+function isTaskOutputPending(status: AgentTaskStatus): boolean {
+  return status === 'pending' || status === 'running' || status === 'queued_rerun'
 }
 
 export function EmployeeTaskList({
@@ -67,10 +86,61 @@ export function EmployeeTaskList({
   onExplore,
   rerunningTaskId,
   onRerunTask,
+  stoppingTaskId,
+  onStopTask,
+  onFetchTaskDetail,
   t,
 }: EmployeeTaskListProps) {
   const [openMenuId, setOpenMenuId] = React.useState<string | null>(null)
+  const [detailTaskId, setDetailTaskId] = React.useState<string | null>(null)
+  const [detail, setDetail] = React.useState<AgentTaskDetail | null>(null)
+  const [detailLoading, setDetailLoading] = React.useState(false)
+  const [detailError, setDetailError] = React.useState<string | null>(null)
   const exploreDisabled = exploring || loading || isEmployeeBusy(tasks)
+
+  const closeDetail = React.useCallback(() => {
+    setDetailTaskId(null)
+    setDetail(null)
+    setDetailError(null)
+    setDetailLoading(false)
+  }, [])
+
+  const loadDetail = React.useCallback(
+    async (taskId: string, options?: { silent?: boolean }) => {
+      if (!options?.silent) {
+        setDetailLoading(true)
+        setDetailError(null)
+      }
+      try {
+        const next = await onFetchTaskDetail(taskId)
+        setDetail(next)
+      } catch (err) {
+        setDetailError(err instanceof Error && err.message ? err.message : t('ui.employeeTasks.detail.loadError'))
+      } finally {
+        if (!options?.silent) setDetailLoading(false)
+      }
+    },
+    [onFetchTaskDetail, t],
+  )
+
+  const openDetail = React.useCallback(
+    (taskId: string) => {
+      setOpenMenuId(null)
+      setDetailTaskId(taskId)
+      setDetail(null)
+      void loadDetail(taskId)
+    },
+    [loadDetail],
+  )
+
+  React.useEffect(() => {
+    if (!detailTaskId || !detail?.task) return
+    if (!isTaskOutputPending(detail.task.status)) return
+    const timer = window.setInterval(() => {
+      void loadDetail(detailTaskId, { silent: true })
+    }, 3000)
+    return () => window.clearInterval(timer)
+  }, [detailTaskId, detail?.task?.status, loadDetail])
 
   const toolbar = (
     <div className="employee-task-list__toolbar">
@@ -117,14 +187,29 @@ export function EmployeeTaskList({
             const statusLabel = t(taskStatusKey(task.status))
             const menuOpen = openMenuId === task.id
             const isRerunning = rerunningTaskId === task.id
-            const rerunEnabled = canRerunTask(task) && !isRerunning
+            const isStopping = stoppingTaskId === task.id
+            const menuBusy = isRerunning || isStopping
+            const rerunEnabled = canRerunTask(task) && !menuBusy
+            const stopEnabled = canStopTask(task) && !menuBusy
             return (
               <div
                 key={task.id}
                 className={`employee-task-item employee-task-item--${task.status} ${menuOpen ? 'employee-task-item--menu-open' : ''}`}
                 role="listitem"
               >
-                <div className="employee-task-item__body">
+                <div
+                  className="employee-task-item__body"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openDetail(task.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      openDetail(task.id)
+                    }
+                  }}
+                  aria-label={t('ui.employeeTasks.detail.title')}
+                >
                   <div className="employee-task-item__header">
                     <span className="employee-task-item__kind">{kindLabel}</span>
                     <span className={`employee-task-item__status employee-task-item__status--${task.status}`}>
@@ -146,24 +231,40 @@ export function EmployeeTaskList({
                       e.stopPropagation()
                       setOpenMenuId(menuOpen ? null : task.id)
                     }}
-                    disabled={isRerunning}
+                    disabled={menuBusy}
                   >
                     <i className="iconfont icon-filmetomore" aria-hidden="true" />
                   </button>
                   {menuOpen ? (
                     <div className="employee-item__menu-dropdown">
-                      <button
-                        type="button"
-                        className="employee-item__menu-dropdown-item"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setOpenMenuId(null)
-                          if (rerunEnabled) onRerunTask(task.id)
-                        }}
-                        disabled={!rerunEnabled}
-                      >
-                        {isRerunning ? t('ui.employeeTasks.rerunning') : t('ui.employeeTasks.rerun')}
-                      </button>
+                      {canStopTask(task) ? (
+                        <button
+                          type="button"
+                          className="employee-item__menu-dropdown-item employee-item__menu-dropdown-item--fire"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setOpenMenuId(null)
+                            if (stopEnabled) onStopTask(task.id)
+                          }}
+                          disabled={!stopEnabled}
+                        >
+                          {isStopping ? t('ui.employeeTasks.stopping') : t('ui.employeeTasks.stop')}
+                        </button>
+                      ) : null}
+                      {canRerunTask(task) ? (
+                        <button
+                          type="button"
+                          className="employee-item__menu-dropdown-item"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setOpenMenuId(null)
+                            if (rerunEnabled) onRerunTask(task.id)
+                          }}
+                          disabled={!rerunEnabled}
+                        >
+                          {isRerunning ? t('ui.employeeTasks.rerunning') : t('ui.employeeTasks.rerun')}
+                        </button>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -172,6 +273,15 @@ export function EmployeeTaskList({
           })
         )}
       </div>
+      <EmployeeTaskDetailDialog
+        open={detailTaskId != null}
+        loading={detailLoading}
+        error={detailError}
+        detail={detail}
+        locale={locale}
+        t={t}
+        onClose={closeDetail}
+      />
     </div>
   )
 }

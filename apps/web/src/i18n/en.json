@@ -91,7 +91,8 @@
         "running": "Running",
         "completed": "Completed",
         "failed": "Failed",
-        "cancelled": "Cancelled"
+        "cancelled": "Cancelled",
+        "queued_rerun": "Queued rerun"
       },
       "explore": "Explore",
       "exploring": "Exploring…",
@@ -99,7 +100,42 @@
       "menu": "Task menu",
       "rerun": "Rerun",
       "rerunning": "Rerunning…",
-      "rerunError": "Failed to rerun task"
+      "rerunError": "Failed to rerun task",
+      "stop": "Stop",
+      "stopping": "Stopping…",
+      "stopError": "Failed to stop task",
+      "detail": {
+        "title": "Task detail",
+        "close": "Close",
+        "loading": "Loading task detail…",
+        "loadError": "Failed to load task detail",
+        "sectionInfo": "Task information",
+        "sectionExecution": "Code agent execution",
+        "sectionOutput": "Result output",
+        "fields": {
+          "id": "Task ID",
+          "kind": "Kind",
+          "status": "Status",
+          "content": "Content",
+          "workdir": "Working directory",
+          "executor": "Executor",
+          "created": "Created",
+          "started": "Started",
+          "ended": "Ended",
+          "duration": "Duration",
+          "tool": "Tool",
+          "model": "Model",
+          "tokens": "Tokens",
+          "exitCode": "Exit code",
+          "error": "Error",
+          "parentTask": "Parent task",
+          "context": "Context"
+        },
+        "outputEmpty": "No output yet",
+        "outputPending": "Output will appear when the task finishes",
+        "durationMs": "{ms} ms",
+        "tokensSummary": "Prompt {prompt} · Completion {completion} · Total {total}"
+      }
     },
     "chat": {
       "emptySelection": "Select an employee to open chat",

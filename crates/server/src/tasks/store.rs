@@ -13,6 +13,10 @@ fn task_path(workspace: &Path, task_id: &str) -> PathBuf {
     tasks_root(workspace).join(format!("{task_id}.json"))
 }
 
+fn task_output_path(workspace: &Path, task_id: &str) -> PathBuf {
+    tasks_root(workspace).join(format!("{task_id}.output.txt"))
+}
+
 pub fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -54,6 +58,22 @@ impl TaskStore {
         }
         let raw = fs::read_to_string(path)?;
         Ok(serde_json::from_str(&raw)?)
+    }
+
+    pub fn save_output(&self, task_id: &str, output: &str) -> anyhow::Result<()> {
+        let root = tasks_root(&self.workspace);
+        fs::create_dir_all(&root)?;
+        let path = task_output_path(&self.workspace, task_id);
+        fs::write(path, output)?;
+        Ok(())
+    }
+
+    pub fn load_output(&self, task_id: &str) -> anyhow::Result<Option<String>> {
+        let path = task_output_path(&self.workspace, task_id);
+        if !path.exists() {
+            return Ok(None);
+        }
+        Ok(Some(fs::read_to_string(path)?))
     }
 
     pub fn list(&self) -> anyhow::Result<Vec<AgentTaskRecord>> {
@@ -172,6 +192,20 @@ mod tests {
         let store = TaskStore::new(&workspace);
         let err = store.load("missing").unwrap_err().to_string();
         assert_eq!(err, "task_not_found");
+        let _ = fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn save_and_load_output_roundtrip() {
+        let workspace = temp_workspace();
+        fs::create_dir_all(&workspace).unwrap();
+        let store = TaskStore::new(&workspace);
+        store.save_output("task_out_1", "agent stdout").unwrap();
+        assert_eq!(
+            store.load_output("task_out_1").unwrap().as_deref(),
+            Some("agent stdout")
+        );
+        assert!(store.load_output("missing").unwrap().is_none());
         let _ = fs::remove_dir_all(&workspace);
     }
 

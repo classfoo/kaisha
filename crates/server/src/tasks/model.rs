@@ -10,6 +10,7 @@ pub enum TaskStatus {
     Completed,
     Failed,
     Cancelled,
+    QueuedRerun,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -95,6 +96,23 @@ impl AgentTaskRecord {
         self.started_at_ms = Some(started_at_ms);
     }
 
+    pub fn reset_for_rerun(&mut self, started_at_ms: u64) {
+        self.status = TaskStatus::Running;
+        self.started_at_ms = Some(started_at_ms);
+        self.ended_at_ms = None;
+        self.exit_code = None;
+        self.error = None;
+        self.output_preview = None;
+        self.tool_instance_id = None;
+        self.tool_name = None;
+        self.tool_kind = None;
+        self.model = None;
+        self.prompt_tokens = 0;
+        self.completion_tokens = 0;
+        self.total_tokens = 0;
+        self.clear_queued_rerun_marker();
+    }
+
     pub fn complete_with_result(
         &mut self,
         instance: &crate::tools::model::ToolInstance,
@@ -125,6 +143,55 @@ impl AgentTaskRecord {
         self.status = TaskStatus::Failed;
         self.ended_at_ms = Some(ended_at_ms);
         self.error = Some(error);
+    }
+
+    pub fn cancel(&mut self, ended_at_ms: u64) {
+        self.status = TaskStatus::Cancelled;
+        self.ended_at_ms = Some(ended_at_ms);
+        self.error = Some("task_stopped_by_user".into());
+    }
+
+    pub fn is_terminal(&self) -> bool {
+        matches!(
+            self.status,
+            TaskStatus::Completed | TaskStatus::Failed | TaskStatus::Cancelled
+        )
+    }
+
+    pub fn is_queued_for_rerun(&self) -> bool {
+        self.status == TaskStatus::QueuedRerun
+    }
+
+    pub fn queued_rerun_at_ms(&self) -> u64 {
+        self.context
+            .get("queued_rerun_at_ms")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(self.created_at_ms)
+    }
+
+    pub fn mark_queued_rerun(&mut self, at_ms: u64) {
+        self.status = TaskStatus::QueuedRerun;
+        self.started_at_ms = None;
+        self.ended_at_ms = None;
+        self.exit_code = None;
+        self.error = None;
+        self.output_preview = None;
+        self.tool_instance_id = None;
+        self.tool_name = None;
+        self.tool_kind = None;
+        self.model = None;
+        self.prompt_tokens = 0;
+        self.completion_tokens = 0;
+        self.total_tokens = 0;
+        if let serde_json::Value::Object(map) = &mut self.context {
+            map.insert("queued_rerun_at_ms".into(), serde_json::json!(at_ms));
+        }
+    }
+
+    pub fn clear_queued_rerun_marker(&mut self) {
+        if let serde_json::Value::Object(map) = &mut self.context {
+            map.remove("queued_rerun_at_ms");
+        }
     }
 }
 
@@ -200,6 +267,43 @@ mod tests {
         task.mark_running(500);
         assert_eq!(task.status, TaskStatus::Running);
         assert_eq!(task.started_at_ms, Some(500));
+    }
+
+    #[test]
+    fn cancel_sets_cancelled_status_and_reason() {
+        let mut task = AgentTaskRecord::new(&sample_params(), "t1".into(), 1);
+        task.mark_running(2);
+        task.cancel(900);
+        assert_eq!(task.status, TaskStatus::Cancelled);
+        assert_eq!(task.ended_at_ms, Some(900));
+        assert_eq!(task.error.as_deref(), Some("task_stopped_by_user"));
+    }
+
+    #[test]
+    fn mark_queued_rerun_sets_status_and_timestamp() {
+        let mut task = AgentTaskRecord::new(&sample_params(), "t1".into(), 1);
+        task.complete_with_result(&sample_instance(), &sample_result(0, "done"), 3);
+        task.mark_queued_rerun(900);
+        assert_eq!(task.status, TaskStatus::QueuedRerun);
+        assert!(task.is_queued_for_rerun());
+        assert_eq!(task.queued_rerun_at_ms(), 900);
+        assert!(task.ended_at_ms.is_none());
+    }
+
+    #[test]
+    fn reset_for_rerun_clears_execution_fields_and_sets_running() {
+        let mut task = AgentTaskRecord::new(&sample_params(), "t1".into(), 1);
+        task.mark_running(2);
+        task.complete_with_result(&sample_instance(), &sample_result(0, "done"), 3);
+        task.reset_for_rerun(900);
+        assert_eq!(task.status, TaskStatus::Running);
+        assert_eq!(task.started_at_ms, Some(900));
+        assert!(task.ended_at_ms.is_none());
+        assert!(task.exit_code.is_none());
+        assert!(task.error.is_none());
+        assert!(task.output_preview.is_none());
+        assert!(task.tool_instance_id.is_none());
+        assert_eq!(task.prompt_tokens, 0);
     }
 
     #[test]

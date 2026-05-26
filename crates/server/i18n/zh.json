@@ -57,5 +57,7 @@
   "todo_not_found": "待办事项不存在",
   "employee_busy_cannot_explore": "员工正在执行其他任务，无法探索",
   "task_cannot_rerun": "待处理或进行中的任务无法重跑",
-  "employee_busy_cannot_rerun": "员工正在执行其他任务，无法重跑此任务"
+  "employee_busy_cannot_rerun": "员工正在执行其他任务，无法重跑此任务",
+  "task_cannot_stop": "该任务未在运行，无法停止",
+  "task_stop_error": "停止任务失败"
 }

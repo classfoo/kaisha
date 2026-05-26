@@ -1,15 +1,20 @@
+mod detail;
 mod model;
 mod runner;
+mod runtime;
 mod store;
+
+pub use detail::{build_task_detail, AgentTaskDetail, AgentTaskExecutionInfo};
 
 pub use model::{
     AgentTaskRecord, CodeAgentTaskParams, TaskKind, TaskStatus,
 };
 pub use runner::{
-    autonomy_execute_content, autonomy_explore_content, build_rerun_params, can_rerun_task,
-    hire_task_content, review_context, review_opinion_content, review_pipeline_content,
-    review_revision_content, review_summary_content, task_content_from_user_input, TaskRunner,
+    autonomy_execute_content, autonomy_explore_content, build_rerun_params,     can_rerun_task, hire_task_content, review_context, review_opinion_content, review_pipeline_content,
+    review_revision_content, review_summary_content, should_queue_rerun_instead,
+    task_content_from_user_input, TaskRunner,
 };
+pub use runtime::TaskRuntimeRegistry;
 pub use store::{filter_tasks, TaskListFilter, TaskStore};
 
 use crate::{i18n, AppState};
@@ -95,6 +100,35 @@ pub async fn get_task(
     })
 }
 
+pub async fn get_task_detail(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+) -> Result<Json<AgentTaskDetail>, (axum::http::StatusCode, String)> {
+    let Some(workspace) = workspace_root(&state) else {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            i18n::msg(&headers, "workspace_not_configured"),
+        ));
+    };
+    let store = TaskStore::new(&workspace);
+    let task = store.load(&task_id).map_err(|err| {
+        let key = err.to_string();
+        if key == "task_not_found" {
+            (
+                axum::http::StatusCode::NOT_FOUND,
+                i18n::msg(&headers, "task_not_found"),
+            )
+        } else {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                key,
+            )
+        }
+    })?;
+    Ok(Json(build_task_detail(&store, task)))
+}
+
 pub async fn rerun_task(
     headers: HeaderMap,
     State(state): State<AppState>,
@@ -126,33 +160,76 @@ pub async fn rerun_task(
         ));
     }
 
-    if let Some(executor_id) = &source.executor_id {
-        let tasks = store.list().map_err(|err| {
+    let tasks = store.list().map_err(|err| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            err.to_string(),
+        )
+    })?;
+    if should_queue_rerun_instead(&source, &tasks) {
+        let runner = TaskRunner::new(&workspace);
+        let task = runner.queue_rerun(&task_id).map_err(|err| {
             (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 err.to_string(),
             )
         })?;
-        if crate::autonomy::is_employee_busy(&tasks, executor_id) {
-            return Err((
-                axum::http::StatusCode::CONFLICT,
-                i18n::msg(&headers, "employee_busy_cannot_rerun"),
-            ));
-        }
+        return Ok(Json(task));
     }
 
     let params = build_rerun_params(&source);
     let tools = state.tools.read().expect("tools lock poisoned").clone();
     let workspace_bg = workspace.clone();
+    let task_id_bg = task_id.clone();
 
     let (task, _, _) = tokio::task::spawn_blocking(move || {
         let runner = TaskRunner::new(&workspace_bg);
-        runner.run_code_chat(&tools, params)
+        runner.rerun_code_chat(&tools, &task_id_bg, params)
     })
     .await
     .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
     .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
+    Ok(Json(task))
+}
+
+pub async fn stop_task(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+) -> Result<Json<AgentTaskRecord>, (axum::http::StatusCode, String)> {
+    let Some(workspace) = workspace_root(&state) else {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            i18n::msg(&headers, "workspace_not_configured"),
+        ));
+    };
+    let runner = TaskRunner::new(&workspace);
+    let task = runner.stop_task(&task_id).map_err(|err| {
+        let key = err.to_string();
+        if key == "task_not_found" {
+            (
+                axum::http::StatusCode::NOT_FOUND,
+                i18n::msg(&headers, "task_not_found"),
+            )
+        } else if key == "task_cannot_stop" {
+            (
+                axum::http::StatusCode::BAD_REQUEST,
+                i18n::msg(&headers, "task_cannot_stop"),
+            )
+        } else {
+            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, key)
+        }
+    })?;
+    if let Some(executor_id) = task.executor_id.as_deref() {
+        let tools = state.tools.read().expect("tools lock poisoned").clone();
+        if let Err(err) = runner.try_drain_queued_reruns(&tools, executor_id) {
+            return Err((
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                err.to_string(),
+            ));
+        }
+    }
     Ok(Json(task))
 }
 

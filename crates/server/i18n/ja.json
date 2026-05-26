@@ -57,5 +57,7 @@
   "todo_not_found": "ToDo項目が見つかりません",
   "employee_busy_cannot_explore": "従業員は別のタスクを実行中のため探索できません",
   "task_cannot_rerun": "保留中または実行中のタスクは再実行できません",
-  "employee_busy_cannot_rerun": "従業員は別のタスクを実行中のため、このタスクを再実行できません"
+  "employee_busy_cannot_rerun": "従業員は別のタスクを実行中のため、このタスクを再実行できません",
+  "task_cannot_stop": "このタスクは実行中ではないため停止できません",
+  "task_stop_error": "タスクの停止に失敗しました"
 }

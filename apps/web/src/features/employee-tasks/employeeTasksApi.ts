@@ -4,6 +4,7 @@ export type AgentTaskStatus =
   | 'completed'
   | 'failed'
   | 'cancelled'
+  | 'queued_rerun'
 
 export type AgentTaskKind =
   | 'employee_hire'
@@ -22,6 +23,7 @@ export type AgentTaskRecord = {
   workdir: string
   tool_instance_id: string | null
   tool_name: string | null
+  tool_kind?: string | null
   executor_id: string | null
   status: AgentTaskStatus
   created_at_ms: number
@@ -30,7 +32,31 @@ export type AgentTaskRecord = {
   exit_code: number | null
   error: string | null
   output_preview: string | null
+  model?: string | null
+  prompt_tokens?: number
+  completion_tokens?: number
+  total_tokens?: number
   parent_task_id?: string | null
+  context?: Record<string, unknown>
+}
+
+export type AgentTaskExecutionInfo = {
+  tool_instance_id: string | null
+  tool_name: string | null
+  tool_kind: string | null
+  model: string | null
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  exit_code: number | null
+  error: string | null
+  duration_ms: number | null
+}
+
+export type AgentTaskDetail = {
+  task: AgentTaskRecord
+  output: string | null
+  execution: AgentTaskExecutionInfo
 }
 
 async function readError(res: Response): Promise<string> {
@@ -52,6 +78,12 @@ export function createEmployeeTasksApi(apiBase: string, locale: string) {
       return res.json()
     },
 
+    async getDetail(taskId: string): Promise<AgentTaskDetail> {
+      const res = await fetch(`${apiBase}/api/tasks/${encodeURIComponent(taskId)}/detail`, { headers })
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
     async triggerExplore(employeeId: string): Promise<void> {
       const res = await fetch(`${apiBase}/api/employees/${encodeURIComponent(employeeId)}/autonomy/explore`, {
         method: 'POST',
@@ -62,6 +94,15 @@ export function createEmployeeTasksApi(apiBase: string, locale: string) {
 
     async rerun(taskId: string): Promise<AgentTaskRecord> {
       const res = await fetch(`${apiBase}/api/tasks/${encodeURIComponent(taskId)}/rerun`, {
+        method: 'POST',
+        headers,
+      })
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async stop(taskId: string): Promise<AgentTaskRecord> {
+      const res = await fetch(`${apiBase}/api/tasks/${encodeURIComponent(taskId)}/stop`, {
         method: 'POST',
         headers,
       })

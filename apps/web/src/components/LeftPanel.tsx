@@ -2,7 +2,7 @@ import React from 'react'
 import type { GitRepo } from '../features/git/gitApi'
 import { EmployeeDirectoryRecord, EmployeeList } from './EmployeeList'
 import { EmployeeTaskList } from './EmployeeTaskList'
-import type { AgentTaskRecord } from '../features/employee-tasks/employeeTasksApi'
+import type { AgentTaskRecord, AgentTaskDetail } from '../features/employee-tasks/employeeTasksApi'
 import { GitRepoList } from './GitRepoList'
 import type { RequirementPhase, RequirementSummary } from '../features/requirements/requirementsApi'
 import { RequirementList } from './RequirementList'
@@ -68,6 +68,9 @@ type LeftPanelProps = {
   onEmployeeTasksExplore: () => void
   rerunningTaskId: string | null
   onRerunEmployeeTask: (taskId: string) => void
+  stoppingTaskId: string | null
+  onStopEmployeeTask: (taskId: string) => void
+  onFetchEmployeeTaskDetail: (taskId: string) => Promise<AgentTaskDetail>
   locale: string
 }
 
@@ -131,6 +134,9 @@ export function LeftPanel({
   onEmployeeTasksExplore,
   rerunningTaskId,
   onRerunEmployeeTask,
+  stoppingTaskId,
+  onStopEmployeeTask,
+  onFetchEmployeeTaskDetail,
   locale,
 }: LeftPanelProps) {
   const selectedEmployeeName = React.useMemo(() => {
@@ -198,6 +204,9 @@ export function LeftPanel({
                 onExplore={onEmployeeTasksExplore}
                 rerunningTaskId={rerunningTaskId}
                 onRerunTask={onRerunEmployeeTask}
+                stoppingTaskId={stoppingTaskId}
+                onStopTask={onStopEmployeeTask}
+                onFetchTaskDetail={onFetchEmployeeTaskDetail}
                 t={t}
               />
             </section>

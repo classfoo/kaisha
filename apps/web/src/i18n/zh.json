@@ -91,7 +91,8 @@
         "running": "进行中",
         "completed": "已完成",
         "failed": "失败",
-        "cancelled": "已取消"
+        "cancelled": "已取消",
+        "queued_rerun": "排队重跑"
       },
       "explore": "探索",
       "exploring": "探索中…",
@@ -99,7 +100,42 @@
       "menu": "任务菜单",
       "rerun": "重跑",
       "rerunning": "重跑中…",
-      "rerunError": "重跑任务失败"
+      "rerunError": "重跑任务失败",
+      "stop": "停止",
+      "stopping": "停止中…",
+      "stopError": "停止任务失败",
+      "detail": {
+        "title": "任务详情",
+        "close": "关闭",
+        "loading": "加载任务详情中…",
+        "loadError": "加载任务详情失败",
+        "sectionInfo": "任务信息",
+        "sectionExecution": "Code Agent 执行过程",
+        "sectionOutput": "结果输出",
+        "fields": {
+          "id": "任务 ID",
+          "kind": "类型",
+          "status": "状态",
+          "content": "内容",
+          "workdir": "工作目录",
+          "executor": "执行者",
+          "created": "创建时间",
+          "started": "开始时间",
+          "ended": "结束时间",
+          "duration": "耗时",
+          "tool": "工具",
+          "model": "模型",
+          "tokens": "Token",
+          "exitCode": "退出码",
+          "error": "错误",
+          "parentTask": "父任务",
+          "context": "上下文"
+        },
+        "outputEmpty": "暂无输出",
+        "outputPending": "任务完成后将显示输出",
+        "durationMs": "{ms} 毫秒",
+        "tokensSummary": "输入 {prompt} · 输出 {completion} · 合计 {total}"
+      }
     },
     "chat": {
       "emptySelection": "请选择一个员工以打开对话",

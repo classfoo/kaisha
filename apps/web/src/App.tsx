@@ -152,10 +152,13 @@ export default function App() {
   const [employeeTasksExploreError, setEmployeeTasksExploreError] = React.useState<string | null>(null)
   const [rerunningTaskId, setRerunningTaskId] = React.useState<string | null>(null)
   const [employeeTaskRerunError, setEmployeeTaskRerunError] = React.useState<string | null>(null)
+  const [stoppingTaskId, setStoppingTaskId] = React.useState<string | null>(null)
+  const [employeeTaskStopError, setEmployeeTaskStopError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     setEmployeeTasksExploreError(null)
     setEmployeeTaskRerunError(null)
+    setEmployeeTaskStopError(null)
   }, [selectedEmployeeId])
 
   const runEmployeeExplore = React.useCallback(async () => {
@@ -182,7 +185,7 @@ export default function App() {
   ])
 
   const rerunEmployeeTask = React.useCallback(async (taskId: string) => {
-    if (!workspace?.configured || rerunningTaskId) return
+    if (!workspace?.configured || rerunningTaskId === taskId) return
     setRerunningTaskId(taskId)
     setEmployeeTaskRerunError(null)
     try {
@@ -196,6 +199,27 @@ export default function App() {
       setRerunningTaskId(null)
     }
   }, [workspace?.configured, rerunningTaskId, employeeTasksApi, employeeTasks.refresh, tt])
+
+  const stopEmployeeTask = React.useCallback(async (taskId: string) => {
+    if (!workspace?.configured || stoppingTaskId) return
+    setStoppingTaskId(taskId)
+    setEmployeeTaskStopError(null)
+    try {
+      await employeeTasksApi.stop(taskId)
+      void employeeTasks.refresh()
+    } catch (err) {
+      setEmployeeTaskStopError(
+        err instanceof Error && err.message ? err.message : tt('ui.employeeTasks.stopError'),
+      )
+    } finally {
+      setStoppingTaskId(null)
+    }
+  }, [workspace?.configured, stoppingTaskId, employeeTasksApi, employeeTasks.refresh, tt])
+
+  const fetchEmployeeTaskDetail = React.useCallback(
+    (taskId: string) => employeeTasksApi.getDetail(taskId),
+    [employeeTasksApi],
+  )
 
   const [newGitRepoName, setNewGitRepoName] = React.useState('')
   const [newRequirementTitle, setNewRequirementTitle] = React.useState('')
@@ -1135,11 +1159,14 @@ export default function App() {
             hardDeletingRequirementId={requirements.hardDeletingId}
             employeeTasks={employeeTasks.tasks}
             employeeTasksLoading={employeeTasks.loading}
-            employeeTasksError={employeeTasksExploreError ?? employeeTaskRerunError ?? employeeTasks.error}
+            employeeTasksError={employeeTasksExploreError ?? employeeTaskRerunError ?? employeeTaskStopError ?? employeeTasks.error}
             employeeTasksExploring={employeeTasksExploring}
             onEmployeeTasksExplore={() => void runEmployeeExplore()}
             rerunningTaskId={rerunningTaskId}
             onRerunEmployeeTask={(taskId) => void rerunEmployeeTask(taskId)}
+            stoppingTaskId={stoppingTaskId}
+            onStopEmployeeTask={(taskId) => void stopEmployeeTask(taskId)}
+            onFetchEmployeeTaskDetail={fetchEmployeeTaskDetail}
             locale={locale}
           />
         ) : null}

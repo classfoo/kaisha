@@ -91,7 +91,8 @@
         "running": "実行中",
         "completed": "完了",
         "failed": "失敗",
-        "cancelled": "キャンセル"
+        "cancelled": "キャンセル",
+        "queued_rerun": "再実行待ち"
       },
       "explore": "探索",
       "exploring": "探索中…",
@@ -99,7 +100,42 @@
       "menu": "タスクメニュー",
       "rerun": "再実行",
       "rerunning": "再実行中…",
-      "rerunError": "タスクの再実行に失敗しました"
+      "rerunError": "タスクの再実行に失敗しました",
+      "stop": "停止",
+      "stopping": "停止中…",
+      "stopError": "タスクの停止に失敗しました",
+      "detail": {
+        "title": "タスク詳細",
+        "close": "閉じる",
+        "loading": "タスク詳細を読み込み中…",
+        "loadError": "タスク詳細の読み込みに失敗しました",
+        "sectionInfo": "タスク情報",
+        "sectionExecution": "Code Agent 実行情報",
+        "sectionOutput": "結果出力",
+        "fields": {
+          "id": "タスク ID",
+          "kind": "種類",
+          "status": "状態",
+          "content": "内容",
+          "workdir": "作業ディレクトリ",
+          "executor": "実行者",
+          "created": "作成時刻",
+          "started": "開始時刻",
+          "ended": "終了時刻",
+          "duration": "所要時間",
+          "tool": "ツール",
+          "model": "モデル",
+          "tokens": "トークン",
+          "exitCode": "終了コード",
+          "error": "エラー",
+          "parentTask": "親タスク",
+          "context": "コンテキスト"
+        },
+        "outputEmpty": "出力はまだありません",
+        "outputPending": "タスク完了後に出力が表示されます",
+        "durationMs": "{ms} ms",
+        "tokensSummary": "入力 {prompt} · 出力 {completion} · 合計 {total}"
+      }
     },
     "chat": {
       "emptySelection": "従業員を選択してチャットを開始してください",

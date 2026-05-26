@@ -124,6 +124,32 @@ impl ToolManager {
         None
     }
 
+    /// Runs a cancellable code-chat turn tracked by `task_id` in the runtime registry.
+    pub fn execute_code_chat_for_task(
+        &self,
+        workspace: &Path,
+        messages: &[ToolChatMessage],
+        task_id: &str,
+        runtime: &crate::tasks::TaskRuntimeRegistry,
+    ) -> anyhow::Result<(ToolInstance, ToolExecutionResult)> {
+        let (instance, driver) = self
+            .pick_enabled_chat_driver()
+            .ok_or_else(|| anyhow::anyhow!("no_enabled_coding_tool"))?;
+        let spec = driver.chat_subprocess_spec(&instance.config, messages)?;
+        let (stdout, stderr, exit_code) =
+            runtime.run_chat_subprocess_cancellable(&spec, Some(workspace), task_id)?;
+        let merged = crate::tools::driver::merge_shell_output(&stdout, &stderr);
+        let usage = driver.collect_usage(&instance.config, messages, &merged)?;
+        Ok((
+            instance,
+            ToolExecutionResult {
+                output: merged,
+                exit_code,
+                usage,
+            },
+        ))
+    }
+
     /// Runs a single code-chat turn using workspace as the subprocess working directory.
     pub fn execute_code_chat(
         &self,

@@ -105,7 +105,18 @@ pub fn select_exploration_mode(
 }
 
 pub fn is_employee_busy(tasks: &[AgentTaskRecord], employee_id: &str) -> bool {
+    is_employee_busy_excluding(tasks, employee_id, None)
+}
+
+pub fn is_employee_busy_excluding(
+    tasks: &[AgentTaskRecord],
+    employee_id: &str,
+    exclude_task_id: Option<&str>,
+) -> bool {
     tasks.iter().any(|task| {
+        if exclude_task_id == Some(task.id.as_str()) {
+            return false;
+        }
         task.executor_id.as_deref() == Some(employee_id)
             && matches!(task.status, TaskStatus::Pending | TaskStatus::Running)
     })
