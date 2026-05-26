@@ -1,7 +1,8 @@
 use crate::{
     i18n,
     requirement::{
-        load_requirement_detail, normalize_requirement_id, requirement_dir,
+        load_requirement_detail, list_requirement_summaries, normalize_requirement_id,
+        requirement_dir, RequirementPhase, RequirementSummary,
     },
     AppState,
 };
@@ -147,6 +148,207 @@ fn save_dev_state(workspace: &Path, id: &str, state: &DevStateFile) -> Result<()
         .map_err(|e| e.to_string())
 }
 
+pub fn try_load_dev_state(workspace: &Path, id: &str) -> Option<DevStateFile> {
+    load_dev_state(workspace, id).ok()
+}
+
+pub fn requirement_needs_development_tasks(
+    workspace: &Path,
+    requirement_id: &str,
+) -> anyhow::Result<bool> {
+    let detail = load_requirement_detail(workspace, requirement_id)?;
+    if detail.phase != RequirementPhase::Development {
+        return Ok(false);
+    }
+    Ok(match try_load_dev_state(workspace, requirement_id) {
+        None => true,
+        Some(state) => state.tasks.is_empty(),
+    })
+}
+
+pub fn list_development_requirements_needing_tasks(
+    workspace: &Path,
+) -> anyhow::Result<Vec<RequirementSummary>> {
+    let summaries = list_requirement_summaries(workspace)?;
+    Ok(summaries
+        .into_iter()
+        .filter(|item| item.phase == RequirementPhase::Development)
+        .filter(|item| {
+            requirement_needs_development_tasks(workspace, &item.id).unwrap_or(false)
+        })
+        .collect())
+}
+
+pub fn development_requirements_need_planning(workspace: &Path) -> bool {
+    list_development_requirements_needing_tasks(workspace)
+        .map(|items| !items.is_empty())
+        .unwrap_or(false)
+}
+
+fn create_feature_branch(workspace: &Path, feature_branch: &str) {
+    if let Some(main_repo) = workspace
+        .join("repos")
+        .join("main")
+        .join("main")
+        .exists()
+        .then(|| workspace.join("repos").join("main").join("main"))
+    {
+        let _ = std::process::Command::new("git")
+            .current_dir(&main_repo)
+            .args(["checkout", "-b", feature_branch])
+            .output();
+    }
+}
+
+fn create_task_branch(workspace: &Path, branch: &str) {
+    if let Some(main_repo) = workspace
+        .join("repos")
+        .join("main")
+        .join("main")
+        .exists()
+        .then(|| workspace.join("repos").join("main").join("main"))
+    {
+        let _ = std::process::Command::new("git")
+            .current_dir(&main_repo)
+            .args(["checkout", "-b", branch])
+            .output();
+    }
+}
+
+pub fn ensure_development_started(
+    workspace: &Path,
+    requirement_id: &str,
+) -> Result<DevStateFile, String> {
+    let id = normalize_requirement_id(requirement_id).map_err(|e| e.to_string())?;
+    let file_path = crate::requirement::requirement_file_path(workspace, &id);
+    if !file_path.exists() {
+        return Err("requirement_not_found".to_string());
+    }
+    let _detail = load_requirement_detail(workspace, &id).map_err(|e| e.to_string())?;
+    let feature_branch = format!("feat-{id}");
+    let state_path = dev_state_path(workspace, &id);
+    let state = if state_path.exists() {
+        let mut state = load_dev_state(workspace, &id)?;
+        state.feature_branch = feature_branch.clone();
+        state.feature_branch_created = true;
+        state
+    } else {
+        DevStateFile {
+            requirement_id: id.clone(),
+            feature_branch: feature_branch.clone(),
+            feature_branch_created: true,
+            tasks: vec![],
+            current_task_id: None,
+        }
+    };
+    save_dev_state(workspace, &id, &state)?;
+    create_feature_branch(workspace, &feature_branch);
+    Ok(state)
+}
+
+pub fn add_development_task(
+    workspace: &Path,
+    requirement_id: &str,
+    title: &str,
+    description: &str,
+    assignee: Option<&str>,
+) -> Result<DevTask, String> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err("task_title_empty".to_string());
+    }
+    let id = normalize_requirement_id(requirement_id).map_err(|e| e.to_string())?;
+    let mut state = ensure_development_started(workspace, &id)?;
+    if state.tasks.iter().any(|task| task.title == title) {
+        return state
+            .tasks
+            .iter()
+            .find(|task| task.title == title)
+            .cloned()
+            .ok_or_else(|| "task_not_found".to_string());
+    }
+    let task_num = state.tasks.len() + 1;
+    let task_id = format!("task-{task_num:03}");
+    let branch = format!("{}-{}", state.feature_branch, task_id);
+    let now = now_ms();
+    let task = DevTask {
+        id: task_id.clone(),
+        title: title.to_string(),
+        assignee: assignee.filter(|value| !value.trim().is_empty()).map(str::to_string),
+        branch: branch.clone(),
+        status: DevTaskStatus::BranchCreated,
+        progress: 0,
+        created_at_ms: now,
+        updated_at_ms: now,
+    };
+    state.tasks.push(task.clone());
+    state.current_task_id = Some(task_id.clone());
+    save_dev_state(workspace, &id, &state)?;
+    save_task_content(
+        workspace,
+        &id,
+        &task_id,
+        &format!("# {title}\n\n{description}\n\nBranch: `{branch}`\n"),
+    )?;
+    create_task_branch(workspace, &branch);
+    Ok(task)
+}
+
+const DEV_CONTEXT_EXCERPT_CHARS: usize = 800;
+
+fn excerpt_text(content: &str, max_chars: usize) -> String {
+    let trimmed = content.trim();
+    if trimmed.chars().count() <= max_chars {
+        return trimmed.to_string();
+    }
+    trimmed.chars().take(max_chars).collect::<String>() + "…"
+}
+
+pub fn format_development_requirement_context(
+    workspace: &Path,
+    item: &RequirementSummary,
+) -> anyhow::Result<String> {
+    let detail = load_requirement_detail(workspace, &item.id)?;
+    let mut out = format!(
+        "- id: {}\n  title: {}\n  phase: development\n  file: requirements/{}/{}\n",
+        item.id,
+        item.title,
+        item.id,
+        crate::requirement::REQUIREMENT_FILE
+    );
+    let excerpt = excerpt_text(&detail.content, DEV_CONTEXT_EXCERPT_CHARS);
+    if !excerpt.is_empty() {
+        out.push_str("  content_excerpt: |\n");
+        for line in excerpt.lines() {
+            out.push_str(&format!("    {line}\n"));
+        }
+    }
+    match try_load_dev_state(workspace, &item.id) {
+        None => out.push_str("  development_state: not_started\n  development_tasks: (none)\n"),
+        Some(state) => {
+            out.push_str(&format!(
+                "  development_state: started\n  feature_branch: {}\n",
+                state.feature_branch
+            ));
+            if state.tasks.is_empty() {
+                out.push_str("  development_tasks: (none)\n");
+            } else {
+                out.push_str("  development_tasks:\n");
+                for task in &state.tasks {
+                    out.push_str(&format!(
+                        "    - id: {} | title: {} | status: {} | assignee: {}\n",
+                        task.id,
+                        task.title,
+                        task.status.as_str(),
+                        task.assignee.as_deref().unwrap_or("-")
+                    ));
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
 fn save_task_content(
     workspace: &Path,
     id: &str,
@@ -259,43 +461,19 @@ pub async fn start_development(
     }
     let _detail = load_requirement_detail(&workspace, &id)
         .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let feature_branch = format!("feat-{}", id);
-    let state_path = dev_state_path(&workspace, &id);
-    let state = if state_path.exists() {
-        let mut s = load_dev_state(&workspace, &id).map_err(|e| {
+    let state = ensure_development_started(&workspace, &id).map_err(|e| {
+        if e == "requirement_not_found" {
+            (
+                axum::http::StatusCode::NOT_FOUND,
+                i18n::msg(&headers, "requirement_not_found"),
+            )
+        } else {
             (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 e.to_string(),
             )
-        })?;
-        s.feature_branch = feature_branch.clone();
-        s.feature_branch_created = true;
-        s
-    } else {
-        DevStateFile {
-            requirement_id: id.clone(),
-            feature_branch: feature_branch.clone(),
-            feature_branch_created: true,
-            tasks: vec![],
-            current_task_id: None,
         }
-    };
-    save_dev_state(&workspace, &id, &state).map_err(|e| {
-        (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            e.to_string(),
-        )
     })?;
-    if let Some(main_repo) = workspace.join("repos").join("main").join("main")
-        .exists()
-        .then(|| workspace.join("repos").join("main").join("main"))
-    {
-        let result = std::process::Command::new("git")
-            .current_dir(&main_repo)
-            .args(["checkout", "-b", &feature_branch])
-            .output();
-        let _ = result;
-    }
     Ok(Json(wire_state(&state)))
 }
 
@@ -338,45 +516,33 @@ pub async fn create_task(
             i18n::msg(&headers, "feature_branch_not_created"),
         ));
     }
-    let task_num = state.tasks.len() + 1;
-    let task_id = format!("task-{task_num:03}");
-    let branch = format!("{}-{}", state.feature_branch, task_id);
-    let now = now_ms();
-    let task = DevTask {
-        id: task_id.clone(),
-        title: title.to_string(),
-        assignee: payload.assignee.filter(|s| !s.trim().is_empty()),
-        branch: branch.clone(),
-        status: DevTaskStatus::BranchCreated,
-        progress: 0,
-        created_at_ms: now,
-        updated_at_ms: now,
-    };
-    state.tasks.push(task);
-    state.current_task_id = Some(task_id.clone());
-    save_dev_state(&workspace, &id, &state).map_err(|e| {
+    let task = add_development_task(
+        &workspace,
+        &id,
+        title,
+        &format!("# {title}\n"),
+        payload.assignee.as_deref(),
+    )
+    .map_err(|e| {
+        if e == "task_title_empty" {
+            (
+                axum::http::StatusCode::BAD_REQUEST,
+                i18n::msg(&headers, "task_title_empty"),
+            )
+        } else {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                e.to_string(),
+            )
+        }
+    })?;
+    state = load_dev_state(&workspace, &id).map_err(|e| {
         (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             e.to_string(),
         )
     })?;
-    save_task_content(
-        &workspace,
-        &id,
-        &task_id,
-        &format!("# {title}\n\nBranch: `{branch}`\n"),
-    )
-    .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    if let Some(main_repo) = workspace.join("repos").join("main").join("main")
-        .exists()
-        .then(|| workspace.join("repos").join("main").join("main"))
-    {
-        let result = std::process::Command::new("git")
-            .current_dir(&main_repo)
-            .args(["checkout", "-b", &branch])
-            .output();
-        let _ = result;
-    }
+    let _ = task;
     Ok(Json(wire_state(&state)))
 }
 

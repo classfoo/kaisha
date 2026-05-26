@@ -137,23 +137,24 @@ export default function App() {
   ]
   const git = useGitWorkspace(API_BASE, locale, Boolean(workspace?.configured), refreshTick)
   const requirements = useRequirementsWorkspace(API_BASE, locale, Boolean(workspace?.configured), refreshTick)
-  const employeeTasks = useEmployeeTasks(
-    API_BASE,
-    locale,
-    Boolean(workspace?.configured),
-    selectedEmployeeId,
-    refreshTick,
-  )
-  const employeeTasksApi = React.useMemo(
-    () => createEmployeeTasksApi(API_BASE, locale),
-    [locale],
-  )
   const [employeeTasksExploring, setEmployeeTasksExploring] = React.useState(false)
   const [employeeTasksExploreError, setEmployeeTasksExploreError] = React.useState<string | null>(null)
   const [rerunningTaskId, setRerunningTaskId] = React.useState<string | null>(null)
   const [employeeTaskRerunError, setEmployeeTaskRerunError] = React.useState<string | null>(null)
   const [stoppingTaskId, setStoppingTaskId] = React.useState<string | null>(null)
   const [employeeTaskStopError, setEmployeeTaskStopError] = React.useState<string | null>(null)
+  const employeeTasks = useEmployeeTasks(
+    API_BASE,
+    locale,
+    Boolean(workspace?.configured),
+    selectedEmployeeId,
+    refreshTick,
+    employeeTasksExploring || rerunningTaskId != null || stoppingTaskId != null,
+  )
+  const employeeTasksApi = React.useMemo(
+    () => createEmployeeTasksApi(API_BASE, locale),
+    [locale],
+  )
 
   React.useEffect(() => {
     setEmployeeTasksExploreError(null)
@@ -360,7 +361,10 @@ export default function App() {
 
   React.useEffect(() => {
     window.localStorage.setItem('kaisha.locale', locale)
-  }, [locale])
+    if (workspace?.configured) {
+      void fetch(`${API_BASE}/api/health`, { headers: { 'x-lang': locale } })
+    }
+  }, [locale, workspace?.configured])
 
   React.useEffect(() => {
     // Fetch shop status on mount

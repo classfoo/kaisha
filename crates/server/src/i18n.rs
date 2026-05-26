@@ -24,6 +24,31 @@ fn parse_lang(headers: &HeaderMap) -> &'static str {
     "en"
 }
 
+pub fn resolve_lang(headers: &HeaderMap) -> &'static str {
+    parse_lang(headers)
+}
+
+pub fn agent_language_directive(lang: &str) -> String {
+    let lang = if lang.starts_with("zh") {
+        "zh"
+    } else if lang.starts_with("ja") {
+        "ja"
+    } else {
+        "en"
+    };
+    msg_by_lang(lang, "agent_language_directive")
+}
+
+pub fn msg_by_lang(lang: &str, key: &str) -> String {
+    if let Some(v) = dict(lang).get(key) {
+        return v.clone();
+    }
+    if let Some(v) = dict("en").get(key) {
+        return v.clone();
+    }
+    key.to_string()
+}
+
 fn load_dict(raw: &str) -> Dict {
     serde_json::from_str::<Dict>(raw).unwrap_or_default()
 }
@@ -89,5 +114,12 @@ mod tests {
             let text = msg(&headers, "task_not_found");
             assert_ne!(text, "task_not_found");
         }
+    }
+
+    #[test]
+    fn agent_language_directive_is_localized() {
+        assert!(agent_language_directive("zh").contains("简体中文"));
+        assert!(agent_language_directive("ja").contains("日本語"));
+        assert!(agent_language_directive("en").contains("English"));
     }
 }

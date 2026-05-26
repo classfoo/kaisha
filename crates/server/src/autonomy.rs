@@ -9,7 +9,11 @@ use crate::{
     requirement::{
         ensure_requirements_root, format_requirement_md, list_requirement_summaries,
         load_requirement_detail, phase_in_progress, RequirementMeta, RequirementPhase,
-        REQUIREMENT_FILE,
+        RequirementSummary, REQUIREMENT_FILE,
+    },
+    requirement_development::{
+        add_development_task, development_requirements_need_planning,
+        format_development_requirement_context, list_development_requirements_needing_tasks,
     },
     tasks::{
         autonomy_execute_content, autonomy_explore_content, AgentTaskRecord, CodeAgentTaskParams,
@@ -70,7 +74,8 @@ pub struct ParsedAutonomyTodo {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ParsedNewRequirement {
-    pub id: String,
+    #[serde(default)]
+    pub id: Option<String>,
     pub title: String,
     #[serde(default)]
     pub phase: Option<String>,
@@ -128,6 +133,7 @@ pub fn should_run_autonomy(
     last_autonomy_run_ms: Option<u64>,
     now_ms: u64,
     trigger: AutonomyTriggerKind,
+    development_planning_needed: bool,
 ) -> bool {
     should_start_autonomy_exploration(
         incomplete_todos,
@@ -136,6 +142,7 @@ pub fn should_run_autonomy(
         now_ms,
         trigger,
         false,
+        development_planning_needed,
     )
 }
 
@@ -146,6 +153,7 @@ pub fn should_start_autonomy_exploration(
     now_ms: u64,
     trigger: AutonomyTriggerKind,
     force: bool,
+    development_planning_needed: bool,
 ) -> bool {
     if employee_busy {
         return false;
@@ -161,7 +169,7 @@ pub fn should_start_autonomy_exploration(
             true
         }
         AutonomyTriggerKind::Scheduled => {
-            if incomplete_todos > 0 {
+            if incomplete_todos > 0 && !development_planning_needed {
                 return false;
             }
             if let Some(last) = last_autonomy_run_ms {
@@ -184,18 +192,55 @@ fn now_ms() -> u64 {
 }
 
 pub fn parse_autonomy_plan_output(output: &str) -> Option<ParsedAutonomyPlan> {
-    for line in output.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('{') {
-            if let Ok(plan) = serde_json::from_str::<ParsedAutonomyPlan>(trimmed) {
+    let candidates = autonomy_plan_json_candidates(output);
+    for candidate in candidates {
+        if let Ok(plan) = serde_json::from_str::<ParsedAutonomyPlan>(&candidate) {
+            if !plan.todos.is_empty() || !plan.new_requirements.is_empty() {
                 return Some(plan);
             }
         }
     }
-    if let Ok(plan) = serde_json::from_str::<ParsedAutonomyPlan>(output.trim()) {
-        return Some(plan);
-    }
     None
+}
+
+fn autonomy_plan_json_candidates(output: &str) -> Vec<String> {
+    let mut candidates = Vec::new();
+    let trimmed = output.trim();
+    if trimmed.starts_with('{') {
+        candidates.push(trimmed.to_string());
+    }
+    for line in output.lines() {
+        let line = line.trim();
+        if line.starts_with('{') {
+            candidates.push(line.to_string());
+        }
+    }
+    let mut rest = output;
+    while let Some(start) = rest.find("```") {
+        let after_fence = &rest[start + 3..];
+        let body = after_fence
+            .strip_prefix("json")
+            .or_else(|| after_fence.strip_prefix("JSON"))
+            .unwrap_or(after_fence);
+        if let Some(end) = body.find("```") {
+            let block = body[..end].trim();
+            if block.starts_with('{') {
+                candidates.push(block.to_string());
+            }
+            rest = &body[end + 3..];
+        } else {
+            break;
+        }
+    }
+    candidates
+}
+
+pub fn has_development_phase_requirements(
+    summaries: &[RequirementSummary],
+) -> bool {
+    summaries
+        .iter()
+        .any(|item| item.phase == RequirementPhase::Development)
 }
 
 fn format_requirement_context(
@@ -220,10 +265,25 @@ fn format_requirement_context(
         }
         let phase = item.phase.as_str();
         let duty = duty_for_phase(&rules, &role_key, phase);
+        if item.phase == RequirementPhase::Development {
+            out.push_str(&format_development_requirement_context(workspace, item)?);
+            out.push_str(&format!("  role_duty: {duty}\n\n"));
+            continue;
+        }
         out.push_str(&format!(
             "- id: {}\n  title: {}\n  phase: {}\n  role_duty: {}\n  file: requirements/{}/{}\n",
             item.id, item.title, phase, duty, item.id, REQUIREMENT_FILE
         ));
+        if let Ok(detail) = load_requirement_detail(workspace, &item.id) {
+            let excerpt: String = detail.content.chars().take(480).collect();
+            if !excerpt.trim().is_empty() {
+                out.push_str("  content_excerpt: |\n");
+                for line in excerpt.lines() {
+                    out.push_str(&format!("    {line}\n"));
+                }
+            }
+        }
+        out.push('\n');
     }
     Ok(out)
 }
@@ -264,8 +324,21 @@ fn build_explore_messages(
     let requirement_ctx = format_requirement_context(workspace, employee)?;
     let git_ctx = format_git_context(workspace)?;
     let mode_instructions = match mode {
+        ExplorationMode::RequirementPlanning if has_development_phase_requirements(
+            &list_requirement_summaries(workspace)?,
+        ) => {
+            r#"Requirements in the `development` phase need implementation breakdown now.
+
+Rules:
+1. Read each development-phase requirement's content excerpt and existing development tasks.
+2. Break the requirement into concrete implementation todos for this employee's role duty.
+3. Every todo MUST include `requirement_id` and `requirement_phase: "development"`.
+4. Each todo becomes both an employee todo and a requirement development task.
+5. Prefer 2-5 focused tasks that can be executed in separate sessions.
+6. Do not duplicate todos already listed in the employee todo file or development task list."#
+        }
         ExplorationMode::RequirementPlanning => {
-            r#"The employee has no incomplete todos. Review in-progress requirements and create actionable todos aligned with each requirement's phase and the employee's role duty.
+            r#"Review in-progress requirements and create actionable todos aligned with each requirement's phase and the employee's role duty.
 
 Rules:
 1. Prefer updating work on existing in-progress requirements.
@@ -402,6 +475,71 @@ fn parse_requirement_phase(raw: &str) -> RequirementPhase {
     }
 }
 
+fn sync_todo_to_development_task(
+    workspace: &Path,
+    employee_id: &str,
+    todo: &ParsedAutonomyTodo,
+) -> anyhow::Result<bool> {
+    let Some(requirement_id) = todo
+        .requirement_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(false);
+    };
+    let detail = load_requirement_detail(workspace, requirement_id)?;
+    let targets_development = detail.phase == RequirementPhase::Development
+        || todo
+            .requirement_phase
+            .as_deref()
+            .map(|phase| phase.eq_ignore_ascii_case("development"))
+            .unwrap_or(false);
+    if !targets_development {
+        return Ok(false);
+    }
+    add_development_task(
+        workspace,
+        requirement_id,
+        &todo.title,
+        &todo.description,
+        Some(employee_id),
+    )
+    .map_err(|err| anyhow::anyhow!(err))?;
+    Ok(true)
+}
+
+fn seed_development_tasks_from_requirements(
+    workspace: &Path,
+    employee_id: &str,
+) -> anyhow::Result<usize> {
+    let mut added = 0;
+    for item in list_development_requirements_needing_tasks(workspace)? {
+        let detail = load_requirement_detail(workspace, &item.id)?;
+        let title = format!("Implement {}", detail.title);
+        let description = detail.content.chars().take(800).collect::<String>();
+        add_todo(
+            workspace,
+            employee_id,
+            &title,
+            &description,
+            TodoSource::Requirement,
+            Some(&item.id),
+            Some("development"),
+        )?;
+        add_development_task(
+            workspace,
+            &item.id,
+            &title,
+            &description,
+            Some(employee_id),
+        )
+        .map_err(|err| anyhow::anyhow!(err))?;
+        added += 1;
+    }
+    Ok(added)
+}
+
 pub fn apply_autonomy_plan(
     workspace: &Path,
     employee_id: &str,
@@ -414,7 +552,7 @@ pub fn apply_autonomy_plan(
     };
     let req_root = ensure_requirements_root(workspace)?;
     for req in &plan.new_requirements {
-        let id = req.id.trim();
+        let id = req.id.as_deref().unwrap_or("").trim();
         if id.is_empty() {
             continue;
         }
@@ -454,6 +592,7 @@ pub fn apply_autonomy_plan(
             todo.requirement_id.as_deref(),
             todo.requirement_phase.as_deref(),
         )?;
+        let _ = sync_todo_to_development_task(workspace, employee_id, todo)?;
         added += 1;
     }
     Ok(added)
@@ -471,6 +610,7 @@ pub fn run_autonomy_exploration(
     let todos = load_todos(workspace, &employee.id)?;
     let tasks = TaskStore::new(workspace).list()?;
     let busy = is_employee_busy(&tasks, &employee.id);
+    let development_planning_needed = development_requirements_need_planning(workspace);
     if !should_start_autonomy_exploration(
         count_incomplete_todos(&todos),
         busy,
@@ -478,6 +618,7 @@ pub fn run_autonomy_exploration(
         now_ms(),
         trigger,
         force,
+        development_planning_needed,
     ) {
         return Ok(());
     }
@@ -506,8 +647,14 @@ pub fn run_autonomy_exploration(
     file.last_autonomy_run_ms = Some(now_ms());
 
     if result.exit_code == 0 {
+        let mut added = 0;
         if let Some(plan) = parse_autonomy_plan_output(&result.output) {
-            apply_autonomy_plan(workspace, &employee.id, mode, &plan)?;
+            added = apply_autonomy_plan(workspace, &employee.id, mode, &plan)?;
+            file = load_todos(workspace, &employee.id)?;
+            file.last_autonomy_run_ms = Some(now_ms());
+        }
+        if added == 0 && development_planning_needed {
+            let _ = seed_development_tasks_from_requirements(workspace, &employee.id)?;
             file = load_todos(workspace, &employee.id)?;
             file.last_autonomy_run_ms = Some(now_ms());
         }
@@ -582,6 +729,7 @@ pub fn process_employee_autonomy(
         return Ok(());
     }
 
+    let development_planning_needed = development_requirements_need_planning(workspace);
     if matches!(trigger, AutonomyTriggerKind::TaskCompleted | AutonomyTriggerKind::Manual) {
         if should_run_autonomy(
             count_incomplete_todos(&file),
@@ -589,6 +737,7 @@ pub fn process_employee_autonomy(
             file.last_autonomy_run_ms,
             now_ms(),
             trigger,
+            development_planning_needed,
         ) {
             run_autonomy_exploration(workspace, tools, employee, trigger, false)?;
         }
@@ -596,6 +745,7 @@ pub fn process_employee_autonomy(
 
     let file = load_todos(workspace, &employee.id)?;
     let incomplete = count_incomplete_todos(&file);
+    let development_planning_needed = development_requirements_need_planning(workspace);
     if should_execute_next_todo(incomplete, false) {
         execute_next_todo(workspace, tools, employee)?;
         return Ok(());
@@ -608,6 +758,7 @@ pub fn process_employee_autonomy(
             file.last_autonomy_run_ms,
             now_ms(),
             trigger,
+            development_planning_needed,
         )
     {
         run_autonomy_exploration(workspace, tools, employee, trigger, false)?;
@@ -929,7 +1080,8 @@ mod tests {
             false,
             None,
             100_000,
-            AutonomyTriggerKind::Scheduled
+            AutonomyTriggerKind::Scheduled,
+            false,
         ));
     }
 
@@ -940,7 +1092,20 @@ mod tests {
             false,
             None,
             100_000,
-            AutonomyTriggerKind::Scheduled
+            AutonomyTriggerKind::Scheduled,
+            false,
+        ));
+    }
+
+    #[test]
+    fn scheduled_autonomy_runs_when_development_planning_needed() {
+        assert!(should_run_autonomy(
+            2,
+            false,
+            None,
+            100_000,
+            AutonomyTriggerKind::Scheduled,
+            true,
         ));
     }
 
@@ -951,7 +1116,8 @@ mod tests {
             false,
             Some(99_000),
             105_000,
-            AutonomyTriggerKind::TaskCompleted
+            AutonomyTriggerKind::TaskCompleted,
+            false,
         ));
     }
 
@@ -974,6 +1140,73 @@ mod tests {
     }
 
     #[test]
+    fn parse_autonomy_plan_from_json_codeblock() {
+        let output = r#"Here is the plan:
+```json
+{"mode":"requirement_planning","todos":[{"title":"Build API","description":"Add endpoints","requirement_id":"auth","requirement_phase":"development"}],"new_requirements":[]}
+```"#;
+        let plan = parse_autonomy_plan_output(output).expect("plan");
+        assert_eq!(plan.todos.len(), 1);
+        assert_eq!(plan.todos[0].requirement_id.as_deref(), Some("auth"));
+    }
+
+    #[test]
+    fn apply_autonomy_plan_creates_development_tasks() {
+        use crate::requirement::{format_requirement_md, RequirementMeta, REQUIREMENT_FILE};
+
+        let workspace = std::env::temp_dir().join(format!(
+            "kaisha-autonomy-dev-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let employee_dir = crate::employee::employee_root(&workspace).join("dev1");
+        std::fs::create_dir_all(&employee_dir).unwrap();
+        let req_dir = ensure_requirements_root(&workspace).unwrap().join("auth");
+        std::fs::create_dir_all(&req_dir).unwrap();
+        std::fs::write(
+            req_dir.join(REQUIREMENT_FILE),
+            format_requirement_md(
+                &RequirementMeta {
+                    id: "auth".into(),
+                    title: "User auth".into(),
+                    phase: RequirementPhase::Development,
+                    confirm_status: None,
+                    created_at_ms: 1,
+                    updated_at_ms: 2,
+                },
+                "## Scope\nImplement login.",
+            ),
+        )
+        .unwrap();
+        let plan = ParsedAutonomyPlan {
+            _mode: Some("requirement_planning".into()),
+            todos: vec![ParsedAutonomyTodo {
+                title: "Implement login API".into(),
+                description: "Add login endpoint".into(),
+                requirement_id: Some("auth".into()),
+                requirement_phase: Some("development".into()),
+            }],
+            new_requirements: vec![],
+        };
+        let added = apply_autonomy_plan(
+            &workspace,
+            "dev1",
+            ExplorationMode::RequirementPlanning,
+            &plan,
+        )
+        .unwrap();
+        assert_eq!(added, 1);
+        let dev_state = crate::requirement_development::try_load_dev_state(&workspace, "auth")
+            .expect("dev state");
+        assert_eq!(dev_state.tasks.len(), 1);
+        assert_eq!(dev_state.tasks[0].title, "Implement login API");
+        assert_eq!(dev_state.tasks[0].assignee.as_deref(), Some("dev1"));
+        let _ = std::fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
     fn apply_autonomy_plan_adds_todos_and_requirements() {
         let workspace = std::env::temp_dir().join(format!(
             "kaisha-autonomy-apply-{}",
@@ -993,7 +1226,7 @@ mod tests {
                 requirement_phase: None,
             }],
             new_requirements: vec![ParsedNewRequirement {
-                id: "ux-nav-contrast".into(),
+                id: Some("ux-nav-contrast".into()),
                 title: "Improve nav contrast".into(),
                 phase: Some("collection".into()),
                 content: Some("## Problem\nLow contrast.".into()),
@@ -1026,6 +1259,7 @@ mod tests {
             now,
             AutonomyTriggerKind::Manual,
             false,
+            false,
         ));
         assert!(should_start_autonomy_exploration(
             0,
@@ -1034,6 +1268,7 @@ mod tests {
             now,
             AutonomyTriggerKind::Manual,
             true,
+            false,
         ));
     }
 }

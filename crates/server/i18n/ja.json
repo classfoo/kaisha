@@ -59,5 +59,6 @@
   "task_cannot_rerun": "保留中または実行中のタスクは再実行できません",
   "employee_busy_cannot_rerun": "従業員は別のタスクを実行中のため、このタスクを再実行できません",
   "task_cannot_stop": "このタスクは実行中ではないため停止できません",
-  "task_stop_error": "タスクの停止に失敗しました"
+  "task_stop_error": "タスクの停止に失敗しました",
+  "agent_language_directive": "言語ポリシー：常に日本語で回答してください。ユーザー向けの説明、要約、自然言語出力、ToDo タイトルはすべて日本語で記述してください。JSON キーと技術識別子は変更しないでください。"
 }

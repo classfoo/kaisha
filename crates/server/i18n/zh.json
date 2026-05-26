@@ -59,5 +59,6 @@
   "task_cannot_rerun": "待处理或进行中的任务无法重跑",
   "employee_busy_cannot_rerun": "员工正在执行其他任务，无法重跑此任务",
   "task_cannot_stop": "该任务未在运行，无法停止",
-  "task_stop_error": "停止任务失败"
+  "task_stop_error": "停止任务失败",
+  "agent_language_directive": "语言策略：始终使用简体中文回复。所有面向用户的说明、总结、自然语言输出以及待办标题必须使用简体中文。JSON 键名和技术标识符保持不变。"
 }

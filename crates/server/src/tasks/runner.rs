@@ -92,10 +92,13 @@ impl TaskRunner {
         params: &CodeAgentTaskParams,
         task: &mut AgentTaskRecord,
     ) -> anyhow::Result<(ToolInstance, ToolExecutionResult)> {
+        let lang = crate::agent_locale::resolve_lang_for_workspace(self.store.workspace());
+        let messages =
+            crate::agent_locale::ensure_language_system_message(params.messages.clone(), lang);
         let runtime = task_runtime_handle();
         match tools.execute_code_chat_for_task(
             &params.workdir,
-            &params.messages,
+            &messages,
             &task.id,
             runtime.as_ref(),
         ) {
@@ -318,8 +321,12 @@ impl TaskRunner {
         task.mark_running(started);
         self.store.save(&task)?;
 
+        let lang = crate::agent_locale::resolve_lang_for_workspace(self.store.workspace());
+        let messages =
+            crate::agent_locale::ensure_language_system_message(params.messages.clone(), lang);
+
         match tools
-            .execute_code_chat_streaming(&params.workdir, &params.messages, delta_tx)
+            .execute_code_chat_streaming(&params.workdir, &messages, delta_tx)
             .await
         {
             Ok((instance, result)) => {

@@ -2,6 +2,7 @@ mod employee;
 mod employee_chat;
 mod employee_requirement_agent;
 mod employee_todo;
+mod agent_locale;
 mod autonomy;
 mod autonomy_trigger;
 mod git;
@@ -18,6 +19,8 @@ use application::HealthService;
 use axum::{
     extract::{Path as AxumPath, State},
     http::HeaderMap,
+    middleware::{self, Next},
+    response::Response,
     routing::{get, post},
     Json, Router,
 };
@@ -521,6 +524,26 @@ async fn upsert_settings_item(
     }))
 }
 
+async fn sync_workspace_locale_middleware(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    request: axum::http::Request<axum::body::Body>,
+    next: Next,
+) -> Response {
+    if headers.get("x-lang").is_some() {
+        if let Some(workspace) = state
+            .workspace
+            .read()
+            .expect("workspace lock poisoned")
+            .path
+            .clone()
+        {
+            agent_locale::sync_lang_from_headers(&headers, &workspace);
+        }
+    }
+    next.run(request).await
+}
+
 pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow::Result<()> {
     if let Some(workspace) = workspace_init.path.as_deref() {
         employee::ensure_default_employee(workspace)?;
@@ -533,6 +556,33 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any);
+
+    let workspace = Arc::new(RwLock::new(WorkspaceState {
+        source: workspace_init.source,
+        path: workspace_init.path.clone(),
+        config_file: workspace_init.config_file,
+    }));
+    let settings = Arc::new(RwLock::new(settings_state));
+    let tools = Arc::new(RwLock::new(tools_manager));
+    let shop_status_value = if let Some(wp) = &workspace_init.path {
+        shop_status::load_shop_status(wp).unwrap_or_default()
+    } else {
+        shop_status::ShopStatus::default()
+    };
+    let shop_status = Arc::new(RwLock::new(shop_status_value));
+    let coordinator = Arc::new(autonomy::AutonomyCoordinator::new(
+        workspace.clone(),
+        tools.clone(),
+    ));
+    tokio::spawn(coordinator.clone().run_loop());
+    let app_state = AppState {
+        health: HealthService,
+        workspace,
+        settings,
+        tools,
+        autonomy: Some(coordinator),
+        shop_status,
+    };
 
     let app = Router::new()
         .route("/api/health", get(health))
@@ -679,34 +729,11 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
         .route("/api/shop/status", get(get_shop_status))
         .route("/api/shop/toggle", post(toggle_shop_status))
         .layer(cors)
-        .with_state({
-            let workspace = Arc::new(RwLock::new(WorkspaceState {
-                source: workspace_init.source,
-                path: workspace_init.path.clone(),
-                config_file: workspace_init.config_file,
-            }));
-            let settings = Arc::new(RwLock::new(settings_state));
-            let tools = Arc::new(RwLock::new(tools_manager));
-            let shop_status_value = if let Some(wp) = &workspace_init.path {
-                shop_status::load_shop_status(wp).unwrap_or_default()
-            } else {
-                shop_status::ShopStatus::default()
-            };
-            let shop_status = Arc::new(RwLock::new(shop_status_value));
-            let coordinator = Arc::new(autonomy::AutonomyCoordinator::new(
-                workspace.clone(),
-                tools.clone(),
-            ));
-            tokio::spawn(coordinator.clone().run_loop());
-            AppState {
-                health: HealthService,
-                workspace,
-                settings,
-                tools,
-                autonomy: Some(coordinator),
-                shop_status,
-            }
-        });
+        .layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            sync_workspace_locale_middleware,
+        ))
+        .with_state(app_state);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!("HTTP API listening on {}", addr);
