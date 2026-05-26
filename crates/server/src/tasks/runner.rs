@@ -379,12 +379,22 @@ pub fn review_pipeline_content(requirement_id: &str) -> String {
     format!("Run requirement review pipeline for `{requirement_id}`")
 }
 
-pub fn autonomy_explore_content(employee_id: &str, mode: &str) -> String {
-    format!("Autonomy exploration for employee `{employee_id}` ({mode})")
+pub fn autonomy_explore_content(workspace: &Path, employee_id: &str, mode_label: &str) -> String {
+    let lang = crate::agent_locale::resolve_lang_for_workspace(workspace);
+    crate::i18n::format_msg(
+        lang,
+        "task_content_autonomy_explore",
+        &[("employee_id", employee_id), ("mode", mode_label)],
+    )
 }
 
-pub fn autonomy_execute_content(employee_id: &str, todo_title: &str) -> String {
-    format!("Execute todo `{todo_title}` for employee `{employee_id}`")
+pub fn autonomy_execute_content(workspace: &Path, employee_id: &str, todo_title: &str) -> String {
+    let lang = crate::agent_locale::resolve_lang_for_workspace(workspace);
+    crate::i18n::format_msg(
+        lang,
+        "task_content_autonomy_execute",
+        &[("employee_id", employee_id), ("todo_title", todo_title)],
+    )
 }
 
 pub fn review_context(requirement_id: &str) -> serde_json::Value {
@@ -450,6 +460,17 @@ mod tests {
             .expect("clock")
             .as_nanos();
         std::env::temp_dir().join(format!("kaisha-task-runner-{unique}"))
+    }
+
+    #[test]
+    fn autonomy_explore_content_uses_workspace_locale() {
+        let workspace = temp_workspace();
+        fs::create_dir_all(&workspace).unwrap();
+        crate::agent_locale::save_workspace_lang(&workspace, "zh").unwrap();
+        let content = autonomy_explore_content(&workspace, "alice", "需求规划");
+        assert!(content.contains("alice"));
+        assert!(content.contains("自主探索"));
+        let _ = fs::remove_dir_all(workspace);
     }
 
     #[test]

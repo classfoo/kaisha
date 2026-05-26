@@ -155,7 +155,7 @@ pub fn should_start_autonomy_exploration(
     force: bool,
     development_planning_needed: bool,
 ) -> bool {
-    if employee_busy {
+    if employee_busy && !force {
         return false;
     }
     if force {
@@ -316,50 +316,43 @@ fn format_git_context(workspace: &Path) -> anyhow::Result<String> {
     Ok(out)
 }
 
+fn exploration_mode_label(workspace: &Path, mode: ExplorationMode) -> String {
+    let lang = crate::agent_locale::resolve_lang_for_workspace(workspace);
+    let key = match mode {
+        ExplorationMode::RequirementPlanning => "autonomy_explore_mode_label_requirement_planning",
+        ExplorationMode::GitExploration => "autonomy_explore_mode_label_git_exploration",
+    };
+    crate::i18n::msg_by_lang(lang, key)
+}
+
 fn build_explore_messages(
     workspace: &Path,
     employee: &EmployeeRecord,
     mode: ExplorationMode,
 ) -> anyhow::Result<Vec<ToolChatMessage>> {
+    let lang = crate::agent_locale::resolve_lang_for_workspace(workspace);
     let requirement_ctx = format_requirement_context(workspace, employee)?;
     let git_ctx = format_git_context(workspace)?;
     let mode_instructions = match mode {
-        ExplorationMode::RequirementPlanning if has_development_phase_requirements(
-            &list_requirement_summaries(workspace)?,
-        ) => {
-            r#"Requirements in the `development` phase need implementation breakdown now.
-
-Rules:
-1. Read each development-phase requirement's content excerpt and existing development tasks.
-2. Break the requirement into concrete implementation todos for this employee's role duty.
-3. Every todo MUST include `requirement_id` and `requirement_phase: "development"`.
-4. Each todo becomes both an employee todo and a requirement development task.
-5. Prefer 2-5 focused tasks that can be executed in separate sessions.
-6. Do not duplicate todos already listed in the employee todo file or development task list."#
+        ExplorationMode::RequirementPlanning
+            if has_development_phase_requirements(&list_requirement_summaries(workspace)?) =>
+        {
+            crate::i18n::msg_by_lang(lang, "autonomy_explore_instructions_development")
         }
         ExplorationMode::RequirementPlanning => {
-            r#"Review in-progress requirements and create actionable todos aligned with each requirement's phase and the employee's role duty.
-
-Rules:
-1. Prefer updating work on existing in-progress requirements.
-2. Each todo must be concrete and executable in one focused session.
-3. Link todos to requirement_id and requirement_phase when applicable.
-4. Do not duplicate todos already listed in the employee todo file."#
+            crate::i18n::msg_by_lang(lang, "autonomy_explore_instructions_requirement_planning")
         }
         ExplorationMode::GitExploration => {
-            r#"No in-progress requirements are available for this employee to join. Browse the product git repository, analyze UX and technical issues, and propose improvement work.
-
-Rules:
-1. Inspect code, docs, and recent structure in the repo working directory when available.
-2. You may propose new experience requirements or technical refactor requirements.
-3. Put executable todos in `todos` and new requirement proposals in `new_requirements`.
-4. New requirements must use phase `collection` unless clearly ready for review."#
+            crate::i18n::msg_by_lang(lang, "autonomy_explore_instructions_git")
         }
     };
 
     let existing = load_todos(workspace, &employee.id)?;
     let existing_todos = if existing.items.is_empty() {
-        "(none)\n".to_string()
+        format!(
+            "{}\n",
+            crate::i18n::msg_by_lang(lang, "autonomy_explore_existing_todos_none")
+        )
     } else {
         existing
             .items
@@ -378,40 +371,15 @@ Rules:
     };
 
     let system = format!(
-        r#"You are an employee autonomy planner for a software team.
-
-{mode_instructions}
-
-Respond with ONLY one JSON object:
-{{
-  "mode": "requirement_planning" | "git_exploration",
-  "todos": [
-    {{
-      "title": "short actionable title",
-      "description": "what to do and expected outcome",
-      "requirement_id": "optional",
-      "requirement_phase": "optional"
-    }}
-  ],
-  "new_requirements": [
-    {{
-      "id": "kebab-case-id",
-      "title": "requirement title",
-      "phase": "collection",
-      "content": "markdown body"
-    }}
-  ]
-}}
-
-## Requirement context
-{requirement_ctx}
-
-## Git context
-{git_ctx}
-
-## Existing employee todos
-{existing_todos}
-"#
+        "{}\n\n{}\n\n{}\n\n{}\n{}\n\n{}\n{}\n\n{}\n{existing_todos}",
+        crate::i18n::msg_by_lang(lang, "autonomy_explore_planner_intro"),
+        mode_instructions,
+        crate::i18n::msg_by_lang(lang, "autonomy_explore_json_schema"),
+        crate::i18n::msg_by_lang(lang, "autonomy_explore_section_requirement_context"),
+        requirement_ctx,
+        crate::i18n::msg_by_lang(lang, "autonomy_explore_section_git_context"),
+        git_ctx,
+        crate::i18n::msg_by_lang(lang, "autonomy_explore_section_existing_todos"),
     );
 
     Ok(vec![
@@ -421,7 +389,7 @@ Respond with ONLY one JSON object:
         },
         ToolChatMessage {
             role: "user".into(),
-            content: "Plan the next actionable todos for this employee now.".into(),
+            content: crate::i18n::msg_by_lang(lang, "autonomy_explore_user_prompt"),
         },
     ])
 }
@@ -431,35 +399,52 @@ fn build_execute_messages(
     employee: &EmployeeRecord,
     todo: &crate::employee_todo::EmployeeTodoItem,
 ) -> anyhow::Result<Vec<ToolChatMessage>> {
-    let mut ctx = format!(
-        "Employee: {} ({})\nTodo: {}\nDescription: {}\n",
-        employee.name, employee.role, todo.title, todo.description
+    let lang = crate::agent_locale::resolve_lang_for_workspace(workspace);
+    let mut ctx = crate::i18n::format_msg(
+        lang,
+        "autonomy_execute_context_header",
+        &[
+            ("name", &employee.name),
+            ("role", &employee.role),
+            ("title", &todo.title),
+            ("description", &todo.description),
+        ],
     );
     if let Some(ref req_id) = todo.requirement_id {
-        ctx.push_str(&format!("Requirement id: {req_id}\n"));
+        ctx.push_str(&crate::i18n::format_msg(
+            lang,
+            "autonomy_execute_requirement_id",
+            &[("requirement_id", req_id)],
+        ));
         if let Ok(detail) = load_requirement_detail(workspace, req_id) {
             let excerpt: String = detail.content.chars().take(1200).collect();
-            ctx.push_str(&format!("\nRequirement excerpt:\n{excerpt}\n"));
+            ctx.push_str(&crate::i18n::format_msg(
+                lang,
+                "autonomy_execute_requirement_excerpt",
+                &[("excerpt", &excerpt)],
+            ));
         }
     }
     Ok(vec![
         ToolChatMessage {
             role: "system".into(),
-            content: format!(
-                r#"You are {name}, a {role} executing one assigned todo.
-
-Working directory is the workspace root. Use file tools and git as needed.
-When finished, summarize what you changed or learned.
-
-{ctx}"#,
-                name = employee.name,
-                role = employee.role,
-                ctx = ctx
+            content: crate::i18n::format_msg(
+                lang,
+                "autonomy_execute_system",
+                &[
+                    ("name", &employee.name),
+                    ("role", &employee.role),
+                    ("ctx", &ctx),
+                ],
             ),
         },
         ToolChatMessage {
             role: "user".into(),
-            content: format!("Execute this todo now: {}", todo.title),
+            content: crate::i18n::format_msg(
+                lang,
+                "autonomy_execute_user_prompt",
+                &[("title", &todo.title)],
+            ),
         },
     ])
 }
@@ -513,10 +498,15 @@ fn seed_development_tasks_from_requirements(
     workspace: &Path,
     employee_id: &str,
 ) -> anyhow::Result<usize> {
+    let lang = crate::agent_locale::resolve_lang_for_workspace(workspace);
     let mut added = 0;
     for item in list_development_requirements_needing_tasks(workspace)? {
         let detail = load_requirement_detail(workspace, &item.id)?;
-        let title = format!("Implement {}", detail.title);
+        let title = crate::i18n::format_msg(
+            lang,
+            "autonomy_seed_implement_requirement",
+            &[("title", &detail.title)],
+        );
         let description = detail.content.chars().take(800).collect::<String>();
         add_todo(
             workspace,
@@ -630,7 +620,11 @@ pub fn run_autonomy_exploration(
         tools,
         CodeAgentTaskParams {
             kind: TaskKind::AutonomyExplore,
-            content: autonomy_explore_content(&employee.id, &format!("{mode:?}")),
+            content: autonomy_explore_content(
+                workspace,
+                &employee.id,
+                &exploration_mode_label(workspace, mode),
+            ),
             workdir: workdir.clone(),
             messages,
             executor_id: Some(employee.id.clone()),
@@ -686,7 +680,7 @@ pub fn execute_next_todo(
         tools,
         CodeAgentTaskParams {
             kind: TaskKind::AutonomyExecute,
-            content: autonomy_execute_content(&employee.id, &todo.title),
+            content: autonomy_execute_content(workspace, &employee.id, &todo.title),
             workdir: workspace.to_path_buf(),
             messages,
             executor_id: Some(employee.id.clone()),
@@ -986,18 +980,6 @@ pub async fn run_employee_autonomy_explore_handler(
             crate::i18n::msg(&headers, "employee_not_found"),
         ));
     };
-    let tasks = TaskStore::new(&workspace).list().map_err(|e| {
-        (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            e.to_string(),
-        )
-    })?;
-    if is_employee_busy(&tasks, &employee_id) {
-        return Err((
-            axum::http::StatusCode::CONFLICT,
-            crate::i18n::msg(&headers, "employee_busy_cannot_explore"),
-        ));
-    }
     let tools = state.tools.read().expect("tools lock poisoned").clone();
     let workspace_for_load = workspace.clone();
     tokio::task::spawn_blocking(move || {
@@ -1268,6 +1250,28 @@ mod tests {
             now,
             AutonomyTriggerKind::Manual,
             true,
+            false,
+        ));
+    }
+
+    #[test]
+    fn forced_manual_exploration_runs_when_employee_busy() {
+        assert!(should_start_autonomy_exploration(
+            0,
+            true,
+            None,
+            10_000,
+            AutonomyTriggerKind::Manual,
+            true,
+            false,
+        ));
+        assert!(!should_start_autonomy_exploration(
+            0,
+            true,
+            None,
+            10_000,
+            AutonomyTriggerKind::Scheduled,
+            false,
             false,
         ));
     }

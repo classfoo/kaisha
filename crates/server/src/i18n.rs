@@ -49,6 +49,14 @@ pub fn msg_by_lang(lang: &str, key: &str) -> String {
     key.to_string()
 }
 
+pub fn format_msg(lang: &str, key: &str, vars: &[(&str, &str)]) -> String {
+    let mut text = msg_by_lang(lang, key);
+    for (name, value) in vars {
+        text = text.replace(&format!("{{{name}}}"), value);
+    }
+    text
+}
+
 fn load_dict(raw: &str) -> Dict {
     serde_json::from_str::<Dict>(raw).unwrap_or_default()
 }

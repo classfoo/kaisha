@@ -52,10 +52,6 @@ function formatTaskTime(ms: number, locale: string): string {
   }
 }
 
-function isEmployeeBusy(tasks: AgentTaskRecord[]): boolean {
-  return tasks.some((task) => task.status === 'pending' || task.status === 'running')
-}
-
 function canRerunTask(task: AgentTaskRecord): boolean {
   return (
     task.status === 'pending' ||
@@ -96,7 +92,7 @@ export function EmployeeTaskList({
   const [detail, setDetail] = React.useState<AgentTaskDetail | null>(null)
   const [detailLoading, setDetailLoading] = React.useState(false)
   const [detailError, setDetailError] = React.useState<string | null>(null)
-  const exploreDisabled = exploring || loading || isEmployeeBusy(tasks)
+  const exploreDisabled = false
 
   const closeDetail = React.useCallback(() => {
     setDetailTaskId(null)
