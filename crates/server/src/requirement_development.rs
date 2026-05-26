@@ -1,4 +1,6 @@
 use crate::{
+    autonomy_trigger::mark_employee_for_autonomy,
+    employee::list_employee_records,
     i18n,
     requirement::{
         load_requirement_detail, list_requirement_summaries, normalize_requirement_id,
@@ -161,8 +163,8 @@ pub fn requirement_needs_development_tasks(
         return Ok(false);
     }
     Ok(match try_load_dev_state(workspace, requirement_id) {
-        None => true,
-        Some(state) => state.tasks.is_empty(),
+        None => false,
+        Some(state) => state.feature_branch_created && state.tasks.is_empty(),
     })
 }
 
@@ -474,6 +476,13 @@ pub async fn start_development(
             )
         }
     })?;
+    if state.tasks.is_empty() {
+        if let Ok(employees) = list_employee_records(&workspace) {
+            for employee in employees {
+                let _ = mark_employee_for_autonomy(&workspace, &employee.id);
+            }
+        }
+    }
     Ok(Json(wire_state(&state)))
 }
 
@@ -857,6 +866,73 @@ mod tests {
         assert!(path.exists());
         let raw = fs::read_to_string(path).unwrap();
         assert!(raw.contains("# Title"));
+        let _ = fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn requirement_needs_development_tasks_only_after_start() {
+        use crate::requirement::{format_requirement_md, RequirementMeta, REQUIREMENT_FILE};
+
+        let workspace = temp_workspace();
+        let req_dir = workspace.join("requirements").join("auth");
+        fs::create_dir_all(&req_dir).unwrap();
+        fs::write(
+            req_dir.join(REQUIREMENT_FILE),
+            format_requirement_md(
+                &RequirementMeta {
+                    id: "auth".into(),
+                    title: "User auth".into(),
+                    phase: RequirementPhase::Development,
+                    confirm_status: None,
+                    created_at_ms: 1,
+                    updated_at_ms: 2,
+                },
+                "## Scope\nImplement login.",
+            ),
+        )
+        .unwrap();
+
+        assert!(!requirement_needs_development_tasks(&workspace, "auth").unwrap());
+
+        ensure_development_started(&workspace, "auth").unwrap();
+        assert!(requirement_needs_development_tasks(&workspace, "auth").unwrap());
+
+        add_development_task(&workspace, "auth", "Task one", "Do work", None).unwrap();
+        assert!(!requirement_needs_development_tasks(&workspace, "auth").unwrap());
+
+        let _ = fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn ensure_development_started_persists_state_file() {
+        use crate::requirement::{format_requirement_md, RequirementMeta, REQUIREMENT_FILE};
+
+        let workspace = temp_workspace();
+        let req_dir = workspace.join("requirements").join("auth");
+        fs::create_dir_all(&req_dir).unwrap();
+        fs::write(
+            req_dir.join(REQUIREMENT_FILE),
+            format_requirement_md(
+                &RequirementMeta {
+                    id: "auth".into(),
+                    title: "User auth".into(),
+                    phase: RequirementPhase::Development,
+                    confirm_status: None,
+                    created_at_ms: 1,
+                    updated_at_ms: 2,
+                },
+                "## Scope\nImplement login.",
+            ),
+        )
+        .unwrap();
+
+        ensure_development_started(&workspace, "auth").unwrap();
+        let path = dev_state_path(&workspace, "auth");
+        assert!(path.exists());
+        let loaded = load_dev_state(&workspace, "auth").unwrap();
+        assert!(loaded.feature_branch_created);
+        assert_eq!(loaded.feature_branch, "feat-auth");
+
         let _ = fs::remove_dir_all(&workspace);
     }
 }

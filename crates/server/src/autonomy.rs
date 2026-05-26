@@ -14,6 +14,7 @@ use crate::{
     requirement_development::{
         add_development_task, development_requirements_need_planning,
         format_development_requirement_context, list_development_requirements_needing_tasks,
+        try_load_dev_state,
     },
     tasks::{
         autonomy_execute_content, autonomy_explore_content, AgentTaskRecord, CodeAgentTaskParams,
@@ -481,6 +482,9 @@ fn sync_todo_to_development_task(
             .map(|phase| phase.eq_ignore_ascii_case("development"))
             .unwrap_or(false);
     if !targets_development {
+        return Ok(false);
+    }
+    if try_load_dev_state(workspace, requirement_id).is_none() {
         return Ok(false);
     }
     add_development_task(
@@ -1162,6 +1166,7 @@ mod tests {
             ),
         )
         .unwrap();
+        crate::requirement_development::ensure_development_started(&workspace, "auth").unwrap();
         let plan = ParsedAutonomyPlan {
             _mode: Some("requirement_planning".into()),
             todos: vec![ParsedAutonomyTodo {
@@ -1185,6 +1190,58 @@ mod tests {
         assert_eq!(dev_state.tasks.len(), 1);
         assert_eq!(dev_state.tasks[0].title, "Implement login API");
         assert_eq!(dev_state.tasks[0].assignee.as_deref(), Some("dev1"));
+        let _ = std::fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn apply_autonomy_plan_skips_development_tasks_until_started() {
+        use crate::requirement::{format_requirement_md, RequirementMeta, REQUIREMENT_FILE};
+
+        let workspace = std::env::temp_dir().join(format!(
+            "kaisha-autonomy-dev-skip-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let employee_dir = crate::employee::employee_root(&workspace).join("dev1");
+        std::fs::create_dir_all(&employee_dir).unwrap();
+        let req_dir = ensure_requirements_root(&workspace).unwrap().join("auth");
+        std::fs::create_dir_all(&req_dir).unwrap();
+        std::fs::write(
+            req_dir.join(REQUIREMENT_FILE),
+            format_requirement_md(
+                &RequirementMeta {
+                    id: "auth".into(),
+                    title: "User auth".into(),
+                    phase: RequirementPhase::Development,
+                    confirm_status: None,
+                    created_at_ms: 1,
+                    updated_at_ms: 2,
+                },
+                "## Scope\nImplement login.",
+            ),
+        )
+        .unwrap();
+        let plan = ParsedAutonomyPlan {
+            _mode: Some("requirement_planning".into()),
+            todos: vec![ParsedAutonomyTodo {
+                title: "Implement login API".into(),
+                description: "Add login endpoint".into(),
+                requirement_id: Some("auth".into()),
+                requirement_phase: Some("development".into()),
+            }],
+            new_requirements: vec![],
+        };
+        let added = apply_autonomy_plan(
+            &workspace,
+            "dev1",
+            ExplorationMode::RequirementPlanning,
+            &plan,
+        )
+        .unwrap();
+        assert_eq!(added, 1);
+        assert!(crate::requirement_development::try_load_dev_state(&workspace, "auth").is_none());
         let _ = std::fs::remove_dir_all(&workspace);
     }
 

@@ -61,14 +61,37 @@ export function useRequirementsWorkspace(
     [api],
   )
 
+  const loadDevelopment = React.useCallback(
+    async (id: string, phase: RequirementPhase) => {
+      if (phase !== 'development') {
+        setDevelopment(null)
+        setDevLoading(false)
+        return null
+      }
+      setDevLoading(true)
+      try {
+        const data = await api.getDevelopment(id)
+        setDevelopment(data)
+        return data
+      } catch (e) {
+        setDevelopment(null)
+        throw e
+      } finally {
+        setDevLoading(false)
+      }
+    },
+    [api],
+  )
+
   const loadDetail = React.useCallback(
     async (id: string) => {
       const data = await api.get(id)
       setDetail(data)
       void loadReview(id).catch(() => setReview(null))
+      void loadDevelopment(id, data.phase).catch(() => setDevelopment(null))
       return data
     },
-    [api, loadReview],
+    [api, loadReview, loadDevelopment],
   )
 
   const refresh = React.useCallback(async () => {
@@ -76,6 +99,7 @@ export function useRequirementsWorkspace(
       setItems([])
       setSelectedId(null)
       setDetail(null)
+      setDevelopment(null)
       setError(null)
       return
     }
@@ -92,11 +116,13 @@ export function useRequirementsWorkspace(
       } else {
         setSelectedId(null)
         setDetail(null)
+        setDevelopment(null)
       }
     } catch (e) {
       setItems([])
       setSelectedId(null)
       setDetail(null)
+      setDevelopment(null)
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
@@ -364,23 +390,6 @@ export function useRequirementsWorkspace(
         throw e
       } finally {
         setReconfirming(false)
-      }
-    },
-    [api],
-  )
-
-  const loadDevelopment = React.useCallback(
-    async (id: string) => {
-      setDevLoading(true)
-      try {
-        const data = await api.getDevelopment(id)
-        setDevelopment(data)
-        return data
-      } catch (e) {
-        setDevelopment(null)
-        throw e
-      } finally {
-        setDevLoading(false)
       }
     },
     [api],
