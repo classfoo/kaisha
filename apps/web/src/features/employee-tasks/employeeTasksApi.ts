@@ -15,6 +15,7 @@ export type AgentTaskKind =
   | 'review_pipeline'
   | 'autonomy_explore'
   | 'autonomy_execute'
+  | 'work_task_execute'
 
 export type AgentTaskRecord = {
   id: string

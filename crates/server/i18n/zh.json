@@ -53,6 +53,7 @@
   "review_opinion_not_participant": "该员工不在本次评审参与者列表中",
   "review_opinion_invalid_action": "无效的评审操作",
   "task_not_found": "任务不存在",
+  "work_task_not_found": "工作任务不存在",
   "autonomy_not_enabled": "员工自主性未启用",
   "todo_not_found": "待办事项不存在",
   "employee_busy_cannot_explore": "员工正在执行其他任务，无法探索",
@@ -80,5 +81,11 @@
   "autonomy_execute_context_header": "员工：{name}（{role}）\n待办：{title}\n描述：{description}\n",
   "autonomy_execute_requirement_id": "需求 ID：{requirement_id}\n",
   "autonomy_execute_requirement_excerpt": "\n需求摘要：\n{excerpt}\n",
-  "autonomy_seed_implement_requirement": "实现 {title}"
+  "autonomy_seed_implement_requirement": "实现 {title}",
+  "task_content_work_task_execute": "为员工 `{employee_id}` 执行工作任务 `{task_title}`",
+  "work_task_execute_system": "你是 {name}，担任 {role}，正在执行一项已分配的工作任务。\n\n工作目录是 workspace 根目录。按需使用文件工具和 git。\n完成后，总结你做了哪些改动或获得了哪些信息。\n\n{ctx}",
+  "work_task_execute_user_prompt": "请立即执行此工作任务：{title}",
+  "work_task_execute_context_header": "员工：{name}（{role}）\n任务：{title}\n描述：{description}\n业务类型：{biz_type}\n业务 ID：{biz_id}\n",
+  "work_task_execute_branch": "开发分支：{branch}\n",
+  "review_work_task_title": "评审 {requirement_title}（{employee_name}）"
 }

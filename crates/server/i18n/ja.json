@@ -53,6 +53,7 @@
   "review_opinion_not_participant": "この従業員はレビュー参加者ではありません",
   "review_opinion_invalid_action": "無効なレビュー操作です",
   "task_not_found": "タスクが見つかりません",
+  "work_task_not_found": "ワークタスクが見つかりません",
   "autonomy_not_enabled": "従業員の自律機能が有効になっていません",
   "todo_not_found": "ToDo項目が見つかりません",
   "employee_busy_cannot_explore": "従業員は別のタスクを実行中のため探索できません",
@@ -80,5 +81,11 @@
   "autonomy_execute_context_header": "従業員：{name}（{role}）\nToDo：{title}\n説明：{description}\n",
   "autonomy_execute_requirement_id": "要件 ID：{requirement_id}\n",
   "autonomy_execute_requirement_excerpt": "\n要件抜粋：\n{excerpt}\n",
-  "autonomy_seed_implement_requirement": "{title} を実装"
+  "autonomy_seed_implement_requirement": "{title} を実装",
+  "task_content_work_task_execute": "従業員 `{employee_id}` のワークタスク `{task_title}` を実行",
+  "work_task_execute_system": "あなたは {name}、{role} として割り当てられたワークタスクを実行しています。\n\n作業ディレクトリは workspace ルートです。必要に応じてファイルツールと git を使ってください。\n完了後、変更内容または得られた知見を要約してください。\n\n{ctx}",
+  "work_task_execute_user_prompt": "このワークタスクを今すぐ実行してください：{title}",
+  "work_task_execute_context_header": "従業員：{name}（{role}）\nタスク：{title}\n説明：{description}\n業務タイプ：{biz_type}\n業務 ID：{biz_id}\n",
+  "work_task_execute_branch": "開発ブランチ：{branch}\n",
+  "review_work_task_title": "要件 {requirement_title} を {employee_name} がレビュー"
 }

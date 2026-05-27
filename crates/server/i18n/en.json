@@ -53,6 +53,7 @@
   "review_opinion_not_participant": "This employee is not a participant in the review",
   "review_opinion_invalid_action": "Invalid review action",
   "task_not_found": "Task not found",
+  "work_task_not_found": "Work task not found",
   "autonomy_not_enabled": "Employee autonomy is not enabled",
   "todo_not_found": "Todo item not found",
   "employee_busy_cannot_explore": "Employee is busy with another task",
@@ -80,5 +81,11 @@
   "autonomy_execute_context_header": "Employee: {name} ({role})\nTodo: {title}\nDescription: {description}\n",
   "autonomy_execute_requirement_id": "Requirement id: {requirement_id}\n",
   "autonomy_execute_requirement_excerpt": "\nRequirement excerpt:\n{excerpt}\n",
-  "autonomy_seed_implement_requirement": "Implement {title}"
+  "autonomy_seed_implement_requirement": "Implement {title}",
+  "task_content_work_task_execute": "Execute work task `{task_title}` for employee `{employee_id}`",
+  "work_task_execute_system": "You are {name}, a {role} executing one assigned work task.\n\nWorking directory is the workspace root. Use file tools and git as needed.\nWhen finished, summarize what you changed or learned.\n\n{ctx}",
+  "work_task_execute_user_prompt": "Execute this work task now: {title}",
+  "work_task_execute_context_header": "Employee: {name} ({role})\nTask: {title}\nDescription: {description}\nBiz type: {biz_type}\nBiz id: {biz_id}\n",
+  "work_task_execute_branch": "Development branch: {branch}\n",
+  "review_work_task_title": "Review {requirement_title} as {employee_name}"
 }

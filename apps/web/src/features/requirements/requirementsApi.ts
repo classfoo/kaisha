@@ -29,6 +29,9 @@ export type OpinionItemStatus = 'pending' | 'in_progress' | 'revising' | 'comple
 export type OpinionUserAction = 'rerun' | 'pass' | 'fail' | 'abandon'
 
 export type ReviewOpinion = {
+  task_id: string
+  biz_type: string
+  biz_id: string
   employee_id: string
   employee_name: string
   role: string
@@ -72,6 +75,8 @@ export type DevTask = {
   progress: number
   created_at_ms: number
   updated_at_ms: number
+  biz_type: string
+  biz_id: string
 }
 
 export type RequirementDevelopment = {

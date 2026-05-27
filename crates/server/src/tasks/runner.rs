@@ -397,6 +397,19 @@ pub fn autonomy_execute_content(workspace: &Path, employee_id: &str, todo_title:
     )
 }
 
+pub fn work_task_execute_content(
+    workspace: &Path,
+    employee_id: &str,
+    task_title: &str,
+) -> String {
+    let lang = crate::agent_locale::resolve_lang_for_workspace(workspace);
+    crate::i18n::format_msg(
+        lang,
+        "task_content_work_task_execute",
+        &[("employee_id", employee_id), ("task_title", task_title)],
+    )
+}
+
 pub fn review_context(requirement_id: &str) -> serde_json::Value {
     json!({ "requirement_id": requirement_id })
 }

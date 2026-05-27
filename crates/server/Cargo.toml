@@ -7,6 +7,10 @@ edition = "2021"
 name = "kaisha-server"
 path = "src/main.rs"
 
+[[bin]]
+name = "kaisha-migrate-work-tasks"
+path = "src/bin/migrate_work_tasks.rs"
+
 [dependencies]
 anyhow = { workspace = true }
 application = { path = "../application" }

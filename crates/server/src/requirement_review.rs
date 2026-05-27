@@ -1,4 +1,5 @@
 use crate::{
+    autonomy_trigger::mark_employee_for_autonomy,
     employee::{append_employee_memory, list_employee_records, EmployeeRecord},
     i18n,
     requirement::{
@@ -11,6 +12,13 @@ use crate::{
     },
     tools::{driver::ToolChatMessage, manager::ToolManager},
     work_rules::{duty_for_phase, load_work_rules, resolve_role_key, WorkRulesFile},
+    work_task::{
+        filter_work_tasks, is_review_task,
+        list_work_tasks, review_opinion_status, review_passed, review_phase,
+        save_work_task, set_review_opinion_status, set_review_passed, set_review_phase,
+        update_work_task, BIZ_TYPE_REQUIREMENT, TASK_KIND_REVIEW,
+        WorkTask, WorkTaskFilter, WorkTaskStatus,
+    },
     AppState,
 };
 use axum::{
@@ -81,6 +89,9 @@ pub struct ReviewStateFile {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ReviewOpinionWire {
+    pub task_id: String,
+    pub biz_type: String,
+    pub biz_id: String,
     pub employee_id: String,
     pub employee_name: String,
     pub role: String,
@@ -204,6 +215,7 @@ pub fn start_review(workspace: &Path, requirement_id: &str) -> anyhow::Result<Re
     };
     fs::write(state_path(workspace, &id), serde_json::to_string_pretty(&state)?)?;
     set_requirement_phase(workspace, &id, RequirementPhase::Review)?;
+    ensure_review_work_tasks(workspace, &id, &state, &employees)?;
     Ok(state)
 }
 
@@ -393,29 +405,36 @@ fn load_opinions(
     state: &ReviewStateFile,
     employees: &[EmployeeRecord],
 ) -> Vec<ReviewOpinionWire> {
+    let _ = reconcile_review_work_tasks(workspace, requirement_id, employees);
+    let _ = ensure_review_work_tasks(workspace, requirement_id, state, employees);
     let rules = load_work_rules(workspace).ok();
     let employee_by_id: std::collections::HashMap<&str, &EmployeeRecord> =
         employees.iter().map(|e| (e.id.as_str(), e)).collect();
+    let tasks = list_review_work_tasks(workspace, requirement_id).unwrap_or_default();
 
-    state
-        .participants
-        .iter()
-        .map(|participant_id| {
-            let emp = employee_by_id.get(participant_id.as_str());
-            let employee_id = participant_id.clone();
+    tasks
+        .into_iter()
+        .filter_map(|task| {
+            let employee_id = task.assignee.clone()?;
+            let emp = employee_by_id.get(employee_id.as_str());
             let employee_name = emp
                 .map(|e| e.name.clone())
-                .unwrap_or_else(|| participant_id.clone());
+                .unwrap_or_else(|| employee_id.clone());
             let role = emp
                 .map(|e| e.role.clone())
                 .unwrap_or_else(|| "—".to_string());
             let role_key = emp
                 .and_then(|e| rules.as_ref().and_then(|r| resolve_role_key(r, &e.role)));
             let content = read_opinion_content(workspace, requirement_id, &employee_id);
-            let has_file = content.is_some();
-            let status = opinion_item_status(state, &employee_id, has_file);
-            let passed = content.as_deref().and_then(parse_opinion_passed);
-            ReviewOpinionWire {
+            let status = work_status_to_opinion(&task, state);
+            let passed = content
+                .as_deref()
+                .and_then(parse_opinion_passed)
+                .or_else(|| review_passed(&task));
+            Some(ReviewOpinionWire {
+                task_id: task.id,
+                biz_type: task.biz_type,
+                biz_id: task.biz_id,
                 employee_id,
                 employee_name,
                 role,
@@ -423,7 +442,7 @@ fn load_opinions(
                 status,
                 passed,
                 content,
-            }
+            })
         })
         .collect()
 }
@@ -736,7 +755,7 @@ pub fn apply_opinion_user_action(
     if !state.participants.iter().any(|p| p == employee_id) {
         anyhow::bail!("review_opinion_not_participant");
     }
-    if state.current_reviewer_id.is_some() {
+    if state.current_reviewer_id.is_some() || review_task_in_progress(workspace, &id) {
         anyhow::bail!("review_opinion_busy");
     }
 
@@ -752,6 +771,7 @@ pub fn apply_opinion_user_action(
             state.abandoned_participants.retain(|p| p != employee_id);
             save_state(workspace, &state)?;
             delete_opinion_file(workspace, &id, employee_id)?;
+            sync_review_work_task_pending(workspace, &id, employee_id)?;
             let workdir = requirement_workdir(workspace, &id);
             let rules = load_work_rules(workspace)?;
             let mut state = load_state(workspace, &id)?;
@@ -774,11 +794,13 @@ pub fn apply_opinion_user_action(
             state.abandoned_participants.retain(|p| p != employee_id);
             save_state(workspace, &state)?;
             write_manual_opinion(workspace, &id, employee_id, true)?;
+            sync_review_work_task_manual(workspace, &id, employee_id, true)?;
         }
         OpinionUserAction::Fail => {
             state.abandoned_participants.retain(|p| p != employee_id);
             save_state(workspace, &state)?;
             write_manual_opinion(workspace, &id, employee_id, false)?;
+            sync_review_work_task_manual(workspace, &id, employee_id, false)?;
         }
         OpinionUserAction::Abandon => {
             if !state.abandoned_participants.iter().any(|p| p == employee_id) {
@@ -786,6 +808,7 @@ pub fn apply_opinion_user_action(
             }
             save_state(workspace, &state)?;
             delete_opinion_file(workspace, &id, employee_id)?;
+            sync_review_work_task_abandoned(workspace, &id, employee_id)?;
         }
     }
 
@@ -808,6 +831,7 @@ fn run_employee_review(
     state.current_reviewer_id = Some(employee.id.clone());
     state.current_task = Some(ReviewTask::Opinion);
     save_state(workspace, state)?;
+    sync_review_work_task_running(workspace, requirement_id, &employee.id, "opinion")?;
 
     let role_key = resolve_role_key(rules, &employee.role);
     let messages = build_reviewer_messages(
@@ -831,10 +855,12 @@ fn run_employee_review(
         },
     )?;
     let opinion = ensure_opinion_file(workspace, requirement_id, &employee.id, &result.output)?;
+    let passed = parse_opinion_passed(&opinion);
 
     state.current_reviewer_id = None;
     state.current_task = None;
     save_state(workspace, state)?;
+    sync_review_work_task_completed(workspace, requirement_id, &employee.id, passed)?;
 
     let section = format!("Review opinion — {}", now_ms());
     append_employee_memory(
@@ -862,6 +888,7 @@ fn run_employee_revision(
     state.current_reviewer_id = Some(employee.id.clone());
     state.current_task = Some(ReviewTask::Revise);
     save_state(workspace, state)?;
+    sync_review_work_task_running(workspace, requirement_id, &employee.id, "revise")?;
 
     let role_key = resolve_role_key(rules, &employee.role);
     let messages = build_revision_messages(
@@ -885,10 +912,14 @@ fn run_employee_revision(
         },
     )?;
     let _ = ensure_opinion_file(workspace, requirement_id, &employee.id, &result.output)?;
+    let opinion = read_opinion_content(workspace, requirement_id, &employee.id)
+        .unwrap_or_default();
+    let passed = parse_opinion_passed(&opinion);
 
     state.current_reviewer_id = None;
     state.current_task = None;
     save_state(workspace, state)?;
+    sync_review_work_task_completed(workspace, requirement_id, &employee.id, passed)?;
 
     let section = format!("Requirement revision after review — {}", now_ms());
     append_employee_memory(
@@ -1060,6 +1091,399 @@ pub fn run_requirement_review(
             Err(err)
         }
     }
+}
+
+fn review_work_task_id(employee_id: &str) -> String {
+    format!("review-{employee_id}")
+}
+
+fn list_review_work_tasks(workspace: &Path, requirement_id: &str) -> anyhow::Result<Vec<WorkTask>> {
+    Ok(filter_work_tasks(
+        list_work_tasks(workspace).map_err(|e| anyhow::anyhow!(e))?,
+        &WorkTaskFilter {
+            biz_type: Some(BIZ_TYPE_REQUIREMENT.to_string()),
+            biz_id: Some(requirement_id.to_string()),
+            task_kind: Some(TASK_KIND_REVIEW.to_string()),
+            ..Default::default()
+        },
+    ))
+}
+
+fn opinion_status_to_work(status: OpinionItemStatus) -> WorkTaskStatus {
+    match status {
+        OpinionItemStatus::Pending => WorkTaskStatus::Pending,
+        OpinionItemStatus::InProgress | OpinionItemStatus::Revising => WorkTaskStatus::InProgress,
+        OpinionItemStatus::Completed => WorkTaskStatus::Completed,
+        OpinionItemStatus::Abandoned => WorkTaskStatus::Cancelled,
+    }
+}
+
+fn work_status_to_opinion(task: &WorkTask, state: &ReviewStateFile) -> OpinionItemStatus {
+    if state
+        .abandoned_participants
+        .iter()
+        .any(|id| task.assignee.as_deref() == Some(id.as_str()))
+        || review_opinion_status(task) == Some("abandoned")
+    {
+        return OpinionItemStatus::Abandoned;
+    }
+    if state.status == ReviewStatus::InProgress {
+        if state.current_reviewer_id.as_deref() == task.assignee.as_deref() {
+            return match state.current_task {
+                Some(ReviewTask::Revise) => OpinionItemStatus::Revising,
+                Some(ReviewTask::Opinion) | None => OpinionItemStatus::InProgress,
+            };
+        }
+    }
+    match review_opinion_status(task).unwrap_or("pending") {
+        "in_progress" => OpinionItemStatus::InProgress,
+        "revising" => OpinionItemStatus::Revising,
+        "completed" => OpinionItemStatus::Completed,
+        "abandoned" => OpinionItemStatus::Abandoned,
+        _ => match task.status {
+            WorkTaskStatus::Completed => OpinionItemStatus::Completed,
+            WorkTaskStatus::InProgress => OpinionItemStatus::InProgress,
+            WorkTaskStatus::Cancelled => OpinionItemStatus::Abandoned,
+            _ => OpinionItemStatus::Pending,
+        },
+    }
+}
+
+fn review_task_title(workspace: &Path, requirement_title: &str, employee_name: &str) -> String {
+    let lang = crate::agent_locale::resolve_lang_for_workspace(workspace);
+    crate::i18n::format_msg(
+        lang,
+        "review_work_task_title",
+        &[
+            ("requirement_title", requirement_title),
+            ("employee_name", employee_name),
+        ],
+    )
+}
+
+fn opinion_status_as_str(status: OpinionItemStatus) -> &'static str {
+    match status {
+        OpinionItemStatus::Pending => "pending",
+        OpinionItemStatus::InProgress => "in_progress",
+        OpinionItemStatus::Revising => "revising",
+        OpinionItemStatus::Completed => "completed",
+        OpinionItemStatus::Abandoned => "abandoned",
+    }
+}
+
+fn ensure_review_work_tasks(
+    workspace: &Path,
+    requirement_id: &str,
+    state: &ReviewStateFile,
+    employees: &[EmployeeRecord],
+) -> anyhow::Result<()> {
+    let detail = load_requirement_detail(workspace, requirement_id)?;
+    let existing = list_review_work_tasks(workspace, requirement_id)?;
+    let employee_by_id: std::collections::HashMap<&str, &EmployeeRecord> =
+        employees.iter().map(|e| (e.id.as_str(), e)).collect();
+
+    for participant_id in &state.participants {
+        if existing
+            .iter()
+            .any(|task| task.assignee.as_deref() == Some(participant_id.as_str()))
+        {
+            continue;
+        }
+        let employee_name = employee_by_id
+            .get(participant_id.as_str())
+            .map(|e| e.name.as_str())
+            .unwrap_or(participant_id.as_str());
+        let content = read_opinion_content(workspace, requirement_id, participant_id);
+        let has_file = content.is_some();
+        let opinion_status = opinion_item_status(state, participant_id, has_file);
+        let passed = content.as_deref().and_then(parse_opinion_passed);
+        let task_id = review_work_task_id(participant_id);
+        let title = review_task_title(workspace, &detail.title, employee_name);
+        let task = WorkTask {
+            id: task_id,
+            biz_type: BIZ_TYPE_REQUIREMENT.to_string(),
+            biz_id: requirement_id.to_string(),
+            title,
+            description: String::new(),
+            assignee: Some(participant_id.clone()),
+            status: opinion_status_to_work(opinion_status),
+            progress: if opinion_status == OpinionItemStatus::Completed {
+                100
+            } else {
+                0
+            },
+            auto_executable: true,
+            metadata: serde_json::json!({
+                "task_kind": TASK_KIND_REVIEW,
+                "review_phase": "opinion",
+                "opinion_status": opinion_status_as_str(opinion_status),
+                "employee_id": participant_id,
+                "passed": passed,
+            }),
+            created_at_ms: state.started_at_ms,
+            updated_at_ms: now_ms(),
+            agent_task_id: None,
+        };
+        save_work_task(workspace, &task).map_err(|e| anyhow::anyhow!(e))?;
+        if let Some(assignee) = task.assignee.as_deref() {
+            let _ = mark_employee_for_autonomy(workspace, assignee);
+        }
+    }
+    Ok(())
+}
+
+pub fn reconcile_review_work_tasks(
+    workspace: &Path,
+    requirement_id: &str,
+    employees: &[EmployeeRecord],
+) -> anyhow::Result<()> {
+    let id = normalize_requirement_id(requirement_id)?;
+    if !state_path(workspace, &id).exists() {
+        return Ok(());
+    }
+    let state = load_state(workspace, &id)?;
+    ensure_review_work_tasks(workspace, &id, &state, employees)?;
+
+    for participant_id in &state.participants {
+        let task_id = review_work_task_id(participant_id);
+        let content = read_opinion_content(workspace, &id, participant_id);
+        let is_abandoned = state
+            .abandoned_participants
+            .iter()
+            .any(|value| value == participant_id);
+        let (work_status, opinion_status, review_phase, passed, progress) = if is_abandoned {
+            (
+                WorkTaskStatus::Cancelled,
+                "abandoned",
+                "opinion",
+                None,
+                0,
+            )
+        } else if state.status == ReviewStatus::Completed {
+            let passed = content
+                .as_deref()
+                .and_then(parse_opinion_passed)
+                .or(match state.conclusion {
+                    Some(ReviewConclusion::Adopt) => Some(true),
+                    Some(ReviewConclusion::Supplement) => Some(false),
+                    None => None,
+                });
+            (
+                WorkTaskStatus::Completed,
+                "completed",
+                "opinion",
+                passed,
+                100,
+            )
+        } else if content.is_some() {
+            (
+                WorkTaskStatus::Completed,
+                "completed",
+                "opinion",
+                content.as_deref().and_then(parse_opinion_passed),
+                100,
+            )
+        } else if state.current_reviewer_id.as_deref() == Some(participant_id.as_str()) {
+            match state.current_task {
+                Some(ReviewTask::Revise) => (
+                    WorkTaskStatus::InProgress,
+                    "revising",
+                    "revise",
+                    None,
+                    0,
+                ),
+                _ => (
+                    WorkTaskStatus::InProgress,
+                    "in_progress",
+                    "opinion",
+                    None,
+                    0,
+                ),
+            }
+        } else {
+            (
+                WorkTaskStatus::Pending,
+                "pending",
+                "opinion",
+                None,
+                0,
+            )
+        };
+
+        update_work_task(workspace, &task_id, |task| {
+            if !is_review_task(task) || task.biz_id != id {
+                return Err("work_task_not_found".to_string());
+            }
+            task.status = work_status;
+            task.progress = progress;
+            set_review_phase(task, review_phase);
+            set_review_opinion_status(task, opinion_status);
+            set_review_passed(task, passed);
+            Ok(())
+        })
+        .map_err(|err| anyhow::anyhow!(err))?;
+    }
+    Ok(())
+}
+
+fn sync_review_work_task_running(
+    workspace: &Path,
+    requirement_id: &str,
+    employee_id: &str,
+    review_phase: &str,
+) -> anyhow::Result<()> {
+    let task_id = review_work_task_id(employee_id);
+    update_work_task(workspace, &task_id, |task| {
+        if !is_review_task(task) || task.biz_id != requirement_id {
+            return Err("work_task_not_found".to_string());
+        }
+        task.status = WorkTaskStatus::InProgress;
+        set_review_phase(task, review_phase);
+        set_review_opinion_status(
+            task,
+            if review_phase == "revise" {
+                "revising"
+            } else {
+                "in_progress"
+            },
+        );
+        Ok(())
+    })
+    .map_err(|e| anyhow::anyhow!(e))?;
+    Ok(())
+}
+
+fn sync_review_work_task_completed(
+    workspace: &Path,
+    requirement_id: &str,
+    employee_id: &str,
+    passed: Option<bool>,
+) -> anyhow::Result<()> {
+    let task_id = review_work_task_id(employee_id);
+    update_work_task(workspace, &task_id, |task| {
+        if !is_review_task(task) || task.biz_id != requirement_id {
+            return Err("work_task_not_found".to_string());
+        }
+        task.status = WorkTaskStatus::Completed;
+        task.progress = 100;
+        set_review_phase(task, "opinion");
+        set_review_opinion_status(task, "completed");
+        set_review_passed(task, passed);
+        Ok(())
+    })
+    .map_err(|e| anyhow::anyhow!(e))?;
+    Ok(())
+}
+
+fn sync_review_work_task_pending(
+    workspace: &Path,
+    requirement_id: &str,
+    employee_id: &str,
+) -> anyhow::Result<()> {
+    let task_id = review_work_task_id(employee_id);
+    update_work_task(workspace, &task_id, |task| {
+        if !is_review_task(task) || task.biz_id != requirement_id {
+            return Err("work_task_not_found".to_string());
+        }
+        task.status = WorkTaskStatus::Pending;
+        task.progress = 0;
+        set_review_phase(task, "opinion");
+        set_review_opinion_status(task, "pending");
+        set_review_passed(task, None);
+        Ok(())
+    })
+    .map_err(|e| anyhow::anyhow!(e))?;
+    Ok(())
+}
+
+fn sync_review_work_task_abandoned(
+    workspace: &Path,
+    requirement_id: &str,
+    employee_id: &str,
+) -> anyhow::Result<()> {
+    let task_id = review_work_task_id(employee_id);
+    update_work_task(workspace, &task_id, |task| {
+        if !is_review_task(task) || task.biz_id != requirement_id {
+            return Err("work_task_not_found".to_string());
+        }
+        task.status = WorkTaskStatus::Cancelled;
+        set_review_opinion_status(task, "abandoned");
+        set_review_passed(task, None);
+        Ok(())
+    })
+    .map_err(|e| anyhow::anyhow!(e))?;
+    Ok(())
+}
+
+fn sync_review_work_task_manual(
+    workspace: &Path,
+    requirement_id: &str,
+    employee_id: &str,
+    passed: bool,
+) -> anyhow::Result<()> {
+    sync_review_work_task_completed(workspace, requirement_id, employee_id, Some(passed))
+}
+
+fn review_task_in_progress(workspace: &Path, requirement_id: &str) -> bool {
+    list_review_work_tasks(workspace, requirement_id)
+        .map(|tasks| {
+            tasks.iter().any(|task| task.status == WorkTaskStatus::InProgress)
+        })
+        .unwrap_or(false)
+}
+
+pub fn execute_review_work_task(
+    workspace: &Path,
+    tools: &ToolManager,
+    employee: &EmployeeRecord,
+    work_task: &WorkTask,
+) -> anyhow::Result<()> {
+    if !is_review_task(work_task) {
+        anyhow::bail!("work_task_not_found");
+    }
+    let requirement_id = work_task.biz_id.clone();
+    let rules = load_work_rules(workspace)?;
+    let detail = load_requirement_detail(workspace, &requirement_id)?;
+    let workdir = requirement_workdir(workspace, &requirement_id);
+    let runner = TaskRunner::new(workspace);
+    let mut state = load_state(workspace, &requirement_id)?;
+    if state.current_reviewer_id.is_some() || review_task_in_progress(workspace, &requirement_id) {
+        anyhow::bail!("review_opinion_busy");
+    }
+
+    let phase = review_phase(work_task).unwrap_or("opinion");
+    if phase == "revise" {
+        let prior = read_opinion_content(workspace, &requirement_id, &employee.id)
+            .unwrap_or_else(|| "(no prior opinion)".to_string());
+        run_employee_revision(
+            workspace,
+            tools,
+            &runner,
+            None,
+            &rules,
+            &mut state,
+            employee,
+            &requirement_id,
+            &detail.title,
+            &prior,
+            &workdir,
+        )?;
+    } else {
+        run_employee_review(
+            workspace,
+            tools,
+            &runner,
+            None,
+            &rules,
+            &mut state,
+            employee,
+            &requirement_id,
+            &detail.title,
+            &detail.content,
+            &workdir,
+        )?;
+    }
+    Ok(())
 }
 
 fn workspace_root(state: &AppState) -> Option<PathBuf> {
@@ -1257,7 +1681,10 @@ pub async fn run_review_handler(
         if existing.status == ReviewStatus::Completed {
             return Err(map_review_err(&headers)(anyhow::anyhow!("review_already_completed")));
         }
-        if existing.status == ReviewStatus::InProgress && existing.current_reviewer_id.is_some() {
+        if existing.status == ReviewStatus::InProgress
+            && (existing.current_reviewer_id.is_some()
+                || review_task_in_progress(&workspace, &req_id))
+        {
             return load_review_wire(&workspace, &req_id)
                 .map(Json)
                 .map_err(map_review_err(&headers));
@@ -1419,26 +1846,112 @@ mod tests {
     }
 
     #[test]
+    fn migrate_legacy_review_state_to_work_tasks() {
+        use crate::requirement::{format_requirement_md, RequirementMeta, REQUIREMENT_FILE};
+        use std::{
+            fs,
+            time::{SystemTime, UNIX_EPOCH},
+        };
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let workspace = std::env::temp_dir().join(format!("kaisha-review-migrate-{unique}"));
+        fs::create_dir_all(&workspace).unwrap();
+        let employee_dir = crate::employee::employee_root(&workspace).join("alice");
+        fs::create_dir_all(&employee_dir).unwrap();
+        fs::write(
+            employee_dir.join("profile.json"),
+            serde_json::json!({
+                "id": "alice",
+                "name": "Alice",
+                "department": "engineering",
+                "role": "Engineer"
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let req_dir = workspace.join("requirements").join("auth");
+        fs::create_dir_all(req_dir.join("review").join("opinions")).unwrap();
+        fs::write(
+            req_dir.join(REQUIREMENT_FILE),
+            format_requirement_md(
+                &RequirementMeta {
+                    id: "auth".into(),
+                    title: "User auth".into(),
+                    phase: RequirementPhase::Review,
+                    confirm_status: None,
+                    created_at_ms: 1,
+                    updated_at_ms: 2,
+                },
+                "## Scope\nReview login.",
+            ),
+        )
+        .unwrap();
+        let state = ReviewStateFile {
+            requirement_id: "auth".into(),
+            status: ReviewStatus::InProgress,
+            started_at_ms: 1,
+            completed_at_ms: None,
+            conclusion: None,
+            participants: vec!["alice".into()],
+            current_reviewer_id: None,
+            current_task: None,
+            abandoned_participants: vec![],
+        };
+        fs::write(
+            req_dir.join("review/state.json"),
+            serde_json::to_string_pretty(&state).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            req_dir.join("review/opinions/alice.md"),
+            "Recommendation: approve\n",
+        )
+        .unwrap();
+
+        let wire = load_review_wire(&workspace, "auth").unwrap();
+        assert_eq!(wire.opinions.len(), 1);
+        assert_eq!(wire.opinions[0].task_id, "review-alice");
+        assert_eq!(wire.opinions[0].biz_type, BIZ_TYPE_REQUIREMENT);
+        assert_eq!(wire.opinions[0].biz_id, "auth");
+        assert_eq!(wire.opinions[0].employee_id, "alice");
+        assert_eq!(wire.opinions[0].status, OpinionItemStatus::Completed);
+        assert_eq!(wire.opinions[0].passed, Some(true));
+
+        let tasks = list_review_work_tasks(&workspace, "auth").unwrap();
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].assignee.as_deref(), Some("alice"));
+        assert!(tasks[0].auto_executable);
+
+        let _ = fs::remove_dir_all(&workspace);
+    }
+
+    fn sample_opinion(
+        employee_id: &str,
+        status: OpinionItemStatus,
+        passed: Option<bool>,
+    ) -> ReviewOpinionWire {
+        ReviewOpinionWire {
+            task_id: format!("review-{employee_id}"),
+            biz_type: BIZ_TYPE_REQUIREMENT.into(),
+            biz_id: "r1".into(),
+            employee_id: employee_id.into(),
+            employee_name: employee_id.to_uppercase(),
+            role: "r".into(),
+            role_key: None,
+            status,
+            passed,
+            content: None,
+        }
+    }
+
+    #[test]
     fn review_tally_counts_pass_and_fail() {
         let opinions = vec![
-            ReviewOpinionWire {
-                employee_id: "a".into(),
-                employee_name: "A".into(),
-                role: "r".into(),
-                role_key: None,
-                status: OpinionItemStatus::Completed,
-                passed: Some(true),
-                content: None,
-            },
-            ReviewOpinionWire {
-                employee_id: "b".into(),
-                employee_name: "B".into(),
-                role: "r".into(),
-                role_key: None,
-                status: OpinionItemStatus::Completed,
-                passed: Some(false),
-                content: None,
-            },
+            sample_opinion("a", OpinionItemStatus::Completed, Some(true)),
+            sample_opinion("b", OpinionItemStatus::Completed, Some(false)),
         ];
         let tally = review_tally(&opinions);
         assert_eq!(tally.passed, 1);
@@ -1462,15 +1975,7 @@ mod tests {
     #[test]
     fn overall_pass_requires_every_active_reviewer_approved() {
         let state = sample_state(vec!["a"]);
-        let ok = vec![ReviewOpinionWire {
-            employee_id: "a".into(),
-            employee_name: "A".into(),
-            role: "r".into(),
-            role_key: None,
-            status: OpinionItemStatus::Completed,
-            passed: Some(true),
-            content: None,
-        }];
+        let ok = vec![sample_opinion("a", OpinionItemStatus::Completed, Some(true))];
         assert!(all_reviewers_passed(&ok, &state));
         assert_eq!(
             derive_review_conclusion(&ok, &state),
@@ -1479,24 +1984,8 @@ mod tests {
 
         let state2 = sample_state(vec!["a", "b"]);
         let mixed = vec![
-            ReviewOpinionWire {
-                employee_id: "a".into(),
-                employee_name: "A".into(),
-                role: "r".into(),
-                role_key: None,
-                status: OpinionItemStatus::Completed,
-                passed: Some(true),
-                content: None,
-            },
-            ReviewOpinionWire {
-                employee_id: "b".into(),
-                employee_name: "B".into(),
-                role: "r".into(),
-                role_key: None,
-                status: OpinionItemStatus::Completed,
-                passed: Some(false),
-                content: None,
-            },
+            sample_opinion("a", OpinionItemStatus::Completed, Some(true)),
+            sample_opinion("b", OpinionItemStatus::Completed, Some(false)),
         ];
         assert!(!all_reviewers_passed(&mixed, &state2));
         assert_eq!(
@@ -1509,15 +1998,7 @@ mod tests {
     fn abandoned_participant_does_not_block_overall_pass() {
         let mut state = sample_state(vec!["a", "b"]);
         state.abandoned_participants.push("b".into());
-        let opinions = vec![ReviewOpinionWire {
-            employee_id: "a".into(),
-            employee_name: "A".into(),
-            role: "r".into(),
-            role_key: None,
-            status: OpinionItemStatus::Completed,
-            passed: Some(true),
-            content: None,
-        }];
+        let opinions = vec![sample_opinion("a", OpinionItemStatus::Completed, Some(true))];
         assert!(all_reviewers_passed(&opinions, &state));
     }
 }

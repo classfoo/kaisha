@@ -17,8 +17,13 @@ use crate::{
         try_load_dev_state,
     },
     tasks::{
-        autonomy_execute_content, autonomy_explore_content, AgentTaskRecord, CodeAgentTaskParams,
-        TaskKind, TaskRunner, TaskStatus, TaskStore,
+        autonomy_execute_content, autonomy_explore_content, work_task_execute_content,
+        AgentTaskRecord, CodeAgentTaskParams, TaskKind, TaskRunner, TaskStatus, TaskStore,
+    },
+    work_task::{
+        self, count_pending_auto_tasks_for_assignee, is_development_task, is_review_task,
+        next_pending_auto_task_for_assignee, set_dev_status, task_branch, update_work_task,
+        WorkTask, WorkTaskStatus,
     },
     tools::driver::ToolChatMessage,
     work_rules::{duty_for_phase, load_work_rules, resolve_role_key},
@@ -183,6 +188,10 @@ pub fn should_start_autonomy_exploration(
 
 pub fn should_execute_next_todo(incomplete_todos: usize, employee_busy: bool) -> bool {
     !employee_busy && incomplete_todos > 0
+}
+
+pub fn should_execute_next_work_task(pending_work_tasks: usize, employee_busy: bool) -> bool {
+    !employee_busy && pending_work_tasks > 0
 }
 
 fn now_ms() -> u64 {
@@ -393,6 +402,187 @@ fn build_explore_messages(
             content: crate::i18n::msg_by_lang(lang, "autonomy_explore_user_prompt"),
         },
     ])
+}
+
+fn build_execute_work_task_messages(
+    workspace: &Path,
+    employee: &EmployeeRecord,
+    work_task: &WorkTask,
+) -> anyhow::Result<Vec<ToolChatMessage>> {
+    let lang = crate::agent_locale::resolve_lang_for_workspace(workspace);
+    let mut ctx = crate::i18n::format_msg(
+        lang,
+        "work_task_execute_context_header",
+        &[
+            ("name", &employee.name),
+            ("role", &employee.role),
+            ("title", &work_task.title),
+            ("description", &work_task.description),
+            ("biz_type", &work_task.biz_type),
+            ("biz_id", &work_task.biz_id),
+        ],
+    );
+    if is_development_task(work_task) {
+        if let Some(branch) = task_branch(work_task) {
+            ctx.push_str(&crate::i18n::format_msg(
+                lang,
+                "work_task_execute_branch",
+                &[("branch", branch)],
+            ));
+        }
+    }
+    if work_task.biz_type == work_task::BIZ_TYPE_REQUIREMENT {
+        if let Ok(detail) = load_requirement_detail(workspace, &work_task.biz_id) {
+            let excerpt: String = detail.content.chars().take(1200).collect();
+            ctx.push_str(&crate::i18n::format_msg(
+                lang,
+                "autonomy_execute_requirement_excerpt",
+                &[("excerpt", &excerpt)],
+            ));
+        }
+    }
+    Ok(vec![
+        ToolChatMessage {
+            role: "system".into(),
+            content: crate::i18n::format_msg(
+                lang,
+                "work_task_execute_system",
+                &[
+                    ("name", &employee.name),
+                    ("role", &employee.role),
+                    ("ctx", &ctx),
+                ],
+            ),
+        },
+        ToolChatMessage {
+            role: "user".into(),
+            content: crate::i18n::format_msg(
+                lang,
+                "work_task_execute_user_prompt",
+                &[("title", &work_task.title)],
+            ),
+        },
+    ])
+}
+
+fn apply_work_task_execution_result(
+    workspace: &Path,
+    work_task: &WorkTask,
+    exit_code: i32,
+) -> anyhow::Result<()> {
+    if is_development_task(work_task) {
+        let status = if exit_code == 0 {
+            WorkTaskStatus::InProgress
+        } else {
+            WorkTaskStatus::Pending
+        };
+        let dev_status = if exit_code == 0 {
+            "in_development"
+        } else {
+            "branch_created"
+        };
+        update_work_task(workspace, &work_task.id, |task| {
+            task.status = status;
+            set_dev_status(task, dev_status);
+            if exit_code == 0 {
+                task.progress = task.progress.max(10);
+            }
+            Ok(())
+        })
+        .map_err(|err| anyhow::anyhow!(err))?;
+        return Ok(());
+    }
+    let status = if exit_code == 0 {
+        WorkTaskStatus::Completed
+    } else {
+        WorkTaskStatus::Failed
+    };
+    update_work_task(workspace, &work_task.id, |task| {
+        task.status = status;
+        if exit_code == 0 {
+            task.progress = 100;
+        }
+        Ok(())
+    })
+    .map_err(|err| anyhow::anyhow!(err))?;
+    Ok(())
+}
+
+pub fn execute_next_work_task(
+    workspace: &Path,
+    tools: &crate::tools::manager::ToolManager,
+    employee: &EmployeeRecord,
+) -> anyhow::Result<bool> {
+    let tasks = TaskStore::new(workspace).list()?;
+    if is_employee_busy(&tasks, &employee.id) {
+        return Ok(false);
+    }
+    let Some(work_task) = next_pending_auto_task_for_assignee(workspace, &employee.id)
+        .map_err(|err| anyhow::anyhow!(err))?
+    else {
+        return Ok(false);
+    };
+    let work_task_id = work_task.id.clone();
+    if is_review_task(&work_task) {
+        update_work_task(workspace, &work_task_id, |task| {
+            task.status = WorkTaskStatus::InProgress;
+            Ok(())
+        })
+        .map_err(|err| anyhow::anyhow!(err))?;
+        let review_result =
+            crate::requirement_review::execute_review_work_task(workspace, tools, employee, &work_task);
+        if review_result.is_err() {
+            let _ = update_work_task(workspace, &work_task_id, |task| {
+                task.status = WorkTaskStatus::Pending;
+                Ok(())
+            });
+        }
+        review_result?;
+        mark_employee_for_autonomy(workspace, &employee.id)?;
+        return Ok(true);
+    }
+
+    update_work_task(workspace, &work_task_id, |task| {
+        task.status = WorkTaskStatus::InProgress;
+        Ok(())
+    })
+    .map_err(|err| anyhow::anyhow!(err))?;
+
+    let runner = TaskRunner::new(workspace);
+    let messages = build_execute_work_task_messages(workspace, employee, &work_task)?;
+    let result = runner.run_code_chat(
+        tools,
+        CodeAgentTaskParams {
+            kind: TaskKind::WorkTaskExecute,
+            content: work_task_execute_content(workspace, &employee.id, &work_task.title),
+            workdir: workspace.to_path_buf(),
+            messages,
+            executor_id: Some(employee.id.clone()),
+            parent_task_id: None,
+            context: serde_json::json!({
+                "employee_id": employee.id,
+                "work_task_id": work_task_id,
+                "biz_type": work_task.biz_type,
+                "biz_id": work_task.biz_id,
+            }),
+        },
+    );
+
+    match result {
+        Ok((agent_task, _, exec)) => {
+            let _ = update_work_task(workspace, &work_task_id, |task| {
+                task.agent_task_id = Some(agent_task.id.clone());
+                Ok(())
+            });
+            apply_work_task_execution_result(workspace, &work_task, exec.exit_code)?;
+        }
+        Err(_) => {
+            apply_work_task_execution_result(workspace, &work_task, 1)?;
+        }
+    }
+
+    mark_employee_for_autonomy(workspace, &employee.id)?;
+    Ok(true)
 }
 
 fn build_execute_messages(
@@ -727,6 +917,14 @@ pub fn process_employee_autonomy(
         return Ok(());
     }
 
+    let pending_work_tasks = count_pending_auto_tasks_for_assignee(workspace, &employee.id)
+        .unwrap_or(0);
+    if should_execute_next_work_task(pending_work_tasks, false)
+        && execute_next_work_task(workspace, tools, employee)?
+    {
+        return Ok(());
+    }
+
     let development_planning_needed = development_requirements_need_planning(workspace);
     if matches!(trigger, AutonomyTriggerKind::TaskCompleted | AutonomyTriggerKind::Manual) {
         if should_run_autonomy(
@@ -775,6 +973,7 @@ pub fn process_autonomy_tick(
             return Ok(());
         }
     }
+    let _ = crate::requirement_development::prepare_development_work_tasks_for_autonomy(workspace);
     let employees = list_employee_records(workspace)?;
     let pending = list_pending_autonomy_employees(workspace)?;
     for employee in employees {
@@ -1185,11 +1384,21 @@ mod tests {
         )
         .unwrap();
         assert_eq!(added, 1);
-        let dev_state = crate::requirement_development::try_load_dev_state(&workspace, "auth")
+        let dev_tasks = crate::work_task::list_work_tasks_filtered(
+            &workspace,
+            &crate::work_task::WorkTaskFilter {
+                biz_type: Some(crate::work_task::BIZ_TYPE_REQUIREMENT.into()),
+                biz_id: Some("auth".into()),
+                task_kind: Some(crate::work_task::TASK_KIND_DEVELOPMENT.into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(dev_tasks.len(), 1);
+        assert_eq!(dev_tasks[0].title, "Implement login API");
+        assert_eq!(dev_tasks[0].assignee.as_deref(), Some("dev1"));
+        let _dev_state = crate::requirement_development::try_load_dev_state(&workspace, "auth")
             .expect("dev state");
-        assert_eq!(dev_state.tasks.len(), 1);
-        assert_eq!(dev_state.tasks[0].title, "Implement login API");
-        assert_eq!(dev_state.tasks[0].assignee.as_deref(), Some("dev1"));
         let _ = std::fs::remove_dir_all(&workspace);
     }
 
@@ -1285,6 +1494,13 @@ mod tests {
             .join("requirements/ux-nav-contrast/requirement.md")
             .exists());
         let _ = std::fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn should_execute_next_work_task_when_pending_exists() {
+        assert!(should_execute_next_work_task(1, false));
+        assert!(!should_execute_next_work_task(1, true));
+        assert!(!should_execute_next_work_task(0, false));
     }
 
     #[test]

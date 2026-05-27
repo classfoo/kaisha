@@ -6,6 +6,12 @@ use crate::{
         load_requirement_detail, list_requirement_summaries, normalize_requirement_id,
         requirement_dir, RequirementPhase, RequirementSummary,
     },
+    work_task::{
+        create_work_task, delete_work_task, dev_status, filter_work_tasks,
+        is_development_task, list_work_tasks, load_work_task, save_work_task,
+        set_dev_status, task_branch, update_work_task, work_tasks_root, BIZ_TYPE_REQUIREMENT,
+        CreateWorkTaskParams, TASK_KIND_DEVELOPMENT, WorkTask, WorkTaskFilter, WorkTaskStatus,
+    },
     AppState,
 };
 use axum::{
@@ -13,11 +19,12 @@ use axum::{
     http::HeaderMap,
     Json,
 };
+use crate::work_task::now_ms as work_task_now_ms;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::{
     fs,
     path::Path,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 const DEV_DIR: &str = "development";
@@ -47,6 +54,18 @@ impl DevTaskStatus {
         }
     }
 
+    pub fn from_str(raw: &str) -> Option<Self> {
+        match raw {
+            "branch_created" => Some(Self::BranchCreated),
+            "in_development" => Some(Self::InDevelopment),
+            "dev_complete" => Some(Self::DevComplete),
+            "in_review" => Some(Self::InReview),
+            "review_complete" => Some(Self::ReviewComplete),
+            "merged" => Some(Self::Merged),
+            _ => None,
+        }
+    }
+
     #[allow(dead_code)]
     pub fn next_status(&self) -> Option<Self> {
         match self {
@@ -58,13 +77,33 @@ impl DevTaskStatus {
             Self::Merged => None,
         }
     }
+
+    fn to_work_status(&self) -> WorkTaskStatus {
+        match self {
+            Self::Merged => WorkTaskStatus::Completed,
+            Self::BranchCreated => WorkTaskStatus::Pending,
+            _ => WorkTaskStatus::InProgress,
+        }
+    }
+
+    fn from_planned_status(raw: &str) -> Self {
+        match raw.trim().to_lowercase().as_str() {
+            "pending" | "branch_created" => Self::BranchCreated,
+            "in_progress" | "in_development" | "running" => Self::InDevelopment,
+            "dev_complete" | "complete" | "completed" => Self::DevComplete,
+            "in_review" | "review" => Self::InReview,
+            "review_complete" => Self::ReviewComplete,
+            "merged" => Self::Merged,
+            _ => Self::BranchCreated,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DevTask {
+struct LegacyDevTask {
     pub id: String,
     pub title: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub assignee: Option<String>,
     pub branch: String,
     pub status: DevTaskStatus,
@@ -81,9 +120,40 @@ pub struct DevStateFile {
     #[serde(default)]
     pub feature_branch_created: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub tasks: Vec<DevTask>,
+    tasks: Vec<LegacyDevTask>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_task_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub milestone: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub milestone_phase: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct DevStateFileLoose {
+    #[serde(default)]
+    requirement_id: Option<String>,
+    #[serde(default)]
+    feature_branch: Option<String>,
+    #[serde(default)]
+    feature_branch_created: Option<bool>,
+    #[serde(default)]
+    current_task_id: Option<String>,
+    #[serde(default)]
+    milestone: Option<String>,
+    #[serde(default)]
+    milestone_phase: Option<String>,
+    #[serde(default)]
+    tasks: Option<Value>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct PlannedDevTask {
+    pub title: String,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub milestone: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -97,6 +167,8 @@ pub struct DevTaskWire {
     pub progress: u8,
     pub created_at_ms: u64,
     pub updated_at_ms: u64,
+    pub biz_type: String,
+    pub biz_id: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -107,13 +179,6 @@ pub struct RequirementDevelopmentWire {
     pub tasks: Vec<DevTaskWire>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub current_task_id: Option<String>,
-}
-
-fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
 }
 
 fn dev_dir(workspace: &Path, id: &str) -> std::path::PathBuf {
@@ -138,7 +203,95 @@ fn load_dev_state(workspace: &Path, id: &str) -> Result<DevStateFile, String> {
         return Err("development_not_started".to_string());
     }
     let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    serde_json::from_str(&raw).map_err(|e| e.to_string())
+    let loose: DevStateFileLoose = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    let mut state = DevStateFile {
+        requirement_id: loose
+            .requirement_id
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| id.to_string()),
+        feature_branch: loose
+            .feature_branch
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| format!("feat-{id}")),
+        feature_branch_created: loose.feature_branch_created.unwrap_or(false),
+        tasks: Vec::new(),
+        current_task_id: loose.current_task_id,
+        milestone: loose.milestone,
+        milestone_phase: loose.milestone_phase,
+    };
+    if let Some(tasks) = loose.tasks {
+        migrate_tasks_value(workspace, id, &mut state, &tasks)?;
+    }
+    migrate_legacy_dev_tasks(workspace, id, &mut state)?;
+    Ok(state)
+}
+
+fn migrate_tasks_value(
+    workspace: &Path,
+    requirement_id: &str,
+    state: &mut DevStateFile,
+    tasks: &Value,
+) -> Result<(), String> {
+    match tasks {
+        Value::Array(items) => {
+            for item in items {
+                let legacy: LegacyDevTask =
+                    serde_json::from_value(item.clone()).map_err(|e| e.to_string())?;
+                state.tasks.push(legacy);
+            }
+        }
+        Value::Object(map) if !map.is_empty() => {
+            fs::create_dir_all(work_tasks_root(workspace)).map_err(|e| e.to_string())?;
+            let ts = work_task_now_ms();
+            let default_milestone = state.milestone.clone();
+            for (task_id, item) in map {
+                let planned: PlannedDevTask =
+                    serde_json::from_value(item.clone()).map_err(|e| e.to_string())?;
+                let dev_status = DevTaskStatus::from_planned_status(
+                    planned.status.as_deref().unwrap_or("pending"),
+                );
+                let branch = format!("{}-{}", state.feature_branch, task_id);
+                let description = fs::read_to_string(task_file_path(workspace, requirement_id, task_id))
+                    .unwrap_or_default();
+                let mut metadata = serde_json::json!({
+                    "task_kind": TASK_KIND_DEVELOPMENT,
+                    "branch": branch,
+                    "dev_status": dev_status.as_str(),
+                });
+                if let Some(milestone) = planned
+                    .milestone
+                    .clone()
+                    .or_else(|| default_milestone.clone())
+                {
+                    metadata["milestone"] = Value::String(milestone);
+                }
+                if let Some(existing) = load_work_task(workspace, task_id).ok() {
+                    if is_development_task(&existing) && existing.biz_id == requirement_id {
+                        continue;
+                    }
+                }
+                let task = WorkTask {
+                    id: task_id.clone(),
+                    biz_type: BIZ_TYPE_REQUIREMENT.to_string(),
+                    biz_id: requirement_id.to_string(),
+                    title: planned.title,
+                    description,
+                    assignee: None,
+                    status: dev_status.to_work_status(),
+                    progress: 0,
+                    auto_executable: true,
+                    metadata,
+                    created_at_ms: ts,
+                    updated_at_ms: ts,
+                    agent_task_id: None,
+                };
+                save_work_task(workspace, &task)?;
+            }
+            save_dev_state(workspace, requirement_id, state)?;
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 fn save_dev_state(workspace: &Path, id: &str, state: &DevStateFile) -> Result<(), String> {
@@ -148,6 +301,184 @@ fn save_dev_state(workspace: &Path, id: &str, state: &DevStateFile) -> Result<()
     }
     fs::write(&path, serde_json::to_string_pretty(state).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())
+}
+
+fn migrate_legacy_dev_tasks(
+    workspace: &Path,
+    requirement_id: &str,
+    state: &mut DevStateFile,
+) -> Result<(), String> {
+    if state.tasks.is_empty() {
+        return Ok(());
+    }
+    fs::create_dir_all(work_tasks_root(workspace)).map_err(|e| e.to_string())?;
+    for legacy in state.tasks.drain(..) {
+        let status = legacy.status.to_work_status();
+        let task = WorkTask {
+            id: legacy.id.clone(),
+            biz_type: BIZ_TYPE_REQUIREMENT.to_string(),
+            biz_id: requirement_id.to_string(),
+            title: legacy.title.clone(),
+            description: String::new(),
+            assignee: legacy.assignee.clone(),
+            status,
+            progress: legacy.progress,
+            auto_executable: true,
+            metadata: serde_json::json!({
+                "task_kind": TASK_KIND_DEVELOPMENT,
+                "branch": legacy.branch,
+                "dev_status": legacy.status.as_str(),
+            }),
+            created_at_ms: legacy.created_at_ms,
+            updated_at_ms: legacy.updated_at_ms,
+            agent_task_id: None,
+        };
+        save_work_task(workspace, &task)?;
+        if let Ok(content) = fs::read_to_string(task_file_path(workspace, requirement_id, &legacy.id))
+        {
+            if !content.trim().is_empty() {
+                let mut migrated = task.clone();
+                migrated.description = content;
+                save_work_task(workspace, &migrated)?;
+            }
+        }
+    }
+    save_dev_state(workspace, requirement_id, state)?;
+    Ok(())
+}
+
+pub fn reconcile_development_work_tasks(
+    workspace: &Path,
+    requirement_id: &str,
+) -> Result<(), String> {
+    let id = normalize_requirement_id(requirement_id).map_err(|e| e.to_string())?;
+    if dev_state_path(workspace, &id).exists() {
+        let mut state = load_dev_state(workspace, &id)?;
+        migrate_legacy_dev_tasks(workspace, &id, &mut state)?;
+    }
+
+    let tasks_dir = dev_tasks_dir(workspace, &id);
+    if !tasks_dir.exists() {
+        return Ok(());
+    }
+
+    let state = try_load_dev_state(workspace, &id);
+    let feature_branch = state
+        .as_ref()
+        .map(|value| value.feature_branch.clone())
+        .unwrap_or_else(|| format!("feat-{id}"));
+    let existing = list_development_work_tasks(workspace, &id)?;
+    let default_assignee = existing
+        .iter()
+        .find_map(|task| task.assignee.clone())
+        .filter(|value| !value.trim().is_empty());
+
+    for entry in fs::read_dir(&tasks_dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("md") {
+            continue;
+        }
+        let task_id = path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .ok_or_else(|| "task_id_invalid".to_string())?
+            .to_string();
+        let description = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let title = description
+            .lines()
+            .find(|line| line.starts_with("# "))
+            .map(|line| line.trim_start_matches("# ").trim())
+            .filter(|line| !line.is_empty())
+            .unwrap_or(&task_id)
+            .to_string();
+        let branch = format!("{feature_branch}-{task_id}");
+
+        if let Some(task) = existing.iter().find(|task| task.id == task_id) {
+            let assignee_missing = task.assignee.as_deref().unwrap_or("").trim().is_empty();
+            let description_missing = task.description.trim().is_empty();
+            if assignee_missing || description_missing {
+                update_work_task(workspace, &task_id, |task| {
+                    if assignee_missing {
+                        if let Some(ref assignee) = default_assignee {
+                            task.assignee = Some(assignee.clone());
+                        }
+                    }
+                    if description_missing && !description.trim().is_empty() {
+                        task.description = description.clone();
+                    }
+                    Ok(())
+                })?;
+            }
+            continue;
+        }
+
+        create_work_task(
+            workspace,
+            CreateWorkTaskParams {
+                id: Some(&task_id),
+                biz_type: BIZ_TYPE_REQUIREMENT,
+                biz_id: &id,
+                title: &title,
+                description: &description,
+                assignee: default_assignee.as_deref(),
+                auto_executable: true,
+                metadata: serde_json::json!({
+                    "task_kind": TASK_KIND_DEVELOPMENT,
+                    "branch": branch,
+                    "dev_status": DevTaskStatus::BranchCreated.as_str(),
+                }),
+            },
+        )?;
+    }
+    Ok(())
+}
+
+fn list_development_work_tasks(
+    workspace: &Path,
+    requirement_id: &str,
+) -> Result<Vec<WorkTask>, String> {
+    Ok(filter_work_tasks(
+        list_work_tasks(workspace)?,
+        &WorkTaskFilter {
+            biz_type: Some(BIZ_TYPE_REQUIREMENT.to_string()),
+            biz_id: Some(requirement_id.to_string()),
+            task_kind: Some(TASK_KIND_DEVELOPMENT.to_string()),
+            ..Default::default()
+        },
+    ))
+}
+
+fn dev_status_of(task: &WorkTask) -> DevTaskStatus {
+    dev_status(task)
+        .and_then(DevTaskStatus::from_str)
+        .unwrap_or(DevTaskStatus::BranchCreated)
+}
+
+fn wire_task(task: &WorkTask) -> DevTaskWire {
+    DevTaskWire {
+        id: task.id.clone(),
+        title: task.title.clone(),
+        assignee: task.assignee.clone(),
+        branch: task_branch(task).unwrap_or("").to_string(),
+        status: dev_status_of(task).as_str().to_string(),
+        progress: task.progress,
+        created_at_ms: task.created_at_ms,
+        updated_at_ms: task.updated_at_ms,
+        biz_type: task.biz_type.clone(),
+        biz_id: task.biz_id.clone(),
+    }
+}
+
+fn wire_state(workspace: &Path, state: &DevStateFile) -> Result<RequirementDevelopmentWire, String> {
+    let tasks = list_development_work_tasks(workspace, &state.requirement_id)?;
+    Ok(RequirementDevelopmentWire {
+        requirement_id: state.requirement_id.clone(),
+        feature_branch: state.feature_branch.clone(),
+        feature_branch_created: state.feature_branch_created,
+        tasks: tasks.iter().map(wire_task).collect(),
+        current_task_id: state.current_task_id.clone(),
+    })
 }
 
 pub fn try_load_dev_state(workspace: &Path, id: &str) -> Option<DevStateFile> {
@@ -163,9 +494,55 @@ pub fn requirement_needs_development_tasks(
         return Ok(false);
     }
     Ok(match try_load_dev_state(workspace, requirement_id) {
-        None => false,
-        Some(state) => state.feature_branch_created && state.tasks.is_empty(),
+        None => true,
+        Some(state) => {
+            if !state.feature_branch_created {
+                return Ok(true);
+            }
+            list_development_work_tasks(workspace, requirement_id)
+                .map(|tasks| tasks.is_empty())
+                .unwrap_or(true)
+        }
     })
+}
+
+/// Migrate legacy development tasks, reconcile markdown tasks, and ensure assignees exist
+/// so autonomy can pick up pending development work tasks.
+pub fn prepare_development_work_tasks_for_autonomy(workspace: &Path) -> Result<(), String> {
+    let employees = list_employee_records(workspace).map_err(|e| e.to_string())?;
+    let default_assignee = employees.first().map(|employee| employee.id.clone());
+
+    let summaries = list_requirement_summaries(workspace).map_err(|e| e.to_string())?;
+    for item in summaries
+        .iter()
+        .filter(|summary| summary.phase == RequirementPhase::Development)
+    {
+        reconcile_development_work_tasks(workspace, &item.id)?;
+    }
+
+    for task in list_work_tasks(workspace)? {
+        if !is_development_task(&task) || !task.auto_executable {
+            continue;
+        }
+        let dev_st = dev_status(&task).unwrap_or("branch_created");
+        if dev_st == "branch_created" && task.status == WorkTaskStatus::InProgress {
+            update_work_task(workspace, &task.id, |task| {
+                task.status = WorkTaskStatus::Pending;
+                Ok(())
+            })?;
+        }
+        let assignee_missing = task.assignee.as_deref().unwrap_or("").trim().is_empty();
+        if assignee_missing {
+            if let Some(ref assignee) = default_assignee {
+                update_work_task(workspace, &task.id, |task| {
+                    task.assignee = Some(assignee.clone());
+                    Ok(())
+                })?;
+                let _ = mark_employee_for_autonomy(workspace, assignee);
+            }
+        }
+    }
+    Ok(())
 }
 
 pub fn list_development_requirements_needing_tasks(
@@ -241,6 +618,8 @@ pub fn ensure_development_started(
             feature_branch_created: true,
             tasks: vec![],
             current_task_id: None,
+            milestone: None,
+            milestone_phase: None,
         }
     };
     save_dev_state(workspace, &id, &state)?;
@@ -254,36 +633,38 @@ pub fn add_development_task(
     title: &str,
     description: &str,
     assignee: Option<&str>,
-) -> Result<DevTask, String> {
+) -> Result<WorkTask, String> {
     let title = title.trim();
     if title.is_empty() {
         return Err("task_title_empty".to_string());
     }
     let id = normalize_requirement_id(requirement_id).map_err(|e| e.to_string())?;
-    let mut state = ensure_development_started(workspace, &id)?;
-    if state.tasks.iter().any(|task| task.title == title) {
-        return state
-            .tasks
-            .iter()
-            .find(|task| task.title == title)
-            .cloned()
-            .ok_or_else(|| "task_not_found".to_string());
+    let state = ensure_development_started(workspace, &id)?;
+    let existing = list_development_work_tasks(workspace, &id)?;
+    if let Some(found) = existing.iter().find(|task| task.title == title) {
+        return Ok(found.clone());
     }
-    let task_num = state.tasks.len() + 1;
+    let task_num = existing.len() + 1;
     let task_id = format!("task-{task_num:03}");
     let branch = format!("{}-{}", state.feature_branch, task_id);
-    let now = now_ms();
-    let task = DevTask {
-        id: task_id.clone(),
-        title: title.to_string(),
-        assignee: assignee.filter(|value| !value.trim().is_empty()).map(str::to_string),
-        branch: branch.clone(),
-        status: DevTaskStatus::BranchCreated,
-        progress: 0,
-        created_at_ms: now,
-        updated_at_ms: now,
-    };
-    state.tasks.push(task.clone());
+    create_work_task(
+        workspace,
+        CreateWorkTaskParams {
+            id: Some(&task_id),
+            biz_type: BIZ_TYPE_REQUIREMENT,
+            biz_id: &id,
+            title,
+            description,
+            assignee,
+            auto_executable: true,
+            metadata: serde_json::json!({
+                "task_kind": TASK_KIND_DEVELOPMENT,
+                "branch": branch,
+                "dev_status": DevTaskStatus::BranchCreated.as_str(),
+            }),
+        },
+    )?;
+    let mut state = load_dev_state(workspace, &id)?;
     state.current_task_id = Some(task_id.clone());
     save_dev_state(workspace, &id, &state)?;
     save_task_content(
@@ -293,7 +674,10 @@ pub fn add_development_task(
         &format!("# {title}\n\n{description}\n\nBranch: `{branch}`\n"),
     )?;
     create_task_branch(workspace, &branch);
-    Ok(task)
+    if let Some(assignee) = assignee.filter(|value| !value.trim().is_empty()) {
+        let _ = mark_employee_for_autonomy(workspace, assignee);
+    }
+    load_work_task(workspace, &task_id)
 }
 
 const DEV_CONTEXT_EXCERPT_CHARS: usize = 800;
@@ -332,17 +716,20 @@ pub fn format_development_requirement_context(
                 "  development_state: started\n  feature_branch: {}\n",
                 state.feature_branch
             ));
-            if state.tasks.is_empty() {
+            let tasks = list_development_work_tasks(workspace, &item.id).unwrap_or_default();
+            if tasks.is_empty() {
                 out.push_str("  development_tasks: (none)\n");
             } else {
                 out.push_str("  development_tasks:\n");
-                for task in &state.tasks {
+                for task in &tasks {
                     out.push_str(&format!(
-                        "    - id: {} | title: {} | status: {} | assignee: {}\n",
+                        "    - id: {} | title: {} | status: {} | assignee: {} | biz_type: {} | biz_id: {}\n",
                         task.id,
                         task.title,
-                        task.status.as_str(),
-                        task.assignee.as_deref().unwrap_or("-")
+                        dev_status_of(task).as_str(),
+                        task.assignee.as_deref().unwrap_or("-"),
+                        task.biz_type,
+                        task.biz_id,
                     ));
                 }
             }
@@ -362,29 +749,6 @@ fn save_task_content(
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     fs::write(&path, content).map_err(|e| e.to_string())
-}
-
-fn wire_task(task: &DevTask) -> DevTaskWire {
-    DevTaskWire {
-        id: task.id.clone(),
-        title: task.title.clone(),
-        assignee: task.assignee.clone(),
-        branch: task.branch.clone(),
-        status: task.status.as_str().to_string(),
-        progress: task.progress,
-        created_at_ms: task.created_at_ms,
-        updated_at_ms: task.updated_at_ms,
-    }
-}
-
-fn wire_state(state: &DevStateFile) -> RequirementDevelopmentWire {
-    RequirementDevelopmentWire {
-        requirement_id: state.requirement_id.clone(),
-        feature_branch: state.feature_branch.clone(),
-        feature_branch_created: state.feature_branch_created,
-        tasks: state.tasks.iter().map(wire_task).collect(),
-        current_task_id: state.current_task_id.clone(),
-    }
 }
 
 fn workspace_root(state: &AppState) -> Option<std::path::PathBuf> {
@@ -438,7 +802,12 @@ pub async fn get_development(
             )
         }
     })?;
-    Ok(Json(wire_state(&state)))
+    wire_state(&workspace, &state).map(Json).map_err(|e| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            e.to_string(),
+        )
+    })
 }
 
 pub async fn start_development(
@@ -476,14 +845,22 @@ pub async fn start_development(
             )
         }
     })?;
-    if state.tasks.is_empty() {
+    if list_development_work_tasks(&workspace, &id)
+        .map(|tasks| tasks.is_empty())
+        .unwrap_or(true)
+    {
         if let Ok(employees) = list_employee_records(&workspace) {
             for employee in employees {
                 let _ = mark_employee_for_autonomy(&workspace, &employee.id);
             }
         }
     }
-    Ok(Json(wire_state(&state)))
+    wire_state(&workspace, &state).map(Json).map_err(|e| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            e.to_string(),
+        )
+    })
 }
 
 pub async fn create_task(
@@ -506,7 +883,7 @@ pub async fn create_task(
             i18n::msg(&headers, "task_title_empty"),
         ));
     }
-    let mut state = load_dev_state(&workspace, &id).map_err(|e| {
+    let state = load_dev_state(&workspace, &id).map_err(|e| {
         if e == "development_not_started" {
             (
                 axum::http::StatusCode::NOT_FOUND,
@@ -525,7 +902,7 @@ pub async fn create_task(
             i18n::msg(&headers, "feature_branch_not_created"),
         ));
     }
-    let task = add_development_task(
+    add_development_task(
         &workspace,
         &id,
         title,
@@ -545,14 +922,18 @@ pub async fn create_task(
             )
         }
     })?;
-    state = load_dev_state(&workspace, &id).map_err(|e| {
+    let state = load_dev_state(&workspace, &id).map_err(|e| {
         (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             e.to_string(),
         )
     })?;
-    let _ = task;
-    Ok(Json(wire_state(&state)))
+    wire_state(&workspace, &state).map(Json).map_err(|e| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            e.to_string(),
+        )
+    })
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -585,40 +966,62 @@ pub async fn update_task(
         ));
     };
     let id = normalize_requirement_id(&id).map_err(map_dev_err(&headers))?;
-    let mut state = load_dev_state(&workspace, &id).map_err(|e| {
+    let _state = load_dev_state(&workspace, &id).map_err(|e| {
         (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             e.to_string(),
         )
     })?;
-    let task = state.tasks.iter_mut().find(|t| t.id == task_id).ok_or_else(|| {
-        (
-            axum::http::StatusCode::NOT_FOUND,
-            i18n::msg(&headers, "task_not_found"),
-        )
-    })?;
-    if let Some(title) = payload.title {
-        let trimmed = title.trim();
-        if trimmed.is_empty() {
-            return Err((
+    let title = payload.title.clone();
+    let assignee = payload.assignee.clone();
+    let progress = payload.progress;
+    let _ = update_work_task(&workspace, &task_id, |task| {
+        if !is_development_task(task) || task.biz_id != id {
+            return Err("task_not_found".to_string());
+        }
+        if let Some(ref title) = title {
+            let trimmed = title.trim();
+            if trimmed.is_empty() {
+                return Err("task_title_empty".to_string());
+            }
+            task.title = trimmed.to_string();
+        }
+        task.assignee = assignee.clone().filter(|s| !s.trim().is_empty());
+        if let Some(progress) = progress {
+            task.progress = progress.min(100);
+        }
+        Ok(())
+    })
+    .map_err(|e| {
+        if e == "task_not_found" {
+            (
+                axum::http::StatusCode::NOT_FOUND,
+                i18n::msg(&headers, "task_not_found"),
+            )
+        } else if e == "task_title_empty" {
+            (
                 axum::http::StatusCode::BAD_REQUEST,
                 i18n::msg(&headers, "task_title_empty"),
-            ));
+            )
+        } else {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                e.to_string(),
+            )
         }
-        task.title = trimmed.to_string();
-    }
-    task.assignee = payload.assignee.filter(|s| !s.trim().is_empty());
-    if let Some(progress) = payload.progress {
-        task.progress = progress.min(100);
-    }
-    task.updated_at_ms = now_ms();
-    save_dev_state(&workspace, &id, &state).map_err(|e| {
+    })?;
+    let state = load_dev_state(&workspace, &id).map_err(|e| {
         (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             e.to_string(),
         )
     })?;
-    Ok(Json(wire_state(&state)))
+    wire_state(&workspace, &state).map(Json).map_err(|e| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            e.to_string(),
+        )
+    })
 }
 
 pub async fn delete_task(
@@ -639,24 +1042,41 @@ pub async fn delete_task(
             e.to_string(),
         )
     })?;
-    let idx = state.tasks.iter().position(|t| t.id == task_id).ok_or_else(|| {
+    let task = load_work_task(&workspace, &task_id).map_err(|_| {
         (
             axum::http::StatusCode::NOT_FOUND,
             i18n::msg(&headers, "task_not_found"),
         )
     })?;
-    state.tasks.remove(idx);
-    if state.current_task_id.as_deref() == Some(&task_id) {
-        state.current_task_id = state.tasks.last().map(|t| t.id.clone());
+    if !is_development_task(&task) || task.biz_id != id {
+        return Err((
+            axum::http::StatusCode::NOT_FOUND,
+            i18n::msg(&headers, "task_not_found"),
+        ));
     }
-    let _ = fs::remove_file(task_file_path(&workspace, &id, &task_id));
-    save_dev_state(&workspace, &id, &state).map_err(|e| {
+    delete_work_task(&workspace, &task_id).map_err(|e| {
         (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             e.to_string(),
         )
     })?;
-    Ok(Json(wire_state(&state)))
+    if state.current_task_id.as_deref() == Some(&task_id) {
+        let remaining = list_development_work_tasks(&workspace, &id).unwrap_or_default();
+        state.current_task_id = remaining.last().map(|t| t.id.clone());
+        save_dev_state(&workspace, &id, &state).map_err(|e| {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                e.to_string(),
+            )
+        })?;
+    }
+    let _ = fs::remove_file(task_file_path(&workspace, &id, &task_id));
+    wire_state(&workspace, &state).map(Json).map_err(|e| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            e.to_string(),
+        )
+    })
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -677,77 +1097,84 @@ pub async fn task_action(
         ));
     };
     let id = normalize_requirement_id(&id).map_err(map_dev_err(&headers))?;
-    let mut state = load_dev_state(&workspace, &id).map_err(|e| {
+    let mut dev_state = load_dev_state(&workspace, &id).map_err(|e| {
         (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             e.to_string(),
         )
     })?;
-    let task = state.tasks.iter_mut().find(|t| t.id == task_id).ok_or_else(|| {
+    let task = load_work_task(&workspace, &task_id).map_err(|_| {
         (
             axum::http::StatusCode::NOT_FOUND,
             i18n::msg(&headers, "task_not_found"),
         )
     })?;
-    match payload.action.as_str() {
+    if !is_development_task(&task) || task.biz_id != id {
+        return Err((
+            axum::http::StatusCode::NOT_FOUND,
+            i18n::msg(&headers, "task_not_found"),
+        ));
+    }
+    let current = dev_status_of(&task);
+    let next = match payload.action.as_str() {
         "start_development" => {
-            if !matches!(task.status, DevTaskStatus::BranchCreated) {
+            if current != DevTaskStatus::BranchCreated {
                 return Err((
                     axum::http::StatusCode::BAD_REQUEST,
                     i18n::msg(&headers, "task_action_invalid"),
                 ));
             }
-            task.status = DevTaskStatus::InDevelopment;
+            DevTaskStatus::InDevelopment
         }
         "complete_development" => {
-            if !matches!(task.status, DevTaskStatus::InDevelopment) {
+            if current != DevTaskStatus::InDevelopment {
                 return Err((
                     axum::http::StatusCode::BAD_REQUEST,
                     i18n::msg(&headers, "task_action_invalid"),
                 ));
             }
-            task.status = DevTaskStatus::DevComplete;
-            task.progress = 100;
+            DevTaskStatus::DevComplete
         }
         "start_review" => {
-            if !matches!(task.status, DevTaskStatus::DevComplete) {
+            if current != DevTaskStatus::DevComplete {
                 return Err((
                     axum::http::StatusCode::BAD_REQUEST,
                     i18n::msg(&headers, "task_action_invalid"),
                 ));
             }
-            task.status = DevTaskStatus::InReview;
+            DevTaskStatus::InReview
         }
         "complete_review" => {
-            if !matches!(task.status, DevTaskStatus::InReview) {
+            if current != DevTaskStatus::InReview {
                 return Err((
                     axum::http::StatusCode::BAD_REQUEST,
                     i18n::msg(&headers, "task_action_invalid"),
                 ));
             }
-            task.status = DevTaskStatus::ReviewComplete;
+            DevTaskStatus::ReviewComplete
         }
         "merge" => {
-            if !matches!(task.status, DevTaskStatus::ReviewComplete) {
+            if current != DevTaskStatus::ReviewComplete {
                 return Err((
                     axum::http::StatusCode::BAD_REQUEST,
                     i18n::msg(&headers, "task_action_invalid"),
                 ));
             }
-            task.status = DevTaskStatus::Merged;
             if let Some(main_repo) = workspace.join("repos").join("main").join("main")
                 .exists()
                 .then(|| workspace.join("repos").join("main").join("main"))
             {
+                let branch = task_branch(&task).unwrap_or("").to_string();
                 let _ = std::process::Command::new("git")
                     .current_dir(&main_repo)
-                    .args(["checkout", &state.feature_branch])
+                    .args(["checkout", &dev_state.feature_branch])
                     .output();
                 let _ = std::process::Command::new("git")
                     .current_dir(&main_repo)
-                    .args(["merge", "--no-ff", &task.branch])
+                    .args(["merge", "--no-ff", &branch])
                     .output();
             }
+            DevTaskStatus::Merged
         }
         _ => {
             return Err((
@@ -755,16 +1182,31 @@ pub async fn task_action(
                 i18n::msg(&headers, "task_action_unknown"),
             ));
         }
-    }
-    task.updated_at_ms = now_ms();
-    state.current_task_id = Some(task_id);
-    save_dev_state(&workspace, &id, &state).map_err(|e| {
+    };
+    let progress = if next == DevTaskStatus::DevComplete || next == DevTaskStatus::Merged {
+        100
+    } else {
+        task.progress
+    };
+    let _ = update_work_task(&workspace, &task_id, |task| {
+        set_dev_status(task, next.as_str());
+        task.status = next.to_work_status();
+        task.progress = progress;
+        Ok(())
+    });
+    dev_state.current_task_id = Some(task_id);
+    save_dev_state(&workspace, &id, &dev_state).map_err(|e| {
         (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             e.to_string(),
         )
     })?;
-    Ok(Json(wire_state(&state)))
+    wire_state(&workspace, &dev_state).map(Json).map_err(|e| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            e.to_string(),
+        )
+    })
 }
 
 fn map_dev_err(
@@ -796,6 +1238,7 @@ fn map_dev_err(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::work_task::load_work_task;
     use std::{
         fs,
         time::{SystemTime, UNIX_EPOCH},
@@ -828,14 +1271,81 @@ mod tests {
     }
 
     #[test]
-    fn dev_state_save_and_load_roundtrip() {
+    fn planned_dev_tasks_map_migrates_to_work_tasks() {
+        use crate::requirement::{format_requirement_md, RequirementMeta, REQUIREMENT_FILE};
+
         let workspace = temp_workspace();
         fs::create_dir_all(&workspace).unwrap();
+        let req_dir = workspace.join("requirements").join("game");
+        fs::create_dir_all(&req_dir).unwrap();
+        fs::write(
+            req_dir.join(REQUIREMENT_FILE),
+            format_requirement_md(
+                &RequirementMeta {
+                    id: "game".into(),
+                    title: "Game".into(),
+                    phase: RequirementPhase::Development,
+                    confirm_status: None,
+                    created_at_ms: 1,
+                    updated_at_ms: 2,
+                },
+                "## Scope",
+            ),
+        )
+        .unwrap();
+        fs::create_dir_all(req_dir.join("development")).unwrap();
+        fs::write(
+            dev_state_path(&workspace, "game"),
+            r#"{
+  "requirement_id": "game",
+  "feature_branch": "feat-game",
+  "feature_branch_created": true,
+  "milestone": "M0",
+  "tasks": {
+    "task-001": { "milestone": "M0", "status": "pending", "title": "Bootstrap project" }
+  }
+}"#,
+        )
+        .unwrap();
+
+        let loaded = load_dev_state(&workspace, "game").unwrap();
+        assert_eq!(loaded.milestone.as_deref(), Some("M0"));
+        let task = load_work_task(&workspace, "task-001").unwrap();
+        assert_eq!(task.title, "Bootstrap project");
+        assert_eq!(task.metadata["milestone"], "M0");
+        let raw = fs::read_to_string(dev_state_path(&workspace, "game")).unwrap();
+        assert!(!raw.contains("\"tasks\": {"));
+        let _ = fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn legacy_dev_tasks_migrate_to_work_tasks() {
+        use crate::requirement::{format_requirement_md, RequirementMeta, REQUIREMENT_FILE};
+
+        let workspace = temp_workspace();
+        fs::create_dir_all(&workspace).unwrap();
+        let req_dir = workspace.join("requirements").join("feat-a");
+        fs::create_dir_all(&req_dir.join("development").join("tasks")).unwrap();
+        fs::write(
+            req_dir.join(REQUIREMENT_FILE),
+            format_requirement_md(
+                &RequirementMeta {
+                    id: "feat-a".into(),
+                    title: "Feature A".into(),
+                    phase: RequirementPhase::Development,
+                    confirm_status: None,
+                    created_at_ms: 1,
+                    updated_at_ms: 2,
+                },
+                "## Scope",
+            ),
+        )
+        .unwrap();
         let state = DevStateFile {
             requirement_id: "feat-a".into(),
             feature_branch: "feat-feat-a".into(),
             feature_branch_created: true,
-            tasks: vec![DevTask {
+            tasks: vec![LegacyDevTask {
                 id: "task-001".into(),
                 title: "Implement API".into(),
                 assignee: Some("alice".into()),
@@ -846,13 +1356,21 @@ mod tests {
                 updated_at_ms: 2,
             }],
             current_task_id: Some("task-001".into()),
+            milestone: None,
+            milestone_phase: None,
         };
         save_dev_state(&workspace, "feat-a", &state).unwrap();
+        save_task_content(&workspace, "feat-a", "task-001", "# Title\n").unwrap();
+
         let loaded = load_dev_state(&workspace, "feat-a").unwrap();
-        assert_eq!(loaded.requirement_id, "feat-a");
-        assert_eq!(loaded.tasks.len(), 1);
-        assert_eq!(loaded.tasks[0].title, "Implement API");
-        let wire = wire_state(&loaded);
+        assert!(loaded.tasks.is_empty());
+        let tasks = list_development_work_tasks(&workspace, "feat-a").unwrap();
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].title, "Implement API");
+        assert_eq!(tasks[0].biz_type, BIZ_TYPE_REQUIREMENT);
+        assert_eq!(tasks[0].biz_id, "feat-a");
+        assert_eq!(tasks[0].assignee.as_deref(), Some("alice"));
+        let wire = wire_state(&workspace, &loaded).unwrap();
         assert_eq!(wire.tasks[0].status, "branch_created");
         let _ = fs::remove_dir_all(&workspace);
     }
@@ -892,13 +1410,82 @@ mod tests {
         )
         .unwrap();
 
-        assert!(!requirement_needs_development_tasks(&workspace, "auth").unwrap());
+        assert!(requirement_needs_development_tasks(&workspace, "auth").unwrap());
 
         ensure_development_started(&workspace, "auth").unwrap();
         assert!(requirement_needs_development_tasks(&workspace, "auth").unwrap());
 
         add_development_task(&workspace, "auth", "Task one", "Do work", None).unwrap();
         assert!(!requirement_needs_development_tasks(&workspace, "auth").unwrap());
+
+        let task = load_work_task(&workspace, "task-001").unwrap();
+        assert_eq!(task.biz_type, BIZ_TYPE_REQUIREMENT);
+        assert_eq!(task.biz_id, "auth");
+        assert!(task.auto_executable);
+
+        let _ = fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn prepare_development_work_tasks_assigns_default_assignee() {
+        use crate::employee::employee_root;
+        use crate::requirement::{format_requirement_md, RequirementMeta, REQUIREMENT_FILE};
+
+        let workspace = temp_workspace();
+        let employee_dir = employee_root(&workspace).join("dev1");
+        fs::create_dir_all(&employee_dir).unwrap();
+        fs::write(
+            employee_dir.join("profile.json"),
+            serde_json::json!({
+                "id": "dev1",
+                "name": "Dev",
+                "department": "engineering",
+                "role": "Engineer"
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let req_dir = workspace.join("requirements").join("auth");
+        fs::create_dir_all(&req_dir).unwrap();
+        fs::write(
+            req_dir.join(REQUIREMENT_FILE),
+            format_requirement_md(
+                &RequirementMeta {
+                    id: "auth".into(),
+                    title: "User auth".into(),
+                    phase: RequirementPhase::Development,
+                    confirm_status: None,
+                    created_at_ms: 1,
+                    updated_at_ms: 2,
+                },
+                "## Scope\nImplement login.",
+            ),
+        )
+        .unwrap();
+        ensure_development_started(&workspace, "auth").unwrap();
+        create_work_task(
+            &workspace,
+            CreateWorkTaskParams {
+                id: Some("task-001"),
+                biz_type: BIZ_TYPE_REQUIREMENT,
+                biz_id: "auth",
+                title: "Implement login",
+                description: "Do work",
+                assignee: None,
+                auto_executable: true,
+                metadata: serde_json::json!({
+                    "task_kind": TASK_KIND_DEVELOPMENT,
+                    "branch": "feat-auth-task-001",
+                    "dev_status": "branch_created",
+                }),
+            },
+        )
+        .unwrap();
+
+        prepare_development_work_tasks_for_autonomy(&workspace).unwrap();
+        let task = load_work_task(&workspace, "task-001").unwrap();
+        assert_eq!(task.assignee.as_deref(), Some("dev1"));
+        assert_eq!(task.status, WorkTaskStatus::Pending);
 
         let _ = fs::remove_dir_all(&workspace);
     }

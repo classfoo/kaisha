@@ -24,6 +24,7 @@ pub enum TaskKind {
     ReviewPipeline,
     AutonomyExplore,
     AutonomyExecute,
+    WorkTaskExecute,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

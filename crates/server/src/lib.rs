@@ -14,6 +14,8 @@ mod shop_status;
 mod tasks;
 mod tools;
 mod work_rules;
+mod work_task;
+pub mod work_task_reconcile;
 
 use application::HealthService;
 use axum::{
@@ -706,6 +708,11 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
         .route(
             "/api/work-rules",
             get(work_rules::get_work_rules).put(work_rules::put_work_rules),
+        )
+        .route("/api/work-tasks", get(work_task::list_work_tasks_handler))
+        .route(
+            "/api/work-tasks/:id",
+            get(work_task::get_work_task_handler),
         )
         .route("/api/tasks", get(tasks::list_tasks))
         .route("/api/tasks/:id/detail", get(tasks::get_task_detail))
