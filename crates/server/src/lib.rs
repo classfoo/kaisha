@@ -51,7 +51,7 @@ struct AppState {
     workspace: Arc<RwLock<WorkspaceState>>,
     settings: Arc<RwLock<SettingsState>>,
     tools: Arc<RwLock<ToolManager>>,
-    autonomy: Option<Arc<autonomy::AutonomyCoordinator>>,
+    autonomy: Option<Arc<autonomy::runtime::AutonomousRuntime>>,
     shop_status: Arc<RwLock<shop_status::ShopStatus>>,
 }
 
@@ -572,11 +572,17 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
         shop_status::ShopStatus::default()
     };
     let shop_status = Arc::new(RwLock::new(shop_status_value));
-    let coordinator = Arc::new(autonomy::AutonomyCoordinator::new(
-        workspace.clone(),
+    let coordinator = Arc::new(autonomy::runtime::AutonomousRuntime::new(
+        workspace_init.path.clone().unwrap_or_default(),
         tools.clone(),
     ));
-    tokio::spawn(coordinator.clone().run_loop());
+    let coordinator_clone = coordinator.clone();
+    tokio::spawn(async move {
+        if let Err(err) = coordinator_clone.initialize().await {
+            tracing::warn!("autonomy runtime init failed: {err}");
+        }
+        coordinator_clone.run_loop().await;
+    });
     let app_state = AppState {
         health: HealthService,
         workspace,
@@ -719,20 +725,23 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
         .route("/api/tasks/:id", get(tasks::get_task))
         .route("/api/tasks/:id/rerun", post(tasks::rerun_task))
         .route("/api/tasks/:id/stop", post(tasks::stop_task))
-        .route("/api/autonomy/status", get(autonomy::get_autonomy_status))
-        .route("/api/autonomy/tick", post(autonomy::run_autonomy_tick_handler))
+        .route("/api/autonomy/status", get(autonomy::api::get_autonomy_status))
+        .route("/api/autonomy/tick", post(autonomy::api::run_autonomy_tick_handler))
         .route(
             "/api/employees/:id/todos",
-            get(autonomy::list_employee_todos_handler),
+            get(autonomy::api::list_employee_todos_handler),
         )
         .route(
             "/api/employees/:id/autonomy/run",
-            post(autonomy::run_employee_autonomy_handler),
+            post(autonomy::api::run_employee_autonomy_handler),
         )
         .route(
             "/api/employees/:id/autonomy/explore",
-            post(autonomy::run_employee_autonomy_explore_handler),
+            post(autonomy::api::run_employee_autonomy_explore_handler),
         )
+        .route("/api/autonomy/tasks", get(autonomy::api::list_tasks_handler))
+        .route("/api/autonomy/plans", get(autonomy::api::list_plans_handler))
+        .route("/api/autonomy/workers", get(autonomy::api::list_workers_handler))
         .route("/api/shop/status", get(get_shop_status))
         .route("/api/shop/toggle", post(toggle_shop_status))
         .layer(cors)

@@ -1076,7 +1076,12 @@ pub async fn get_autonomy_status(
         state
             .autonomy
             .as_ref()
-            .map(|c| c.status())
+            .map(|_| AutonomyStatusWire {
+                enabled: true,
+                interval_secs: AUTONOMY_INTERVAL_SECS,
+                pending_employees: vec![],
+                last_tick_ms: None,
+            })
             .unwrap_or(AutonomyStatusWire {
                 enabled: false,
                 interval_secs: AUTONOMY_INTERVAL_SECS,
@@ -1090,17 +1095,19 @@ pub async fn run_autonomy_tick_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> Result<Json<AutonomyStatusWire>, (axum::http::StatusCode, String)> {
-    let Some(coordinator) = state.autonomy.clone() else {
+    let Some(runtime) = state.autonomy.clone() else {
         return Err((
             axum::http::StatusCode::SERVICE_UNAVAILABLE,
             crate::i18n::msg(&headers, "autonomy_not_enabled"),
         ));
     };
-    coordinator
-        .run_tick()
-        .await
-        .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    Ok(Json(coordinator.status()))
+    runtime.notify();
+    Ok(Json(AutonomyStatusWire {
+        enabled: true,
+        interval_secs: AUTONOMY_INTERVAL_SECS,
+        pending_employees: vec![],
+        last_tick_ms: None,
+    }))
 }
 
 pub async fn list_employee_todos_handler(

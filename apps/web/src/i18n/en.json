@@ -84,7 +84,8 @@
         "review_summary": "Review summary",
         "review_pipeline": "Review pipeline",
         "autonomy_explore": "Autonomy exploration",
-        "autonomy_execute": "Autonomy execution"
+        "autonomy_execute": "Autonomy execution",
+        "work_task_execute": "Work task execution"
       },
       "status": {
         "pending": "Pending",

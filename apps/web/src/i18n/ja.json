@@ -84,7 +84,8 @@
         "review_summary": "レビュー要約",
         "review_pipeline": "レビューパイプライン",
         "autonomy_explore": "自律探索",
-        "autonomy_execute": "自律実行"
+        "autonomy_execute": "自律実行",
+        "work_task_execute": "ワークタスク実行"
       },
       "status": {
         "pending": "待機中",
