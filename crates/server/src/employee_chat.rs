@@ -161,6 +161,7 @@ fn normalize_optional_text(value: Option<String>) -> Option<String> {
     })
 }
 
+#[allow(dead_code)]
 fn format_review_assistant_reply(
     review: &crate::requirement_review::RequirementReviewWire,
 ) -> String {
@@ -260,6 +261,7 @@ fn conv_messages_to_prior(messages: &[StoredMessage]) -> Vec<(String, String)> {
     prior_conversation_context(&prior_rows)
 }
 
+#[allow(dead_code)]
 fn run_review_turn(
     tools: &ToolManager,
     workspace: &Path,

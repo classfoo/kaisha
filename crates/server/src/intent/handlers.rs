@@ -390,7 +390,7 @@ impl IntentHandler for AutonomyExploreHandler {
         &self,
         _intent: &IntentDetection,
         _tools: &ToolManager,
-        workspace: &Path,
+        _workspace: &Path,
         employee_id: &str,
         _user_input: &str,
         _prior_messages: &[(String, String)],

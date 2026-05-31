@@ -158,6 +158,7 @@ pub fn requirement_workdir(workspace: &Path, requirement_id: &str) -> PathBuf {
     requirement_dir(workspace, requirement_id)
 }
 
+#[allow(dead_code)]
 pub fn detect_review_start_intent(input: &str, known_ids: &[String]) -> Option<String> {
     let lower = input.to_lowercase();
     let triggers = [

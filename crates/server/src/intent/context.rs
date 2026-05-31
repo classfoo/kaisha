@@ -5,6 +5,7 @@ use crate::requirement::list_requirement_summaries;
 
 /// Context available during intent detection and handling.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct IntentContext<'a> {
     pub workspace: &'a Path,
     pub employee_id: &'a str,
@@ -13,6 +14,7 @@ pub struct IntentContext<'a> {
 }
 
 impl<'a> IntentContext<'a> {
+    #[allow(dead_code)]
     pub fn new(
         workspace: &'a Path,
         employee_id: &'a str,
@@ -41,6 +43,7 @@ impl<'a> IntentContext<'a> {
         None
     }
 
+    #[allow(dead_code)]
     pub fn find_employee_id(&self, input: &str) -> Option<String> {
         for id in &self.known_employee_ids {
             if input.contains(id.as_str()) {

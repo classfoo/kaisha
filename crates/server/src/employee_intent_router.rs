@@ -9,6 +9,7 @@ pub use crate::intent::context::IntentContext;
 
 /// Intent types supported by the router.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
 pub enum IntentType {
     /// Trigger requirement review for a specific requirement
     RequirementReview,
@@ -38,6 +39,7 @@ pub enum IntentType {
     GeneralChat,
 }
 
+#[allow(dead_code)]
 impl IntentType {
     pub fn is_terminal(&self) -> bool {
         matches!(
@@ -70,6 +72,7 @@ pub trait IntentDetector: Send + Sync {
 
 /// Result from intent handler execution.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct IntentResult {
     pub output: String,
     pub execution_result: Option<ToolExecutionResult>,
@@ -155,6 +158,7 @@ impl IntentRouter {
         )
     }
 
+    #[allow(dead_code)]
     pub fn detect_intent_type(&self, input: &str, context: &IntentContext) -> Option<IntentType> {
         self.detect(input, context).map(|d| d.intent_type)
     }
@@ -171,6 +175,7 @@ pub fn extract_requirement_id(input: &str, known_ids: &[String]) -> Option<Strin
 }
 
 /// Helper to extract an employee ID from input text.
+#[allow(dead_code)]
 pub fn extract_employee_id(input: &str, known_ids: &[String]) -> Option<String> {
     for id in known_ids {
         if input.contains(id.as_str()) {
