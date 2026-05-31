@@ -1,4 +1,4 @@
-use crate::autonomy_trigger::mark_employee_for_autonomy;
+use crate::autonomy_trigger::{is_employee_busy, is_employee_busy_excluding, mark_employee_for_autonomy};
 use super::{
     model::{AgentTaskRecord, CodeAgentTaskParams, TaskKind, TaskStatus},
     runtime::task_runtime_handle,
@@ -206,7 +206,7 @@ impl TaskRunner {
         executor_id: &str,
     ) -> anyhow::Result<()> {
         loop {
-            if crate::autonomy::is_employee_busy(&self.store.list()?, executor_id) {
+            if is_employee_busy(&self.store.list()?, executor_id) {
                 return Ok(());
             }
             let Some(task_id) = self.next_queued_rerun_task_id(executor_id)? else {
@@ -379,37 +379,6 @@ pub fn review_pipeline_content(requirement_id: &str) -> String {
     format!("Run requirement review pipeline for `{requirement_id}`")
 }
 
-pub fn autonomy_explore_content(workspace: &Path, employee_id: &str, mode_label: &str) -> String {
-    let lang = crate::agent_locale::resolve_lang_for_workspace(workspace);
-    crate::i18n::format_msg(
-        lang,
-        "task_content_autonomy_explore",
-        &[("employee_id", employee_id), ("mode", mode_label)],
-    )
-}
-
-pub fn autonomy_execute_content(workspace: &Path, employee_id: &str, todo_title: &str) -> String {
-    let lang = crate::agent_locale::resolve_lang_for_workspace(workspace);
-    crate::i18n::format_msg(
-        lang,
-        "task_content_autonomy_execute",
-        &[("employee_id", employee_id), ("todo_title", todo_title)],
-    )
-}
-
-pub fn work_task_execute_content(
-    workspace: &Path,
-    employee_id: &str,
-    task_title: &str,
-) -> String {
-    let lang = crate::agent_locale::resolve_lang_for_workspace(workspace);
-    crate::i18n::format_msg(
-        lang,
-        "task_content_work_task_execute",
-        &[("employee_id", employee_id), ("task_title", task_title)],
-    )
-}
-
 pub fn review_context(requirement_id: &str) -> serde_json::Value {
     json!({ "requirement_id": requirement_id })
 }
@@ -433,7 +402,7 @@ pub fn should_queue_rerun_instead(source: &AgentTaskRecord, tasks: &[AgentTaskRe
     let Some(executor_id) = source.executor_id.as_deref() else {
         return false;
     };
-    crate::autonomy::is_employee_busy_excluding(tasks, executor_id, Some(&source.id))
+    is_employee_busy_excluding(tasks, executor_id, Some(&source.id))
 }
 
 pub fn can_stop_task(task: &AgentTaskRecord) -> bool {
@@ -473,17 +442,6 @@ mod tests {
             .expect("clock")
             .as_nanos();
         std::env::temp_dir().join(format!("kaisha-task-runner-{unique}"))
-    }
-
-    #[test]
-    fn autonomy_explore_content_uses_workspace_locale() {
-        let workspace = temp_workspace();
-        fs::create_dir_all(&workspace).unwrap();
-        crate::agent_locale::save_workspace_lang(&workspace, "zh").unwrap();
-        let content = autonomy_explore_content(&workspace, "alice", "需求规划");
-        assert!(content.contains("alice"));
-        assert!(content.contains("自主探索"));
-        let _ = fs::remove_dir_all(workspace);
     }
 
     #[test]

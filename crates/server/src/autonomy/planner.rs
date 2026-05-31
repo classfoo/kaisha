@@ -5,15 +5,16 @@ use crate::autonomy::task::{
 use crate::autonomy::store;
 use crate::autonomy::task_graph::TaskGraph;
 use crate::tools::manager::ToolManager;
-use std::path::Path;
 use std::sync::Arc;
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct Planner {
     workspace: std::path::PathBuf,
     tools: Arc<std::sync::RwLock<ToolManager>>,
 }
 
+#[allow(dead_code)]
 pub struct PlanningContext {
     pub title: String,
     pub description: String,
@@ -21,6 +22,7 @@ pub struct PlanningContext {
     pub tasks: Vec<TaskSpec>,
 }
 
+#[allow(dead_code)]
 pub struct TaskSpec {
     pub id: Option<String>,
     pub title: String,
@@ -32,6 +34,7 @@ pub struct TaskSpec {
     pub retry_policy: Option<RetryPolicy>,
 }
 
+#[allow(dead_code)]
 impl Planner {
     pub fn new(
         workspace: std::path::PathBuf,

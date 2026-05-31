@@ -1,16 +1,17 @@
 use crate::autonomy::events::{AutonomyEvent, EventBus};
 use crate::autonomy::worker::{self, LoadLevel, Worker, WorkerStatus};
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::Arc;
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct WorkerPool {
     workspace: std::path::PathBuf,
     event_bus: EventBus,
     running_counts: Arc<std::sync::Mutex<HashMap<String, usize>>>,
 }
 
+#[allow(dead_code)]
 impl WorkerPool {
     pub fn new(workspace: std::path::PathBuf, event_bus: EventBus) -> Self {
         Self {

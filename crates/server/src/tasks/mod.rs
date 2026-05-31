@@ -10,9 +10,9 @@ pub use model::{
     AgentTaskRecord, CodeAgentTaskParams, TaskKind, TaskStatus,
 };
 pub use runner::{
-    autonomy_execute_content, autonomy_explore_content, build_rerun_params,     can_rerun_task, hire_task_content, review_context, review_opinion_content, review_pipeline_content,
-    review_revision_content, review_summary_content, should_queue_rerun_instead,
-    task_content_from_user_input, work_task_execute_content, TaskRunner,
+    build_rerun_params, can_rerun_task, hire_task_content, review_context, review_opinion_content,
+    review_pipeline_content, review_revision_content, review_summary_content,
+    should_queue_rerun_instead, task_content_from_user_input, TaskRunner,
 };
 pub use runtime::TaskRuntimeRegistry;
 pub use store::{filter_tasks, TaskListFilter, TaskStore};

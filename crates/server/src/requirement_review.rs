@@ -14,7 +14,7 @@ use crate::{
     work_rules::{duty_for_phase, load_work_rules, resolve_role_key, WorkRulesFile},
     work_task::{
         filter_work_tasks, is_review_task,
-        list_work_tasks, review_opinion_status, review_passed, review_phase,
+        list_work_tasks, review_opinion_status, review_passed,
         save_work_task, set_review_opinion_status, set_review_passed, set_review_phase,
         update_work_task, BIZ_TYPE_REQUIREMENT, TASK_KIND_REVIEW,
         WorkTask, WorkTaskFilter, WorkTaskStatus,
@@ -1430,60 +1430,6 @@ fn review_task_in_progress(workspace: &Path, requirement_id: &str) -> bool {
             tasks.iter().any(|task| task.status == WorkTaskStatus::InProgress)
         })
         .unwrap_or(false)
-}
-
-pub fn execute_review_work_task(
-    workspace: &Path,
-    tools: &ToolManager,
-    employee: &EmployeeRecord,
-    work_task: &WorkTask,
-) -> anyhow::Result<()> {
-    if !is_review_task(work_task) {
-        anyhow::bail!("work_task_not_found");
-    }
-    let requirement_id = work_task.biz_id.clone();
-    let rules = load_work_rules(workspace)?;
-    let detail = load_requirement_detail(workspace, &requirement_id)?;
-    let workdir = requirement_workdir(workspace, &requirement_id);
-    let runner = TaskRunner::new(workspace);
-    let mut state = load_state(workspace, &requirement_id)?;
-    if state.current_reviewer_id.is_some() || review_task_in_progress(workspace, &requirement_id) {
-        anyhow::bail!("review_opinion_busy");
-    }
-
-    let phase = review_phase(work_task).unwrap_or("opinion");
-    if phase == "revise" {
-        let prior = read_opinion_content(workspace, &requirement_id, &employee.id)
-            .unwrap_or_else(|| "(no prior opinion)".to_string());
-        run_employee_revision(
-            workspace,
-            tools,
-            &runner,
-            None,
-            &rules,
-            &mut state,
-            employee,
-            &requirement_id,
-            &detail.title,
-            &prior,
-            &workdir,
-        )?;
-    } else {
-        run_employee_review(
-            workspace,
-            tools,
-            &runner,
-            None,
-            &rules,
-            &mut state,
-            employee,
-            &requirement_id,
-            &detail.title,
-            &detail.content,
-            &workdir,
-        )?;
-    }
-    Ok(())
 }
 
 fn workspace_root(state: &AppState) -> Option<PathBuf> {

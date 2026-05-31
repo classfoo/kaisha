@@ -48,6 +48,7 @@ pub struct TaskGraph {
     dependents: HashMap<String, HashSet<String>>,
 }
 
+#[allow(dead_code)]
 impl TaskGraph {
     pub fn new() -> Self {
         Self {

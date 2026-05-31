@@ -1,8 +1,7 @@
-use crate::autonomy::events::{AutonomyEvent, EventBus};
+use crate::autonomy::events::EventBus;
 use crate::autonomy::task::{Task, TaskResult};
 use crate::autonomy::worker_pool::WorkerPool;
 use crate::tools::manager::ToolManager;
-use crate::autonomy::store;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::Path;
@@ -26,6 +25,7 @@ impl Clone for WorkerHandle {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct ExecutorPool {
     handles: Arc<std::sync::Mutex<HashMap<String, WorkerHandle>>>,
     worker_pool: Arc<WorkerPool>,
@@ -34,6 +34,7 @@ pub struct ExecutorPool {
     workspace: std::path::PathBuf,
 }
 
+#[allow(dead_code)]
 impl ExecutorPool {
     pub fn new(
         worker_pool: Arc<WorkerPool>,

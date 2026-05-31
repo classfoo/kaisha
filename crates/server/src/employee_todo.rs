@@ -154,69 +154,6 @@ pub fn save_todos(workspace: &Path, file: &EmployeeTodoFile) -> anyhow::Result<(
     Ok(())
 }
 
-pub fn incomplete_todos(file: &EmployeeTodoFile) -> Vec<&EmployeeTodoItem> {
-    file.items
-        .iter()
-        .filter(|item| matches!(item.status, TodoStatus::Pending | TodoStatus::InProgress))
-        .collect()
-}
-
-pub fn count_incomplete_todos(file: &EmployeeTodoFile) -> usize {
-    incomplete_todos(file).len()
-}
-
-pub fn next_pending_todo(file: &EmployeeTodoFile) -> Option<&EmployeeTodoItem> {
-    file.items
-        .iter()
-        .find(|item| item.status == TodoStatus::Pending)
-}
-
-pub fn add_todo(
-    workspace: &Path,
-    employee_id: &str,
-    title: &str,
-    description: &str,
-    source: TodoSource,
-    requirement_id: Option<&str>,
-    requirement_phase: Option<&str>,
-) -> anyhow::Result<EmployeeTodoItem> {
-    let mut file = load_todos(workspace, employee_id)?;
-    let ts = now_ms();
-    let item = EmployeeTodoItem {
-        id: new_todo_id(),
-        title: title.trim().to_string(),
-        description: description.trim().to_string(),
-        status: TodoStatus::Pending,
-        source,
-        requirement_id: requirement_id.map(str::to_string),
-        requirement_phase: requirement_phase.map(str::to_string),
-        created_at_ms: ts,
-        updated_at_ms: ts,
-    };
-    file.items.push(item.clone());
-    save_todos(workspace, &file)?;
-    Ok(item)
-}
-
-pub fn mark_todo_status(
-    workspace: &Path,
-    employee_id: &str,
-    todo_id: &str,
-    status: TodoStatus,
-) -> anyhow::Result<EmployeeTodoItem> {
-    let mut file = load_todos(workspace, employee_id)?;
-    let item = file
-        .items
-        .iter_mut()
-        .find(|item| item.id == todo_id)
-        .ok_or_else(|| anyhow::anyhow!("todo_not_found"))?;
-    item.status = status;
-    item.updated_at_ms = now_ms();
-    let updated = item.clone();
-    save_todos(workspace, &file)?;
-    Ok(updated)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -286,42 +223,6 @@ mod tests {
         assert!(file.items[0].id.starts_with("todo_"));
         let reloaded = load_todos(&workspace, "alice").unwrap();
         assert_eq!(reloaded.items[0].id, file.items[0].id);
-        let _ = fs::remove_dir_all(&workspace);
-    }
-
-    #[test]
-    fn add_and_count_incomplete_todos() {
-        let workspace = temp_workspace();
-        seed_employee(&workspace, "alice");
-        add_todo(
-            &workspace,
-            "alice",
-            "Review auth spec",
-            "Check acceptance criteria",
-            TodoSource::Requirement,
-            Some("auth"),
-            Some("review"),
-        )
-        .unwrap();
-        let file = load_todos(&workspace, "alice").unwrap();
-        assert_eq!(count_incomplete_todos(&file), 1);
-        mark_todo_status(&workspace, "alice", &file.items[0].id, TodoStatus::Completed).unwrap();
-        let file = load_todos(&workspace, "alice").unwrap();
-        assert_eq!(count_incomplete_todos(&file), 0);
-        let _ = fs::remove_dir_all(&workspace);
-    }
-
-    #[test]
-    fn next_pending_todo_skips_in_progress() {
-        let workspace = temp_workspace();
-        seed_employee(&workspace, "bob");
-        add_todo(&workspace, "bob", "A", "a", TodoSource::Manual, None, None).unwrap();
-        let mut file = load_todos(&workspace, "bob").unwrap();
-        file.items[0].status = TodoStatus::InProgress;
-        save_todos(&workspace, &file).unwrap();
-        add_todo(&workspace, "bob", "B", "b", TodoSource::Manual, None, None).unwrap();
-        let file = load_todos(&workspace, "bob").unwrap();
-        assert_eq!(next_pending_todo(&file).map(|t| t.title.as_str()), Some("B"));
         let _ = fs::remove_dir_all(&workspace);
     }
 }

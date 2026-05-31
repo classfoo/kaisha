@@ -1,19 +1,18 @@
 use crate::autonomy::events::EventBus;
 use crate::autonomy::executor::ExecutorPool;
-use crate::autonomy::plan::PlanStatus;
 use crate::autonomy::planner::Planner;
 use crate::autonomy::scheduler::Scheduler;
 use crate::autonomy::store;
-use crate::autonomy::task::{TaskResult, TaskStatus};
+use crate::autonomy::task::TaskStatus;
 use crate::autonomy::task_graph::TaskGraph;
 use crate::autonomy::worker_pool::WorkerPool;
 use crate::tools::manager::ToolManager;
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct AutonomousRuntime {
     pub workspace: std::path::PathBuf,
     pub task_graph: Arc<tokio::sync::RwLock<TaskGraph>>,

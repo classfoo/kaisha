@@ -71,6 +71,7 @@ pub enum AutonomyEvent {
     },
 }
 
+#[allow(dead_code)]
 impl AutonomyEvent {
     pub fn task_id(&self) -> Option<&str> {
         match self {
@@ -95,6 +96,7 @@ pub struct EventBus {
     subscribers: Arc<Mutex<Vec<EventCallback>>>,
 }
 
+#[allow(dead_code)]
 impl EventBus {
     pub fn new() -> Self {
         Self {

@@ -30,10 +30,6 @@ impl WorkTaskStatus {
             Self::Failed => "failed",
         }
     }
-
-    pub fn is_terminal(&self) -> bool {
-        matches!(self, Self::Completed | Self::Cancelled | Self::Failed)
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -135,10 +131,6 @@ pub fn review_opinion_status(task: &WorkTask) -> Option<&str> {
     task.metadata
         .get("opinion_status")
         .and_then(|v| v.as_str())
-}
-
-pub fn review_phase(task: &WorkTask) -> Option<&str> {
-    task.metadata.get("review_phase").and_then(|v| v.as_str())
 }
 
 pub fn review_passed(task: &WorkTask) -> Option<bool> {
@@ -301,38 +293,6 @@ pub fn list_work_tasks_filtered(
     filter: &WorkTaskFilter,
 ) -> Result<Vec<WorkTask>, String> {
     Ok(filter_work_tasks(list_work_tasks(workspace)?, filter))
-}
-
-pub fn next_pending_auto_task_for_assignee(
-    workspace: &Path,
-    assignee: &str,
-) -> Result<Option<WorkTask>, String> {
-    let tasks = list_work_tasks_filtered(
-        workspace,
-        &WorkTaskFilter {
-            assignee: Some(assignee.to_string()),
-            status: Some(WorkTaskStatus::Pending),
-            auto_executable: Some(true),
-            ..Default::default()
-        },
-    )?;
-    Ok(tasks.into_iter().next())
-}
-
-pub fn count_pending_auto_tasks_for_assignee(
-    workspace: &Path,
-    assignee: &str,
-) -> Result<usize, String> {
-    Ok(list_work_tasks_filtered(
-        workspace,
-        &WorkTaskFilter {
-            assignee: Some(assignee.to_string()),
-            status: Some(WorkTaskStatus::Pending),
-            auto_executable: Some(true),
-            ..Default::default()
-        },
-    )?
-    .len())
 }
 
 pub struct CreateWorkTaskParams<'a> {
@@ -575,46 +535,6 @@ mod tests {
         .unwrap();
         assert_eq!(alice_tasks.len(), 1);
         assert_eq!(alice_tasks[0].title, "Task A");
-        let _ = fs::remove_dir_all(&workspace);
-    }
-
-    #[test]
-    fn next_pending_auto_task_returns_oldest_first() {
-        let workspace = temp_workspace();
-        fs::create_dir_all(&workspace).unwrap();
-        create_work_task(
-            &workspace,
-            CreateWorkTaskParams {
-                id: None,
-                biz_type: BIZ_TYPE_REQUIREMENT,
-                biz_id: "auth",
-                title: "First",
-                description: "a",
-                assignee: Some("alice"),
-                auto_executable: true,
-                metadata: serde_json::json!({}),
-            },
-        )
-        .unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(2));
-        create_work_task(
-            &workspace,
-            CreateWorkTaskParams {
-                id: None,
-                biz_type: BIZ_TYPE_REQUIREMENT,
-                biz_id: "auth",
-                title: "Second",
-                description: "b",
-                assignee: Some("alice"),
-                auto_executable: true,
-                metadata: serde_json::json!({}),
-            },
-        )
-        .unwrap();
-        let next = next_pending_auto_task_for_assignee(&workspace, "alice")
-            .unwrap()
-            .expect("task");
-        assert_eq!(next.title, "First");
         let _ = fs::remove_dir_all(&workspace);
     }
 

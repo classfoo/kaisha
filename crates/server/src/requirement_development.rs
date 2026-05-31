@@ -3,8 +3,8 @@ use crate::{
     employee::list_employee_records,
     i18n,
     requirement::{
-        load_requirement_detail, list_requirement_summaries, normalize_requirement_id,
-        requirement_dir, RequirementPhase, RequirementSummary,
+        load_requirement_detail, normalize_requirement_id,
+        requirement_dir,
     },
     work_task::{
         create_work_task, delete_work_task, dev_status, filter_work_tasks,
@@ -485,85 +485,6 @@ pub fn try_load_dev_state(workspace: &Path, id: &str) -> Option<DevStateFile> {
     load_dev_state(workspace, id).ok()
 }
 
-pub fn requirement_needs_development_tasks(
-    workspace: &Path,
-    requirement_id: &str,
-) -> anyhow::Result<bool> {
-    let detail = load_requirement_detail(workspace, requirement_id)?;
-    if detail.phase != RequirementPhase::Development {
-        return Ok(false);
-    }
-    Ok(match try_load_dev_state(workspace, requirement_id) {
-        None => true,
-        Some(state) => {
-            if !state.feature_branch_created {
-                return Ok(true);
-            }
-            list_development_work_tasks(workspace, requirement_id)
-                .map(|tasks| tasks.is_empty())
-                .unwrap_or(true)
-        }
-    })
-}
-
-/// Migrate legacy development tasks, reconcile markdown tasks, and ensure assignees exist
-/// so autonomy can pick up pending development work tasks.
-pub fn prepare_development_work_tasks_for_autonomy(workspace: &Path) -> Result<(), String> {
-    let employees = list_employee_records(workspace).map_err(|e| e.to_string())?;
-    let default_assignee = employees.first().map(|employee| employee.id.clone());
-
-    let summaries = list_requirement_summaries(workspace).map_err(|e| e.to_string())?;
-    for item in summaries
-        .iter()
-        .filter(|summary| summary.phase == RequirementPhase::Development)
-    {
-        reconcile_development_work_tasks(workspace, &item.id)?;
-    }
-
-    for task in list_work_tasks(workspace)? {
-        if !is_development_task(&task) || !task.auto_executable {
-            continue;
-        }
-        let dev_st = dev_status(&task).unwrap_or("branch_created");
-        if dev_st == "branch_created" && task.status == WorkTaskStatus::InProgress {
-            update_work_task(workspace, &task.id, |task| {
-                task.status = WorkTaskStatus::Pending;
-                Ok(())
-            })?;
-        }
-        let assignee_missing = task.assignee.as_deref().unwrap_or("").trim().is_empty();
-        if assignee_missing {
-            if let Some(ref assignee) = default_assignee {
-                update_work_task(workspace, &task.id, |task| {
-                    task.assignee = Some(assignee.clone());
-                    Ok(())
-                })?;
-                let _ = mark_employee_for_autonomy(workspace, assignee);
-            }
-        }
-    }
-    Ok(())
-}
-
-pub fn list_development_requirements_needing_tasks(
-    workspace: &Path,
-) -> anyhow::Result<Vec<RequirementSummary>> {
-    let summaries = list_requirement_summaries(workspace)?;
-    Ok(summaries
-        .into_iter()
-        .filter(|item| item.phase == RequirementPhase::Development)
-        .filter(|item| {
-            requirement_needs_development_tasks(workspace, &item.id).unwrap_or(false)
-        })
-        .collect())
-}
-
-pub fn development_requirements_need_planning(workspace: &Path) -> bool {
-    list_development_requirements_needing_tasks(workspace)
-        .map(|items| !items.is_empty())
-        .unwrap_or(false)
-}
-
 fn create_feature_branch(workspace: &Path, feature_branch: &str) {
     if let Some(main_repo) = workspace
         .join("repos")
@@ -678,64 +599,6 @@ pub fn add_development_task(
         let _ = mark_employee_for_autonomy(workspace, assignee);
     }
     load_work_task(workspace, &task_id)
-}
-
-const DEV_CONTEXT_EXCERPT_CHARS: usize = 800;
-
-fn excerpt_text(content: &str, max_chars: usize) -> String {
-    let trimmed = content.trim();
-    if trimmed.chars().count() <= max_chars {
-        return trimmed.to_string();
-    }
-    trimmed.chars().take(max_chars).collect::<String>() + "…"
-}
-
-pub fn format_development_requirement_context(
-    workspace: &Path,
-    item: &RequirementSummary,
-) -> anyhow::Result<String> {
-    let detail = load_requirement_detail(workspace, &item.id)?;
-    let mut out = format!(
-        "- id: {}\n  title: {}\n  phase: development\n  file: requirements/{}/{}\n",
-        item.id,
-        item.title,
-        item.id,
-        crate::requirement::REQUIREMENT_FILE
-    );
-    let excerpt = excerpt_text(&detail.content, DEV_CONTEXT_EXCERPT_CHARS);
-    if !excerpt.is_empty() {
-        out.push_str("  content_excerpt: |\n");
-        for line in excerpt.lines() {
-            out.push_str(&format!("    {line}\n"));
-        }
-    }
-    match try_load_dev_state(workspace, &item.id) {
-        None => out.push_str("  development_state: not_started\n  development_tasks: (none)\n"),
-        Some(state) => {
-            out.push_str(&format!(
-                "  development_state: started\n  feature_branch: {}\n",
-                state.feature_branch
-            ));
-            let tasks = list_development_work_tasks(workspace, &item.id).unwrap_or_default();
-            if tasks.is_empty() {
-                out.push_str("  development_tasks: (none)\n");
-            } else {
-                out.push_str("  development_tasks:\n");
-                for task in &tasks {
-                    out.push_str(&format!(
-                        "    - id: {} | title: {} | status: {} | assignee: {} | biz_type: {} | biz_id: {}\n",
-                        task.id,
-                        task.title,
-                        dev_status_of(task).as_str(),
-                        task.assignee.as_deref().unwrap_or("-"),
-                        task.biz_type,
-                        task.biz_id,
-                    ));
-                }
-            }
-        }
-    }
-    Ok(out)
 }
 
 fn save_task_content(
@@ -1238,6 +1101,7 @@ fn map_dev_err(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::requirement::RequirementPhase;
     use crate::work_task::load_work_task;
     use std::{
         fs,
@@ -1384,109 +1248,6 @@ mod tests {
         assert!(path.exists());
         let raw = fs::read_to_string(path).unwrap();
         assert!(raw.contains("# Title"));
-        let _ = fs::remove_dir_all(&workspace);
-    }
-
-    #[test]
-    fn requirement_needs_development_tasks_only_after_start() {
-        use crate::requirement::{format_requirement_md, RequirementMeta, REQUIREMENT_FILE};
-
-        let workspace = temp_workspace();
-        let req_dir = workspace.join("requirements").join("auth");
-        fs::create_dir_all(&req_dir).unwrap();
-        fs::write(
-            req_dir.join(REQUIREMENT_FILE),
-            format_requirement_md(
-                &RequirementMeta {
-                    id: "auth".into(),
-                    title: "User auth".into(),
-                    phase: RequirementPhase::Development,
-                    confirm_status: None,
-                    created_at_ms: 1,
-                    updated_at_ms: 2,
-                },
-                "## Scope\nImplement login.",
-            ),
-        )
-        .unwrap();
-
-        assert!(requirement_needs_development_tasks(&workspace, "auth").unwrap());
-
-        ensure_development_started(&workspace, "auth").unwrap();
-        assert!(requirement_needs_development_tasks(&workspace, "auth").unwrap());
-
-        add_development_task(&workspace, "auth", "Task one", "Do work", None).unwrap();
-        assert!(!requirement_needs_development_tasks(&workspace, "auth").unwrap());
-
-        let task = load_work_task(&workspace, "task-001").unwrap();
-        assert_eq!(task.biz_type, BIZ_TYPE_REQUIREMENT);
-        assert_eq!(task.biz_id, "auth");
-        assert!(task.auto_executable);
-
-        let _ = fs::remove_dir_all(&workspace);
-    }
-
-    #[test]
-    fn prepare_development_work_tasks_assigns_default_assignee() {
-        use crate::employee::employee_root;
-        use crate::requirement::{format_requirement_md, RequirementMeta, REQUIREMENT_FILE};
-
-        let workspace = temp_workspace();
-        let employee_dir = employee_root(&workspace).join("dev1");
-        fs::create_dir_all(&employee_dir).unwrap();
-        fs::write(
-            employee_dir.join("profile.json"),
-            serde_json::json!({
-                "id": "dev1",
-                "name": "Dev",
-                "department": "engineering",
-                "role": "Engineer"
-            })
-            .to_string(),
-        )
-        .unwrap();
-        let req_dir = workspace.join("requirements").join("auth");
-        fs::create_dir_all(&req_dir).unwrap();
-        fs::write(
-            req_dir.join(REQUIREMENT_FILE),
-            format_requirement_md(
-                &RequirementMeta {
-                    id: "auth".into(),
-                    title: "User auth".into(),
-                    phase: RequirementPhase::Development,
-                    confirm_status: None,
-                    created_at_ms: 1,
-                    updated_at_ms: 2,
-                },
-                "## Scope\nImplement login.",
-            ),
-        )
-        .unwrap();
-        ensure_development_started(&workspace, "auth").unwrap();
-        create_work_task(
-            &workspace,
-            CreateWorkTaskParams {
-                id: Some("task-001"),
-                biz_type: BIZ_TYPE_REQUIREMENT,
-                biz_id: "auth",
-                title: "Implement login",
-                description: "Do work",
-                assignee: None,
-                auto_executable: true,
-                metadata: serde_json::json!({
-                    "task_kind": TASK_KIND_DEVELOPMENT,
-                    "branch": "feat-auth-task-001",
-                    "dev_status": "branch_created",
-                }),
-            },
-        )
-        .unwrap();
-
-        prepare_development_work_tasks_for_autonomy(&workspace).unwrap();
-        let task = load_work_task(&workspace, "task-001").unwrap();
-        assert_eq!(task.assignee.as_deref(), Some("dev1"));
-        assert_eq!(task.status, WorkTaskStatus::Pending);
-
         let _ = fs::remove_dir_all(&workspace);
     }
 

@@ -1,3 +1,4 @@
+use crate::tasks::{AgentTaskRecord, TaskStatus};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -6,11 +7,25 @@ use std::{
 };
 use tokio::sync::Notify;
 
-static AUTONOMY_NOTIFY: OnceLock<Arc<Notify>> = OnceLock::new();
-
-pub fn register_autonomy_notify(notify: Arc<Notify>) {
-    let _ = AUTONOMY_NOTIFY.set(notify);
+pub fn is_employee_busy(tasks: &[AgentTaskRecord], employee_id: &str) -> bool {
+    is_employee_busy_excluding(tasks, employee_id, None)
 }
+
+pub fn is_employee_busy_excluding(
+    tasks: &[AgentTaskRecord],
+    employee_id: &str,
+    exclude_task_id: Option<&str>,
+) -> bool {
+    tasks.iter().any(|task| {
+        if exclude_task_id == Some(task.id.as_str()) {
+            return false;
+        }
+        task.executor_id.as_deref() == Some(employee_id)
+            && matches!(task.status, TaskStatus::Pending | TaskStatus::Running)
+    })
+}
+
+static AUTONOMY_NOTIFY: OnceLock<Arc<Notify>> = OnceLock::new();
 
 pub fn wake_autonomy_loop() {
     if let Some(notify) = AUTONOMY_NOTIFY.get() {
@@ -43,51 +58,4 @@ pub fn mark_employee_for_autonomy(workspace: &Path, employee_id: &str) -> anyhow
     fs::write(path, now_ms().to_string())?;
     wake_autonomy_loop();
     Ok(())
-}
-
-pub fn list_pending_autonomy_employees(workspace: &Path) -> anyhow::Result<Vec<String>> {
-    let dir = autonomy_root(workspace).join("pending");
-    if !dir.exists() {
-        return Ok(Vec::new());
-    }
-    let mut ids = Vec::new();
-    for entry in fs::read_dir(&dir)? {
-        let entry = entry?;
-        let name = entry.file_name().to_string_lossy().to_string();
-        if let Some(id) = name.strip_suffix(".trigger") {
-            ids.push(id.to_string());
-        }
-    }
-    ids.sort();
-    Ok(ids)
-}
-
-pub fn clear_pending_autonomy(workspace: &Path, employee_id: &str) -> anyhow::Result<()> {
-    let path = pending_trigger_path(workspace, employee_id);
-    if path.exists() {
-        fs::remove_file(path)?;
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn mark_and_list_pending_autonomy_employees() {
-        let workspace = std::env::temp_dir().join(format!(
-            "kaisha-autonomy-trigger-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        mark_employee_for_autonomy(&workspace, "alice").unwrap();
-        let pending = list_pending_autonomy_employees(&workspace).unwrap();
-        assert_eq!(pending, vec!["alice".to_string()]);
-        clear_pending_autonomy(&workspace, "alice").unwrap();
-        assert!(list_pending_autonomy_employees(&workspace).unwrap().is_empty());
-        let _ = std::fs::remove_dir_all(&workspace);
-    }
 }

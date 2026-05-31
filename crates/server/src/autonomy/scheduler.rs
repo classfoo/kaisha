@@ -4,7 +4,6 @@ use crate::autonomy::task::{Task, TaskPriority, TaskStatus};
 use crate::autonomy::task_graph::{ReadyTask, TaskGraph};
 use crate::autonomy::worker_pool::WorkerPool;
 use crate::autonomy::store;
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
@@ -25,6 +24,7 @@ impl Default for SchedulerConfig {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct Scheduler {
     task_graph: Arc<tokio::sync::RwLock<TaskGraph>>,
     worker_pool: Arc<WorkerPool>,
@@ -34,6 +34,7 @@ pub struct Scheduler {
     workspace: std::path::PathBuf,
 }
 
+#[allow(dead_code)]
 impl Scheduler {
     pub fn new(
         task_graph: Arc<tokio::sync::RwLock<TaskGraph>>,
@@ -123,7 +124,7 @@ impl Scheduler {
 
     fn select_worker(
         &self,
-        task: &Task,
+        _task: &Task,
         available: &[crate::autonomy::worker::Worker],
     ) -> Option<crate::autonomy::worker::Worker> {
         if available.is_empty() {

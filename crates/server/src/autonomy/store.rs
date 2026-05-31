@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::autonomy::task::{Task, TaskStatus};
 use std::{
     collections::HashMap,
