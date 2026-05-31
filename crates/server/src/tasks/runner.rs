@@ -143,6 +143,14 @@ impl TaskRunner {
         if !result.output.is_empty() {
             let _ = self.store.save_output(&task.id, &result.output);
         }
+        // Sync WorkTask status for autonomy tasks
+        if matches!(params.kind, TaskKind::AutonomyExplore | TaskKind::AutonomyExecute | TaskKind::WorkTaskExecute) {
+            let _ = crate::autonomy_task::sync_work_task_status(
+                self.store.workspace(),
+                &task.id,
+                &task.status,
+            );
+        }
         self.notify_autonomy_if_needed(&params.kind, task);
         task_runtime_handle().unregister(&task.id);
         if let Some(executor_id) = task.executor_id.as_deref() {
@@ -169,6 +177,14 @@ impl TaskRunner {
         }
         task.fail(error, now_ms());
         self.store.save(task)?;
+        // Sync WorkTask status for autonomy tasks
+        if matches!(params.kind, TaskKind::AutonomyExplore | TaskKind::AutonomyExecute | TaskKind::WorkTaskExecute) {
+            let _ = crate::autonomy_task::sync_work_task_status(
+                self.store.workspace(),
+                &task.id,
+                &task.status,
+            );
+        }
         self.notify_autonomy_if_needed(&params.kind, task);
         task_runtime_handle().unregister(&task.id);
         if let Some(executor_id) = task.executor_id.as_deref() {
@@ -233,6 +249,18 @@ impl TaskRunner {
         let id = new_task_id();
         let mut task = AgentTaskRecord::new(&params, id, created);
         self.store.save(&task)?;
+
+        // Create associated WorkTask for autonomy tasks to make them visible
+        if matches!(params.kind, TaskKind::AutonomyExplore | TaskKind::AutonomyExecute | TaskKind::WorkTaskExecute) {
+            if let Some(emp_id) = &params.executor_id {
+                let _ = crate::autonomy_task::create_work_task_for_autonomy(
+                    self.store.workspace(),
+                    emp_id,
+                    &params.kind,
+                    &task.id,
+                );
+            }
+        }
 
         let started = now_ms();
         task.mark_running(started);
@@ -317,6 +345,18 @@ impl TaskRunner {
         let mut task = AgentTaskRecord::new(&params, id, created);
         self.store.save(&task)?;
 
+        // Create associated WorkTask for autonomy tasks to make them visible
+        if matches!(params.kind, TaskKind::AutonomyExplore | TaskKind::AutonomyExecute | TaskKind::WorkTaskExecute) {
+            if let Some(emp_id) = &params.executor_id {
+                let _ = crate::autonomy_task::create_work_task_for_autonomy(
+                    self.store.workspace(),
+                    emp_id,
+                    &params.kind,
+                    &task.id,
+                );
+            }
+        }
+
         let started = now_ms();
         task.mark_running(started);
         self.store.save(&task)?;
@@ -332,12 +372,28 @@ impl TaskRunner {
             Ok((instance, result)) => {
                 task.complete_with_result(&instance, &result, now_ms());
                 self.store.save(&task)?;
+                // Sync WorkTask status for autonomy tasks
+                if matches!(params.kind, TaskKind::AutonomyExplore | TaskKind::AutonomyExecute | TaskKind::WorkTaskExecute) {
+                    let _ = crate::autonomy_task::sync_work_task_status(
+                        self.store.workspace(),
+                        &task.id,
+                        &task.status,
+                    );
+                }
                 self.notify_autonomy_if_needed(&params.kind, &task);
                 Ok((task, instance, result))
             }
             Err(err) => {
                 task.fail(err.to_string(), now_ms());
                 self.store.save(&task)?;
+                // Sync WorkTask status for autonomy tasks
+                if matches!(params.kind, TaskKind::AutonomyExplore | TaskKind::AutonomyExecute | TaskKind::WorkTaskExecute) {
+                    let _ = crate::autonomy_task::sync_work_task_status(
+                        self.store.workspace(),
+                        &task.id,
+                        &task.status,
+                    );
+                }
                 self.notify_autonomy_if_needed(&params.kind, &task);
                 Err(err)
             }

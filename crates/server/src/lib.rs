@@ -1,12 +1,15 @@
 mod employee;
 mod employee_chat;
+mod employee_intent_router;
 mod employee_requirement_agent;
 mod employee_todo;
 mod agent_locale;
 mod autonomy;
+mod autonomy_task;
 mod autonomy_trigger;
 mod git;
 mod i18n;
+mod intent;
 mod requirement;
 mod requirement_development;
 mod requirement_review;

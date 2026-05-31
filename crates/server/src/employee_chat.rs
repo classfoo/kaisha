@@ -4,8 +4,9 @@ use crate::{
         build_requirement_agent_messages, prior_conversation_context, requirement_agent_workdir,
     },
     i18n,
+    intent::context::IntentContext,
     requirement::list_requirement_summaries,
-    requirement_review::{detect_review_start_intent, run_requirement_review},
+    requirement_review::run_requirement_review,
     tasks::{
         task_content_from_user_input, CodeAgentTaskParams, TaskKind, TaskRunner,
     },
@@ -181,15 +182,97 @@ fn format_review_assistant_reply(
     )
 }
 
+/// Routes the user intent through the intent router and returns the result.
+/// This is the main entry point for intent-based chat responses.
+fn process_intent_via_router(
+    tools: &ToolManager,
+    workspace: &Path,
+    employee_id: &str,
+    user_input: &str,
+    conv_messages: &[StoredMessage],
+    known_req_ids: &[String],
+    known_emp_ids: &[String],
+) -> Result<(crate::tools::model::ToolInstance, crate::tools::driver::ToolExecutionResult, Option<String>, Option<String>), String> {
+    let ctx = IntentContext {
+        workspace,
+        employee_id,
+        known_requirement_ids: known_req_ids.to_vec(),
+        known_employee_ids: known_emp_ids.to_vec(),
+    };
+
+    let router = crate::intent::handlers::create_default_router();
+
+    // Detect the intent
+    let detection = router.detect(user_input, &ctx);
+
+    // Route to the appropriate handler or fall back to default
+    match detection {
+        Some(det) => {
+            if let Some(handler) = router.handlers.get(&det.intent_type) {
+                handler.handle(&det, tools, workspace, employee_id, user_input, &conv_messages_to_prior(conv_messages))
+                    .map(|result| {
+                        let instance = tools.pick_enabled_chat_driver()
+                            .map(|(inst, _)| inst)
+                            .unwrap_or_else(|| {
+                                // For terminal intents that don't need a coding tool
+                                crate::tools::model::ToolInstance {
+                                    id: "intent".to_string(),
+                                    kind: crate::tools::model::ToolKind::ClaudeCode,
+                                    name: "Intent Handler".to_string(),
+                                    enabled: true,
+                                    version: 1,
+                                    config: serde_json::json!({}),
+                                }
+                            });
+                        (
+                            instance,
+                            result.execution_result.unwrap_or_else(|| crate::tools::driver::ToolExecutionResult {
+                                output: result.output.clone(),
+                                exit_code: 0,
+                                usage: crate::tools::driver::ToolUsage {
+                                    model: "intent-router".to_string(),
+                                    prompt_tokens: 0,
+                                    completion_tokens: 0,
+                                    total_tokens: 0,
+                                },
+                            }),
+                            result.task_id,
+                            result.output_preview,
+                        )
+                    })
+            } else {
+                // No handler registered for this intent, fall back to default
+                run_requirement_agent_turn_internal(tools, workspace, employee_id, user_input, conv_messages)
+            }
+        }
+        None => {
+            // No intent detected, fall back to default
+            run_requirement_agent_turn_internal(tools, workspace, employee_id, user_input, conv_messages)
+        }
+    }
+}
+
+fn conv_messages_to_prior(messages: &[StoredMessage]) -> Vec<(String, String)> {
+    let prior_rows: Vec<(String, String, u64)> = messages
+        .iter()
+        .map(|m| (m.role.clone(), m.content.clone(), m.created_at_ms))
+        .collect();
+    prior_conversation_context(&prior_rows)
+}
+
 fn run_review_turn(
     tools: &ToolManager,
     workspace: &Path,
     user_input: &str,
-) -> Result<(crate::tools::model::ToolInstance, crate::tools::driver::ToolExecutionResult), String> {
+    _conv_messages: &[(String, String)],
+) -> Result<(crate::tools::model::ToolInstance, crate::tools::driver::ToolExecutionResult, Option<String>, Option<String>), String> {
     let summaries = list_requirement_summaries(workspace).map_err(|e| e.to_string())?;
     let ids: Vec<String> = summaries.iter().map(|s| s.id.clone()).collect();
-    let req_id = detect_review_start_intent(user_input, &ids)
+
+    // Extract requirement ID from input
+    let req_id = crate::employee_intent_router::extract_requirement_id(user_input, &ids)
         .ok_or_else(|| "review_requirement_unspecified".to_string())?;
+
     let review = run_requirement_review(workspace, tools, &req_id).map_err(|e| e.to_string())?;
     let output = format_review_assistant_reply(&review);
     let instance = tools
@@ -208,10 +291,12 @@ fn run_review_turn(
                 total_tokens: 0,
             },
         },
+        None,
+        None,
     ))
 }
 
-fn run_requirement_agent_turn(
+fn run_requirement_agent_turn_internal(
     tools: &ToolManager,
     workspace: &Path,
     employee_id: &str,
@@ -219,11 +304,7 @@ fn run_requirement_agent_turn(
     conv_messages: &[StoredMessage],
 ) -> Result<(crate::tools::model::ToolInstance, crate::tools::driver::ToolExecutionResult, Option<String>, Option<String>), String> {
     let workdir = requirement_agent_workdir(workspace).map_err(|e| e.to_string())?;
-    let prior_rows: Vec<(String, String, u64)> = conv_messages
-        .iter()
-        .map(|m| (m.role.clone(), m.content.clone(), m.created_at_ms))
-        .collect();
-    let prior = prior_conversation_context(&prior_rows);
+    let prior = conv_messages_to_prior(conv_messages);
     let tool_messages =
         build_requirement_agent_messages(workspace, user_input, &prior).map_err(|e| e.to_string())?;
     let runner = TaskRunner::new(workspace);
@@ -250,6 +331,60 @@ fn run_requirement_agent_turn(
                 msg
             }
         })
+}
+
+/// Runs the streaming code agent for SSE responses.
+async fn run_streaming_agent(
+    workspace: &Path,
+    tools: &ToolManager,
+    employee_id: &str,
+    user_input: &str,
+    conv_messages: &[StoredMessage],
+    sse_tx: tokio::sync::mpsc::Sender<Result<Event, Infallible>>,
+) -> Result<(crate::tools::model::ToolInstance, crate::tools::driver::ToolExecutionResult, Option<String>, Option<String>), String> {
+    let workdir = requirement_agent_workdir(workspace).map_err(|e| e.to_string())?;
+    let prior = conv_messages_to_prior(conv_messages);
+    let tool_messages =
+        build_requirement_agent_messages(workspace, user_input, &prior).map_err(|e| e.to_string())?;
+
+    let (delta_tx, delta_rx) = tokio::sync::mpsc::channel::<String>(64);
+    let forward = tokio::spawn(forward_sse_deltas(delta_rx, sse_tx.clone()));
+
+    let runner = TaskRunner::new(workspace);
+    let result = runner
+        .run_code_chat_streaming(
+            tools,
+            CodeAgentTaskParams {
+                kind: TaskKind::RequirementAgent,
+                content: task_content_from_user_input(user_input),
+                workdir: workdir.clone(),
+                messages: tool_messages,
+                executor_id: Some(employee_id.to_string()),
+                parent_task_id: None,
+                context: serde_json::json!({ "employee_id": employee_id }),
+            },
+            delta_tx,
+        )
+        .await
+        .map_err(|e| {
+            let msg = e.root_cause().to_string();
+            if msg == "no_enabled_coding_tool" {
+                "chat_tool_missing".to_string()
+            } else {
+                tracing::warn!(error = %e, "requirement agent execution failed (stream)");
+                msg
+            }
+        });
+    match result {
+        Ok((task, instance, tool_result)) => {
+            let _ = forward.await;
+            Ok((instance, tool_result, Some(task.id), task.output_preview.clone()))
+        }
+        Err(raw) => {
+            forward.abort();
+            Err(raw)
+        }
+    }
 }
 
 fn map_process_error(err: String) -> &'static str {
@@ -297,13 +432,19 @@ fn process_post_message(
     });
 
     let summaries = list_requirement_summaries(&workspace).map_err(|e| e.to_string())?;
-    let ids: Vec<String> = summaries.iter().map(|s| s.id.clone()).collect();
-    let (instance, exec_result, task_id, output_preview) = if detect_review_start_intent(&trimmed, &ids).is_some() {
-        let (inst, res) = run_review_turn(&tools, &workspace, &trimmed)?;
-        (inst, res, None, None)
-    } else {
-        run_requirement_agent_turn(&tools, &workspace, &employee_id, &trimmed, &conv.messages)?
-    };
+    let employees = crate::employee::list_employee_records(&workspace).map_err(|e| e.to_string())?;
+    let req_ids: Vec<String> = summaries.iter().map(|s| s.id.clone()).collect();
+    let emp_ids: Vec<String> = employees.iter().map(|e| e.id.clone()).collect();
+
+    let (instance, exec_result, task_id, output_preview) = process_intent_via_router(
+        &tools,
+        &workspace,
+        &employee_id,
+        &trimmed,
+        &conv.messages,
+        &req_ids,
+        &emp_ids,
+    )?;
 
     let assistant_now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -496,77 +637,68 @@ async fn run_stream_turn_inner(
     save_conversation(&conv_path, &conv).map_err(|e| e.to_string())?;
 
     let summaries = list_requirement_summaries(&workspace).map_err(|e| e.to_string())?;
-    let ids: Vec<String> = summaries.iter().map(|s| s.id.clone()).collect();
-    let review_intent = detect_review_start_intent(&trimmed, &ids);
+    let employees = crate::employee::list_employee_records(&workspace).map_err(|e| e.to_string())?;
+    let req_ids: Vec<String> = summaries.iter().map(|s| s.id.clone()).collect();
+    let emp_ids: Vec<String> = employees.iter().map(|e| e.id.clone()).collect();
 
-    let (instance, tool_result, task_id, output_preview) = if review_intent.is_some() {
-        let result = tokio::task::spawn_blocking({
-            let tools = tools.clone();
-            let workspace = workspace.clone();
-            let trimmed = trimmed.clone();
-            move || run_review_turn(&tools, &workspace, &trimmed)
-        })
-        .await
-        .map_err(|_| "chat_blocking_task_failed".to_string())?
+    let ctx = IntentContext {
+        workspace: &workspace,
+        employee_id: &employee_id,
+        known_requirement_ids: req_ids,
+        known_employee_ids: emp_ids,
+    };
+
+    let router = crate::intent::handlers::create_default_router();
+    let detection = router.detect(&trimmed, &ctx);
+
+    let (instance, tool_result, task_id, output_preview) = if detection.is_some() {
+        // Route through the intent router
+        let prior = conv_messages_to_prior(&conv.messages);
+        let result = router.route_and_handle(
+            &trimmed,
+            &ctx,
+            &tools,
+            &workspace,
+            &employee_id,
+            &prior,
+        )
         .map_err(|e| {
-            tracing::warn!(error = %e, "requirement review failed (stream)");
+            tracing::warn!(error = %e, "intent handler failed (stream)");
             e
         })?;
-        let payload = serde_json::to_string(&serde_json::json!({ "text": result.1.output }))
+        let payload = serde_json::to_string(&serde_json::json!({ "text": result.output }))
             .map_err(|e| e.to_string())?;
         let _ = sse_tx
             .send(Ok(Event::default().event("delta").data(payload)))
             .await;
-        (result.0, result.1, None, None)
-    } else {
-        let workdir = requirement_agent_workdir(&workspace).map_err(|e| e.to_string())?;
-        let prior_rows: Vec<(String, String, u64)> = conv
-            .messages
-            .iter()
-            .map(|m| (m.role.clone(), m.content.clone(), m.created_at_ms))
-            .collect();
-        let prior = prior_conversation_context(&prior_rows);
-        let tool_messages =
-            build_requirement_agent_messages(&workspace, &trimmed, &prior).map_err(|e| e.to_string())?;
-
-        let (delta_tx, delta_rx) = tokio::sync::mpsc::channel::<String>(64);
-        let forward = tokio::spawn(forward_sse_deltas(delta_rx, sse_tx.clone()));
-
-        let runner = TaskRunner::new(&workspace);
-        let result = runner
-            .run_code_chat_streaming(
-                &tools,
-                CodeAgentTaskParams {
-                    kind: TaskKind::RequirementAgent,
-                    content: task_content_from_user_input(&trimmed),
-                    workdir: workdir.clone(),
-                    messages: tool_messages,
-                    executor_id: Some(employee_id.clone()),
-                    parent_task_id: None,
-                    context: serde_json::json!({ "employee_id": employee_id }),
-                },
-                delta_tx,
-            )
-            .await
-            .map_err(|e| {
-                let msg = e.root_cause().to_string();
-                if msg == "no_enabled_coding_tool" {
-                    "chat_tool_missing".to_string()
-                } else {
-                    tracing::warn!(error = %e, "requirement agent execution failed (stream)");
-                    msg
-                }
+        let inst = tools.pick_enabled_chat_driver()
+            .map(|(inst, _)| inst)
+            .unwrap_or_else(|| crate::tools::model::ToolInstance {
+                id: "intent".to_string(),
+                kind: crate::tools::model::ToolKind::ClaudeCode,
+                name: "Intent Handler".to_string(),
+                enabled: true,
+                version: 1,
+                config: serde_json::json!({}),
             });
-        match result {
-            Ok((task, instance, tool_result)) => {
-                let _ = forward.await;
-                (instance, tool_result, Some(task.id), task.output_preview.clone())
-            }
-            Err(raw) => {
-                forward.abort();
-                return Err(raw);
-            }
-        }
+        (
+            inst,
+            result.execution_result.unwrap_or_else(|| crate::tools::driver::ToolExecutionResult {
+                output: result.output.clone(),
+                exit_code: 0,
+                usage: crate::tools::driver::ToolUsage {
+                    model: "intent-router".to_string(),
+                    prompt_tokens: 0,
+                    completion_tokens: 0,
+                    total_tokens: 0,
+                },
+            }),
+            result.task_id,
+            result.output_preview,
+        )
+    } else {
+        // No intent detected, fall back to streaming agent
+        run_streaming_agent(&workspace, &tools, &employee_id, &trimmed, &conv.messages, sse_tx.clone()).await?
     };
 
     let assistant_now = SystemTime::now()
