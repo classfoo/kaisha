@@ -2862,3 +2862,42 @@ select,
   word-break: break-word;
   color: #cfd8e6;
 }
+
+/* Block-based streaming sections */
+.streaming-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.streaming-section {
+  border-radius: 8px;
+  padding: 8px 10px;
+  animation: streaming-fade-in 0.15s ease-in;
+}
+
+.streaming-section--text {
+  background: transparent;
+  padding: 0;
+}
+
+.streaming-section--thinking {
+  background: rgba(120, 100, 200, 0.08);
+  border: 1px dashed rgba(120, 100, 200, 0.35);
+}
+
+.streaming-section--thinking details summary {
+  font-size: 11px;
+  color: #b8a8ff;
+  cursor: pointer;
+  user-select: none;
+}
+
+@keyframes streaming-fade-in {
+  from {
+    opacity: 0.7;
+  }
+  to {
+    opacity: 1;
+  }
+}

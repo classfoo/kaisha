@@ -12,6 +12,7 @@ import {
   type ChatResultMeta,
   type StreamingAssistantState,
   type StreamingToolCall,
+  type StreamingBlock,
 } from '../features/employee-chat/useEmployeeChatMessages'
 import { EmployeeDirectoryRecord } from './EmployeeList'
 
@@ -20,6 +21,8 @@ type StreamingExtras = {
   toolCalls: StreamingToolCall[]
   session: StreamingAssistantState['session']
   result: StreamingAssistantState['result']
+  /** Ordered blocks for section-based rendering. */
+  blocks: StreamingBlock[]
 }
 
 type DisplayMessage = {
@@ -149,64 +152,6 @@ function StreamingToolCallCard({
   )
 }
 
-function StreamingProgressBlock({
-  extras,
-  t,
-}: {
-  extras: StreamingExtras
-  t: (key: string) => string
-}) {
-  const hasSession = Boolean(extras.session)
-  const hasThinking = extras.thinking.trim().length > 0
-  const hasTools = extras.toolCalls.length > 0
-  const hasResult = Boolean(extras.result)
-  if (!hasSession && !hasThinking && !hasTools && !hasResult) return null
-  return (
-    <div className="stream-progress">
-      {extras.session ? (
-        <div className="stream-progress__session">
-          <span className="stream-progress__chip">
-            {t('ui.chat.streaming.sessionStarted')}
-          </span>
-          {extras.session.model ? (
-            <span className="stream-progress__meta">{extras.session.model}</span>
-          ) : null}
-          {extras.session.tools.length > 0 ? (
-            <span className="stream-progress__meta">
-              {t('ui.chat.streaming.tools')}: {extras.session.tools.length}
-            </span>
-          ) : null}
-        </div>
-      ) : null}
-      {hasThinking ? (
-        <details className="stream-progress__thinking" open>
-          <summary className="stream-progress__summary">{t('ui.chat.streaming.thinking')}</summary>
-          <pre className="stream-progress__pre">{extras.thinking}</pre>
-        </details>
-      ) : null}
-      {extras.toolCalls.map((call) => (
-        <StreamingToolCallCard key={call.id} call={call} t={t} />
-      ))}
-      {extras.result ? (
-        <div
-          className={`stream-progress__result stream-progress__result--${extras.result.isError ? 'error' : 'success'}`}
-        >
-          <span className="stream-progress__chip">
-            {extras.result.isError
-              ? t('ui.chat.streaming.resultError')
-              : t('ui.chat.streaming.resultSuccess')}
-          </span>
-          <span className="stream-progress__meta">
-            {t('ui.chat.taskResult.tokens')}:{' '}
-            {extras.result.promptTokens.toLocaleString()} /{' '}
-            {extras.result.completionTokens.toLocaleString()}
-          </span>
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
 function TaskResultPanel({ result, t }: { result: ChatResultMeta | null; t: (key: string) => string }) {
   if (!result) return null
   const isSuccess = result.exit_code === 0
@@ -269,8 +214,10 @@ export function EmployeeChatPanel({
         toolCalls: streamingAssistant.toolCalls,
         session: streamingAssistant.session,
         result: streamingAssistant.result,
+        blocks: streamingAssistant.blocks,
       }
       const hasAnyContent =
+        streamingAssistant.blocks.length > 0 ||
         streamingAssistant.text.length > 0 ||
         streamingAssistant.thinking.length > 0 ||
         streamingAssistant.toolCalls.length > 0 ||
@@ -374,12 +321,75 @@ export function EmployeeChatPanel({
               const bubble = (
                 <div className="chat-message__bubble">
                   {message.streaming ? (
-                    <StreamingProgressBlock extras={message.streaming} t={t} />
+                    <>
+                      {message.streaming.session ? (
+                        <div className="stream-progress__session">
+                          <span className="stream-progress__chip">
+                            {t('ui.chat.streaming.sessionStarted')}
+                          </span>
+                          {message.streaming.session.model ? (
+                            <span className="stream-progress__meta">{message.streaming.session.model}</span>
+                          ) : null}
+                          {message.streaming.session.tools.length > 0 ? (
+                            <span className="stream-progress__meta">
+                              {t('ui.chat.streaming.tools')}: {message.streaming.session.tools.length}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      <div className="streaming-sections">
+                        {message.streaming.blocks.map((block, blockIdx) => {
+                          if (block.type === 'text') {
+                            return (
+                              <div className="streaming-section streaming-section--text" key={`b-${blockIdx}`}>
+                                <div className="chat-message__content">{block.text}</div>
+                              </div>
+                            )
+                          }
+                          if (block.type === 'thinking') {
+                            return (
+                              <div className="streaming-section streaming-section--thinking" key={`b-${blockIdx}`}>
+                                <details open>
+                                  <summary className="stream-progress__summary">{t('ui.chat.streaming.thinking')}</summary>
+                                  <pre className="stream-progress__pre">{block.text}</pre>
+                                </details>
+                              </div>
+                            )
+                          }
+                          if (block.type === 'tool_call') {
+                            return <StreamingToolCallCard key={block.id} call={block} t={t} />
+                          }
+                          if (block.type === 'result') {
+                            return (
+                              <div
+                                className={`stream-progress__result stream-progress__result--${block.isError ? 'error' : 'success'}`}
+                                key={`b-${blockIdx}`}
+                              >
+                                <span className="stream-progress__chip">
+                                  {block.isError
+                                    ? t('ui.chat.streaming.resultError')
+                                    : t('ui.chat.streaming.resultSuccess')}
+                                </span>
+                                <span className="stream-progress__meta">
+                                  {t('ui.chat.taskResult.tokens')}: {block.promptTokens.toLocaleString()} / {block.completionTokens.toLocaleString()}
+                                </span>
+                              </div>
+                            )
+                          }
+                          return null
+                        })}
+                        {!message.streaming.blocks.length && !message.content ? (
+                          <div className="chat-message__content chat-message__content--placeholder">
+                            {t('ui.chat.awaitingReply')}
+                          </div>
+                        ) : null}
+                      </div>
+                    </>
                   ) : null}
-                  {message.content ? (
+                  {message.content && !message.streaming ? (
                     <div className="chat-message__content">{message.content}</div>
                   ) : null}
-                  {message.streaming && !message.content ? (
+                  {message.streaming && !message.content && !message.streaming.blocks.length ? (
                     <div className="chat-message__content chat-message__content--placeholder">
                       {t('ui.chat.awaitingReply')}
                     </div>

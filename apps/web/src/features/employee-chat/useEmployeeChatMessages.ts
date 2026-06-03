@@ -51,12 +51,24 @@ export type StreamingResultSummary = {
   isError: boolean
 }
 
+/** A single content block within a streaming response. Blocks are appended in
+ *  arrival order and group same-type content together, solving the "flat blob"
+ *  rendering problem where tool I/O and text were all mashed together. */
+export type StreamingBlock =
+  | { type: 'text'; text: string }
+  | { type: 'thinking'; text: string }
+  | { type: 'tool_call'; id: string; name: string; inputSummary: string; outputPreview?: string; isError?: boolean; status: 'running' | 'success' | 'error' }
+  | { type: 'session_info'; model?: string; sessionId?: string; tools: string[]; cwd?: string }
+  | { type: 'result'; summary?: string; model?: string; promptTokens: number; completionTokens: number; totalTokens: number; isError: boolean }
+
 export type StreamingAssistantState = {
   text: string
   thinking: string
   toolCalls: StreamingToolCall[]
   session: StreamingSessionInfo | null
   result: StreamingResultSummary | null
+  /** Ordered blocks for section-based rendering. */
+  blocks: StreamingBlock[]
   /** Wall-clock when the first event arrived; useful for showing elapsed time. */
   startedAtMs: number | null
 }
@@ -67,6 +79,7 @@ const EMPTY_STREAM: StreamingAssistantState = {
   toolCalls: [],
   session: null,
   result: null,
+  blocks: [],
   startedAtMs: null,
 }
 
@@ -118,6 +131,13 @@ function nowMs(prev: number | null): number {
   return prev ?? Date.now()
 }
 
+/** Helper: find index of a block by tool_use id within the blocks array. */
+function findToolBlockIndex(blocks: StreamingBlock[], id: string): number {
+  return blocks.findIndex(
+    (b) => b.type === 'tool_call' && b.id === id,
+  )
+}
+
 export function applyStreamingEvent(
   prev: StreamingAssistantState,
   event: { event: string; data: string },
@@ -127,7 +147,14 @@ export function applyStreamingEvent(
     try {
       const j = JSON.parse(event.data) as { text?: string }
       if (j.text) {
-        return { ...prev, text: prev.text + j.text, startedAtMs: nowMs(prev.startedAtMs) }
+        const blocks = [...prev.blocks]
+        const last = blocks.length > 0 ? blocks[blocks.length - 1] : null
+        if (last && last.type === 'text') {
+          blocks[blocks.length - 1] = { ...last, text: last.text + j.text }
+        } else {
+          blocks.push({ type: 'text', text: j.text })
+        }
+        return { ...prev, text: prev.text + j.text, blocks, startedAtMs: nowMs(prev.startedAtMs) }
       }
     } catch {
       /* ignore malformed delta */
@@ -146,7 +173,14 @@ export function applyStreamingEvent(
   }
 
   switch (payload.type) {
-    case 'start':
+    case 'start': {
+      const sessionBlock: StreamingBlock = {
+        type: 'session_info',
+        model: payload.model,
+        sessionId: payload.session_id,
+        tools: payload.tools ?? [],
+        cwd: payload.cwd,
+      }
       return {
         ...prev,
         session: {
@@ -155,12 +189,30 @@ export function applyStreamingEvent(
           tools: payload.tools ?? [],
           cwd: payload.cwd,
         },
+        blocks: [...prev.blocks, sessionBlock],
         startedAtMs,
       }
-    case 'assistant_text':
-      return { ...prev, text: prev.text + payload.text, startedAtMs }
-    case 'thinking':
-      return { ...prev, thinking: prev.thinking + payload.text, startedAtMs }
+    }
+    case 'assistant_text': {
+      const blocks = [...prev.blocks]
+      const last = blocks.length > 0 ? blocks[blocks.length - 1] : null
+      if (last && last.type === 'text') {
+        blocks[blocks.length - 1] = { ...last, text: last.text + payload.text }
+      } else {
+        blocks.push({ type: 'text', text: payload.text })
+      }
+      return { ...prev, text: prev.text + payload.text, blocks, startedAtMs }
+    }
+    case 'thinking': {
+      const blocks = [...prev.blocks]
+      const last = blocks.length > 0 ? blocks[blocks.length - 1] : null
+      if (last && last.type === 'thinking') {
+        blocks[blocks.length - 1] = { ...last, text: last.text + payload.text }
+      } else {
+        blocks.push({ type: 'thinking', text: payload.text })
+      }
+      return { ...prev, thinking: prev.thinking + payload.text, blocks, startedAtMs }
+    }
     case 'tool_use': {
       const useId = payload.id
       const existing = prev.toolCalls.find((tc) => tc.id === useId)
@@ -175,7 +227,25 @@ export function applyStreamingEvent(
       const toolCalls = existing
         ? prev.toolCalls.map((tc) => (tc.id === useId ? next : tc))
         : [...prev.toolCalls, next]
-      return { ...prev, toolCalls, startedAtMs }
+
+      // Block-level: create a new tool_call block (or update existing by id)
+      const blocks = [...prev.blocks]
+      const blockIdx = findToolBlockIndex(blocks, useId)
+      const blockTool: StreamingBlock = {
+        type: 'tool_call',
+        id: useId,
+        name: payload.name,
+        inputSummary: payload.input_summary,
+        status: existing?.status ?? 'running',
+        outputPreview: existing?.outputPreview,
+        isError: existing?.isError,
+      }
+      if (blockIdx >= 0) {
+        blocks[blockIdx] = blockTool
+      } else {
+        blocks.push(blockTool)
+      }
+      return { ...prev, toolCalls, blocks, startedAtMs }
     }
     case 'tool_result': {
       const toolCalls = prev.toolCalls.map((tc) => {
@@ -202,9 +272,44 @@ export function applyStreamingEvent(
               status: payload.is_error ? ('error' as const) : ('success' as const),
             },
           ]
-      return { ...prev, toolCalls: merged, startedAtMs }
+
+      // Block-level: find the matching tool_call block and update it
+      const blocks = [...prev.blocks]
+      const blockIdx = findToolBlockIndex(blocks, payload.tool_use_id)
+      if (blockIdx >= 0) {
+        const existingBlock = blocks[blockIdx]
+        if (existingBlock.type === 'tool_call') {
+          blocks[blockIdx] = {
+            ...existingBlock,
+            outputPreview: payload.output_preview,
+            isError: payload.is_error,
+            status: payload.is_error ? 'error' : 'success',
+          }
+        }
+      } else if (!hasMatch) {
+        // Stub block for orphan tool_result
+        blocks.push({
+          type: 'tool_call',
+          id: payload.tool_use_id,
+          name: '',
+          inputSummary: '',
+          outputPreview: payload.output_preview,
+          isError: payload.is_error,
+          status: payload.is_error ? 'error' : 'success',
+        })
+      }
+      return { ...prev, toolCalls: merged, blocks, startedAtMs }
     }
-    case 'result':
+    case 'result': {
+      const resultBlock: StreamingBlock = {
+        type: 'result',
+        summary: payload.summary,
+        model: payload.model,
+        promptTokens: payload.prompt_tokens ?? 0,
+        completionTokens: payload.completion_tokens ?? 0,
+        totalTokens: payload.total_tokens ?? 0,
+        isError: Boolean(payload.is_error),
+      }
       return {
         ...prev,
         result: {
@@ -215,10 +320,20 @@ export function applyStreamingEvent(
           totalTokens: payload.total_tokens ?? 0,
           isError: Boolean(payload.is_error),
         },
+        blocks: [...prev.blocks, resultBlock],
         startedAtMs,
       }
-    case 'raw':
-      return { ...prev, text: prev.text + payload.text, startedAtMs }
+    }
+    case 'raw': {
+      const blocks = [...prev.blocks]
+      const last = blocks.length > 0 ? blocks[blocks.length - 1] : null
+      if (last && last.type === 'text') {
+        blocks[blocks.length - 1] = { ...last, text: last.text + payload.text }
+      } else {
+        blocks.push({ type: 'text', text: payload.text })
+      }
+      return { ...prev, text: prev.text + payload.text, blocks, startedAtMs }
+    }
     default:
       return prev
   }
