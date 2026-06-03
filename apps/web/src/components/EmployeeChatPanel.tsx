@@ -13,6 +13,7 @@ import {
   type StreamingAssistantState,
   type StreamingToolCall,
   type StreamingBlock,
+  reconstructStreamingState,
 } from '../features/employee-chat/useEmployeeChatMessages'
 import { EmployeeDirectoryRecord } from './EmployeeList'
 
@@ -34,6 +35,7 @@ type DisplayMessage = {
   senderName?: string
   senderAvatarUrl?: string
   streaming?: StreamingExtras
+  taskResult?: ChatResultMeta
 }
 
 type EmployeeChatPanelProps = {
@@ -107,7 +109,7 @@ function formatMessageTimeMs(ms: number): string {
 
 function wireToDisplay(m: ChatWireMessage): DisplayMessage {
   const side = m.role === 'user' ? 'me' : m.role === 'system' ? 'system' : 'employee'
-  return {
+  const base: DisplayMessage = {
     id: m.id,
     side,
     content: m.content,
@@ -115,6 +117,27 @@ function wireToDisplay(m: ChatWireMessage): DisplayMessage {
     senderName: m.sender_name ?? undefined,
     senderAvatarUrl: m.sender_avatar_url ?? undefined,
   }
+
+  // Handle task_process messages: reconstruct streaming state from saved events
+  if (m.role === 'task_process' && m.stream_events && m.stream_events.length > 0) {
+    const streamingState = reconstructStreamingState(m.stream_events)
+    const streamingExtras: StreamingExtras = {
+      thinking: streamingState.thinking,
+      toolCalls: streamingState.toolCalls,
+      session: streamingState.session,
+      result: streamingState.result,
+      blocks: streamingState.blocks,
+    }
+    return {
+      ...base,
+      content: m.content || streamingState.text,
+      pending: m.task_status === 'running',
+      streaming: streamingState.blocks.length > 0 || streamingState.text.length > 0 ? streamingExtras : undefined,
+      taskResult: m.result_meta ?? undefined,
+    }
+  }
+
+  return base
 }
 
 function StreamingToolCallCard({
@@ -393,6 +416,9 @@ export function EmployeeChatPanel({
                     <div className="chat-message__content chat-message__content--placeholder">
                       {t('ui.chat.awaitingReply')}
                     </div>
+                  ) : null}
+                  {message.taskResult ? (
+                    <TaskResultPanel result={message.taskResult} t={t} />
                   ) : null}
                 </div>
               )

@@ -44,6 +44,14 @@ struct StoredMessage {
     sender_name: Option<String>,
     #[serde(default)]
     sender_avatar_url: Option<String>,
+    #[serde(default)]
+    task_id: Option<String>,
+    #[serde(default)]
+    task_status: Option<String>,
+    #[serde(default)]
+    stream_events: Option<Vec<serde_json::Value>>,
+    #[serde(default)]
+    result_meta: Option<PostMessageResultMeta>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -56,6 +64,14 @@ pub struct WireMessage {
     pub sender_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sender_avatar_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream_events: Option<Vec<serde_json::Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result_meta: Option<PostMessageResultMeta>,
 }
 
 impl From<&StoredMessage> for WireMessage {
@@ -67,6 +83,10 @@ impl From<&StoredMessage> for WireMessage {
             created_at_ms: m.created_at_ms,
             sender_name: m.sender_name.clone(),
             sender_avatar_url: m.sender_avatar_url.clone(),
+            task_id: m.task_id.clone(),
+            task_status: m.task_status.clone(),
+            stream_events: m.stream_events.clone(),
+            result_meta: m.result_meta.clone(),
         }
     }
 }
@@ -85,7 +105,7 @@ pub struct PostMessageBody {
     pub sender_avatar_url: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PostMessageResultMeta {
     pub exit_code: i32,
     pub tool_instance_id: String,
@@ -335,7 +355,17 @@ fn run_requirement_agent_turn_internal(
         })
 }
 
+/// Persistence context for streaming events. When present, events are written
+/// to the conversation file in addition to being forwarded via SSE.
+struct StreamPersistence {
+    conv_path: PathBuf,
+    conv: ConversationFile,
+    task_process_msg_idx: usize,
+    save_interval: usize,
+}
+
 /// Runs the streaming code agent for SSE responses.
+/// If `persistence` is provided, events are also saved to the conversation file.
 async fn run_streaming_agent(
     workspace: &Path,
     tools: &ToolManager,
@@ -343,6 +373,7 @@ async fn run_streaming_agent(
     user_input: &str,
     conv_messages: &[StoredMessage],
     sse_tx: tokio::sync::mpsc::Sender<Result<Event, Infallible>>,
+    persistence: Option<StreamPersistence>,
 ) -> Result<(crate::tools::model::ToolInstance, crate::tools::driver::ToolExecutionResult, Option<String>, Option<String>), String> {
     let workdir = requirement_agent_workdir(workspace).map_err(|e| e.to_string())?;
     let prior = conv_messages_to_prior(conv_messages);
@@ -351,7 +382,22 @@ async fn run_streaming_agent(
 
     let (event_tx, event_rx) =
         tokio::sync::mpsc::channel::<crate::tools::driver::ChatStreamEvent>(64);
-    let forward = tokio::spawn(forward_sse_events(event_rx, sse_tx.clone()));
+
+    let forward: tokio::task::JoinHandle<Vec<serde_json::Value>> = if let Some(p) = persistence {
+        tokio::spawn(forward_sse_events_with_persistence(
+            event_rx,
+            sse_tx.clone(),
+            p.conv_path,
+            p.conv,
+            p.task_process_msg_idx,
+            p.save_interval,
+        ))
+    } else {
+        tokio::spawn(async move {
+            forward_sse_events(event_rx, sse_tx.clone()).await;
+            vec![]
+        })
+    };
 
     let runner = TaskRunner::new(workspace);
     let result = runner
@@ -380,7 +426,7 @@ async fn run_streaming_agent(
         });
     match result {
         Ok((task, instance, tool_result, _events)) => {
-            let _ = forward.await;
+            let _collected = forward.await;
             Ok((instance, tool_result, Some(task.id), task.output_preview.clone()))
         }
         Err(raw) => {
@@ -432,6 +478,10 @@ fn process_post_message(
         created_at_ms: now,
         sender_name,
         sender_avatar_url,
+        task_id: None,
+        task_status: None,
+        stream_events: None,
+        result_meta: None,
     });
 
     let summaries = list_requirement_summaries(&workspace).map_err(|e| e.to_string())?;
@@ -460,6 +510,10 @@ fn process_post_message(
         created_at_ms: assistant_now,
         sender_name: None,
         sender_avatar_url: None,
+        task_id: None,
+        task_status: None,
+        stream_events: None,
+        result_meta: None,
     });
 
     save_conversation(&conv_path, &conv).map_err(|e| e.to_string())?;
@@ -621,6 +675,94 @@ async fn forward_sse_events(
     }
 }
 
+/// Variant of forward_sse_events that also collects events into the conversation file.
+/// Events are appended to the task_process message's stream_events array.
+/// Conversation is saved periodically (every N events) and at the end.
+async fn forward_sse_events_with_persistence(
+    mut event_rx: tokio::sync::mpsc::Receiver<crate::tools::driver::ChatStreamEvent>,
+    tx: tokio::sync::mpsc::Sender<Result<Event, Infallible>>,
+    conv_path: PathBuf,
+    mut conv: ConversationFile,
+    task_process_msg_idx: usize,
+    save_interval: usize,
+) -> Vec<serde_json::Value> {
+    use crate::tools::driver::ChatStreamEvent;
+    let mut collected_events: Vec<serde_json::Value> = Vec::new();
+    let mut events_since_save = 0;
+
+    let save_conv = |conv: &ConversationFile| {
+        if let Err(e) = save_conversation(&conv_path, conv) {
+            tracing::warn!(error = %e, "failed to save conversation during streaming");
+        }
+    };
+
+    while let Some(event) = event_rx.recv().await {
+        // Serialize event as JSON value for storage
+        let event_value = match &event {
+            ChatStreamEvent::Start { .. } => {
+                serde_json::to_value(&event).ok()
+            }
+            ChatStreamEvent::AssistantText { .. } => {
+                // For assistant_text, also emit a 'delta' event for SSE compatibility
+                serde_json::to_value(&event).ok()
+            }
+            ChatStreamEvent::Thinking { .. } => serde_json::to_value(&event).ok(),
+            ChatStreamEvent::ToolUse { .. } => serde_json::to_value(&event).ok(),
+            ChatStreamEvent::ToolResult { .. } => serde_json::to_value(&event).ok(),
+            ChatStreamEvent::Result { .. } => serde_json::to_value(&event).ok(),
+            ChatStreamEvent::Raw { .. } => serde_json::to_value(&event).ok(),
+        };
+
+        // Pick a stable SSE event name per variant
+        let event_name = match &event {
+            ChatStreamEvent::Start { .. } => "start",
+            ChatStreamEvent::AssistantText { .. } => "delta",
+            ChatStreamEvent::Thinking { .. } => "thinking",
+            ChatStreamEvent::ToolUse { .. } => "tool_use",
+            ChatStreamEvent::ToolResult { .. } => "tool_result",
+            ChatStreamEvent::Result { .. } => "result",
+            ChatStreamEvent::Raw { .. } => "delta",
+        };
+        let payload = match &event {
+            ChatStreamEvent::AssistantText { text } | ChatStreamEvent::Raw { text } => {
+                serde_json::to_string(&serde_json::json!({ "text": text }))
+            }
+            _ => serde_json::to_string(&event),
+        };
+        let Ok(data) = payload else { continue };
+
+        // Forward to SSE client
+        if tx
+            .send(Ok(Event::default().event(event_name).data(data)))
+            .await
+            .is_err()
+        {
+            break;
+        }
+
+        // Store event for persistence
+        if let Some(val) = event_value {
+            collected_events.push(val);
+            events_since_save += 1;
+
+            // Update the task_process message with collected events
+            if task_process_msg_idx < conv.messages.len() {
+                conv.messages[task_process_msg_idx].stream_events = Some(collected_events.clone());
+            }
+
+            // Periodic save
+            if events_since_save >= save_interval {
+                save_conv(&conv);
+                events_since_save = 0;
+            }
+        }
+    }
+
+    // Final save
+    save_conv(&conv);
+    collected_events
+}
+
 async fn run_stream_turn_inner(
     tools: ToolManager,
     workspace: PathBuf,
@@ -652,6 +794,10 @@ async fn run_stream_turn_inner(
         created_at_ms: now,
         sender_name,
         sender_avatar_url,
+        task_id: None,
+        task_status: None,
+        stream_events: None,
+        result_meta: None,
     });
     save_conversation(&conv_path, &conv).map_err(|e| e.to_string())?;
 
@@ -716,8 +862,65 @@ async fn run_stream_turn_inner(
             result.output_preview,
         )
     } else {
-        // No intent detected, fall back to streaming agent
-        run_streaming_agent(&workspace, &tools, &employee_id, &trimmed, &conv.messages, sse_tx.clone()).await?
+        // No intent detected, fall back to streaming agent.
+        // Create a task_process message to track the streaming execution.
+        let task_process_idx = conv.messages.len();
+        conv.messages.push(StoredMessage {
+            id: new_message_id("msg_task_process"),
+            role: "task_process".to_string(),
+            content: "".to_string(),
+            created_at_ms: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+            sender_name: None,
+            sender_avatar_url: None,
+            task_id: None,
+            task_status: Some("running".to_string()),
+            stream_events: None,
+            result_meta: None,
+        });
+        // Save immediately so the task_process message is persisted
+        save_conversation(&conv_path, &conv).map_err(|e| e.to_string())?;
+
+        let persistence = StreamPersistence {
+            conv_path: conv_path.clone(),
+            conv: conv.clone(),
+            task_process_msg_idx: task_process_idx,
+            save_interval: 10,
+        };
+        let result = run_streaming_agent(
+            &workspace,
+            &tools,
+            &employee_id,
+            &trimmed,
+            &conv.messages,
+            sse_tx.clone(),
+            Some(persistence),
+        )
+        .await?;
+
+        // Update task_process message with final status and task_id
+        if task_process_idx < conv.messages.len() {
+            conv.messages[task_process_idx].task_id = result.2.clone();
+            conv.messages[task_process_idx].task_status = Some("completed".to_string());
+            conv.messages[task_process_idx].content = result.1.output.clone();
+        }
+
+        // We need conv to be updated, so clone it from the result
+        // Actually, we need to reload conv since forward_sse_events_with_persistence modified it
+        // Re-read it from disk (the persistence task saved it)
+        conv = load_conversation(&conv_path).map_err(|e| e.to_string())?;
+        // Ensure the task_process is updated
+        if task_process_idx < conv.messages.len() {
+            conv.messages[task_process_idx].task_status = Some("completed".to_string());
+            conv.messages[task_process_idx].task_id = result.2.clone();
+            if conv.messages[task_process_idx].content.is_empty() {
+                conv.messages[task_process_idx].content = result.1.output.clone();
+            }
+        }
+
+        result
     };
 
     let assistant_now = SystemTime::now()
@@ -731,6 +934,10 @@ async fn run_stream_turn_inner(
         created_at_ms: assistant_now,
         sender_name: None,
         sender_avatar_url: None,
+        task_id: None,
+        task_status: None,
+        stream_events: None,
+        result_meta: None,
     });
     save_conversation(&conv_path, &conv).map_err(|e| e.to_string())?;
 

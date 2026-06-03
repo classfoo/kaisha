@@ -7,6 +7,10 @@ export type ChatWireMessage = {
   created_at_ms: number
   sender_name?: string | null
   sender_avatar_url?: string | null
+  task_id?: string | null
+  task_status?: 'running' | 'completed' | 'failed' | null
+  stream_events?: StreamEventPayload[] | null
+  result_meta?: ChatResultMeta | null
 }
 
 export type ChatSenderProfile = {
@@ -86,7 +90,7 @@ const EMPTY_STREAM: StreamingAssistantState = {
 type MessagesResponse = { messages: ChatWireMessage[] }
 type PostMessageResponse = { messages: ChatWireMessage[]; last_result: ChatResultMeta }
 
-type StreamEventPayload =
+export type StreamEventPayload =
   | { type: 'start'; model?: string; session_id?: string; tools?: string[]; cwd?: string }
   | { type: 'assistant_text'; text: string }
   | { type: 'thinking'; text: string }
@@ -337,6 +341,49 @@ export function applyStreamingEvent(
     default:
       return prev
   }
+}
+
+/** Reconstruct a StreamingAssistantState from a sequence of saved stream events.
+ *  Used when restoring streaming state from a persisted task_process message. */
+export function reconstructStreamingState(streamEvents: StreamEventPayload[]): StreamingAssistantState {
+  let state: StreamingAssistantState = { ...EMPTY_STREAM }
+  for (const event of streamEvents) {
+    // Map the saved event into the { event, data } format that applyStreamingEvent expects.
+    // The saved events are already typed as StreamEventPayload, so we reconstruct the SSE format.
+    const sseEvent: { event: string; data: string } = {
+      event: 'message',
+      data: JSON.stringify(event),
+    }
+
+    // For the 'start' event type, applyStreamingEvent expects event==='start'
+    // but our SSE parser maps named SSE events. We need to use the event type directly.
+    switch (event.type) {
+      case 'start':
+        sseEvent.event = 'start'
+        break
+      case 'assistant_text':
+        sseEvent.event = 'delta'
+        break
+      case 'thinking':
+        sseEvent.event = 'thinking'
+        break
+      case 'tool_use':
+        sseEvent.event = 'tool_use'
+        break
+      case 'tool_result':
+        sseEvent.event = 'tool_result'
+        break
+      case 'result':
+        sseEvent.event = 'result'
+        break
+      case 'raw':
+        sseEvent.event = 'delta'
+        break
+    }
+
+    state = applyStreamingEvent(state, sseEvent)
+  }
+  return state
 }
 
 export function useEmployeeChatMessages(
