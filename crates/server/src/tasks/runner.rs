@@ -5,7 +5,7 @@ use super::{
     store::{new_task_id, now_ms, TaskStore},
 };
 use crate::tools::{
-    driver::ToolExecutionResult,
+    driver::{ChatStreamEvent, ToolExecutionResult},
     manager::ToolManager,
     model::ToolInstance,
 };
@@ -327,12 +327,13 @@ impl TaskRunner {
         }
     }
 
-    pub async fn run_code_chat_streaming(
+    pub async fn run_code_chat_streaming_events(
         &self,
         tools: &ToolManager,
         params: CodeAgentTaskParams,
-        delta_tx: tokio::sync::mpsc::Sender<String>,
-    ) -> anyhow::Result<(AgentTaskRecord, ToolInstance, ToolExecutionResult)> {
+        event_tx: tokio::sync::mpsc::Sender<ChatStreamEvent>,
+    ) -> anyhow::Result<(AgentTaskRecord, ToolInstance, ToolExecutionResult, Vec<ChatStreamEvent>)>
+    {
         // Check shop status - skip execution when closed
         if let Ok(status) = crate::shop_status::load_shop_status(self.store.workspace()) {
             if !status.is_open {
@@ -366,14 +367,21 @@ impl TaskRunner {
             crate::agent_locale::ensure_language_system_message(params.messages.clone(), lang);
 
         match tools
-            .execute_code_chat_streaming(&params.workdir, &messages, delta_tx)
+            .execute_code_chat_streaming_events(&params.workdir, &messages, event_tx)
             .await
         {
-            Ok((instance, result)) => {
+            Ok((instance, result, events)) => {
                 task.complete_with_result(&instance, &result, now_ms());
                 self.store.save(&task)?;
-                // Sync WorkTask status for autonomy tasks
-                if matches!(params.kind, TaskKind::AutonomyExplore | TaskKind::AutonomyExecute | TaskKind::WorkTaskExecute) {
+                if !result.output.is_empty() {
+                    let _ = self.store.save_output(&task.id, &result.output);
+                }
+                if matches!(
+                    params.kind,
+                    TaskKind::AutonomyExplore
+                        | TaskKind::AutonomyExecute
+                        | TaskKind::WorkTaskExecute
+                ) {
                     let _ = crate::autonomy_task::sync_work_task_status(
                         self.store.workspace(),
                         &task.id,
@@ -381,13 +389,17 @@ impl TaskRunner {
                     );
                 }
                 self.notify_autonomy_if_needed(&params.kind, &task);
-                Ok((task, instance, result))
+                Ok((task, instance, result, events))
             }
             Err(err) => {
                 task.fail(err.to_string(), now_ms());
                 self.store.save(&task)?;
-                // Sync WorkTask status for autonomy tasks
-                if matches!(params.kind, TaskKind::AutonomyExplore | TaskKind::AutonomyExecute | TaskKind::WorkTaskExecute) {
+                if matches!(
+                    params.kind,
+                    TaskKind::AutonomyExplore
+                        | TaskKind::AutonomyExecute
+                        | TaskKind::WorkTaskExecute
+                ) {
                     let _ = crate::autonomy_task::sync_work_task_status(
                         self.store.workspace(),
                         &task.id,

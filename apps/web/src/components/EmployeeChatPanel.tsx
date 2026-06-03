@@ -10,8 +10,17 @@ import {
   type ChatSenderProfile,
   type ChatWireMessage,
   type ChatResultMeta,
+  type StreamingAssistantState,
+  type StreamingToolCall,
 } from '../features/employee-chat/useEmployeeChatMessages'
 import { EmployeeDirectoryRecord } from './EmployeeList'
+
+type StreamingExtras = {
+  thinking: string
+  toolCalls: StreamingToolCall[]
+  session: StreamingAssistantState['session']
+  result: StreamingAssistantState['result']
+}
 
 type DisplayMessage = {
   id: string
@@ -21,6 +30,7 @@ type DisplayMessage = {
   pending?: boolean
   senderName?: string
   senderAvatarUrl?: string
+  streaming?: StreamingExtras
 }
 
 type EmployeeChatPanelProps = {
@@ -104,6 +114,99 @@ function wireToDisplay(m: ChatWireMessage): DisplayMessage {
   }
 }
 
+function StreamingToolCallCard({
+  call,
+  t,
+}: {
+  call: StreamingToolCall
+  t: (key: string) => string
+}) {
+  const statusKey =
+    call.status === 'running'
+      ? 'ui.chat.streaming.toolStatusRunning'
+      : call.status === 'error'
+        ? 'ui.chat.streaming.toolStatusError'
+        : 'ui.chat.streaming.toolStatusSuccess'
+  return (
+    <div className={`stream-tool-call stream-tool-call--${call.status}`}>
+      <div className="stream-tool-call__header">
+        <span className="stream-tool-call__name">{call.name || t('ui.chat.streaming.unknownTool')}</span>
+        <span className="stream-tool-call__status">{t(statusKey)}</span>
+      </div>
+      {call.inputSummary ? (
+        <details className="stream-tool-call__details">
+          <summary className="stream-tool-call__summary">{t('ui.chat.streaming.input')}</summary>
+          <pre className="stream-tool-call__pre">{call.inputSummary}</pre>
+        </details>
+      ) : null}
+      {call.outputPreview ? (
+        <details className="stream-tool-call__details" open={call.status === 'error'}>
+          <summary className="stream-tool-call__summary">{t('ui.chat.streaming.output')}</summary>
+          <pre className="stream-tool-call__pre">{call.outputPreview}</pre>
+        </details>
+      ) : null}
+    </div>
+  )
+}
+
+function StreamingProgressBlock({
+  extras,
+  t,
+}: {
+  extras: StreamingExtras
+  t: (key: string) => string
+}) {
+  const hasSession = Boolean(extras.session)
+  const hasThinking = extras.thinking.trim().length > 0
+  const hasTools = extras.toolCalls.length > 0
+  const hasResult = Boolean(extras.result)
+  if (!hasSession && !hasThinking && !hasTools && !hasResult) return null
+  return (
+    <div className="stream-progress">
+      {extras.session ? (
+        <div className="stream-progress__session">
+          <span className="stream-progress__chip">
+            {t('ui.chat.streaming.sessionStarted')}
+          </span>
+          {extras.session.model ? (
+            <span className="stream-progress__meta">{extras.session.model}</span>
+          ) : null}
+          {extras.session.tools.length > 0 ? (
+            <span className="stream-progress__meta">
+              {t('ui.chat.streaming.tools')}: {extras.session.tools.length}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {hasThinking ? (
+        <details className="stream-progress__thinking" open>
+          <summary className="stream-progress__summary">{t('ui.chat.streaming.thinking')}</summary>
+          <pre className="stream-progress__pre">{extras.thinking}</pre>
+        </details>
+      ) : null}
+      {extras.toolCalls.map((call) => (
+        <StreamingToolCallCard key={call.id} call={call} t={t} />
+      ))}
+      {extras.result ? (
+        <div
+          className={`stream-progress__result stream-progress__result--${extras.result.isError ? 'error' : 'success'}`}
+        >
+          <span className="stream-progress__chip">
+            {extras.result.isError
+              ? t('ui.chat.streaming.resultError')
+              : t('ui.chat.streaming.resultSuccess')}
+          </span>
+          <span className="stream-progress__meta">
+            {t('ui.chat.taskResult.tokens')}:{' '}
+            {extras.result.promptTokens.toLocaleString()} /{' '}
+            {extras.result.completionTokens.toLocaleString()}
+          </span>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function TaskResultPanel({ result, t }: { result: ChatResultMeta | null; t: (key: string) => string }) {
   if (!result) return null
   const isSuccess = result.exit_code === 0
@@ -144,7 +247,7 @@ export function EmployeeChatPanel({
 }: EmployeeChatPanelProps) {
   const selectedEmployee = employees.find((item) => item.id === selectedEmployeeId) ?? null
   const imeEnterGuardRef = React.useRef(createImeEnterGuardState())
-  const { serverMessages, optimisticUser, streamingAssistantText, loading, sending, error, lastResult, sendMessage } =
+  const { serverMessages, optimisticUser, streamingAssistant, loading, sending, error, lastResult, sendMessage } =
     useEmployeeChatMessages(apiBase, locale, selectedEmployeeId, chatSenderProfile, onEmployeeTasksRefresh)
 
   const historyRef = React.useRef<HTMLDivElement>(null)
@@ -161,15 +264,28 @@ export function EmployeeChatPanel({
       base = [...base, wireToDisplay(optimisticUser)]
     }
     if (sending && optimisticUser) {
-      if (streamingAssistantText.length > 0) {
+      const streamingExtras: StreamingExtras = {
+        thinking: streamingAssistant.thinking,
+        toolCalls: streamingAssistant.toolCalls,
+        session: streamingAssistant.session,
+        result: streamingAssistant.result,
+      }
+      const hasAnyContent =
+        streamingAssistant.text.length > 0 ||
+        streamingAssistant.thinking.length > 0 ||
+        streamingAssistant.toolCalls.length > 0 ||
+        streamingAssistant.session !== null ||
+        streamingAssistant.result !== null
+      if (hasAnyContent) {
         base = [
           ...base,
           {
             id: 'stream-assistant',
             side: 'employee',
-            content: streamingAssistantText,
+            content: streamingAssistant.text,
             at: '',
             pending: true,
+            streaming: streamingExtras,
           },
         ]
       } else {
@@ -186,13 +302,13 @@ export function EmployeeChatPanel({
       }
     }
     return base
-  }, [chatSenderProfile, optimisticUser, selectedEmployee, sending, serverMessages, streamingAssistantText, t])
+  }, [chatSenderProfile, optimisticUser, selectedEmployee, sending, serverMessages, streamingAssistant, t])
 
   React.useEffect(() => {
     const el = historyRef.current
     if (!el) return
     el.scrollTop = el.scrollHeight
-  }, [displayMessages, sending])
+  }, [displayMessages, sending, streamingAssistant])
 
   const sendFromDraft = React.useCallback(async () => {
     if (!selectedEmployeeId || !selectedEmployee) return
@@ -257,7 +373,17 @@ export function EmployeeChatPanel({
 
               const bubble = (
                 <div className="chat-message__bubble">
-                  <div className="chat-message__content">{message.content}</div>
+                  {message.streaming ? (
+                    <StreamingProgressBlock extras={message.streaming} t={t} />
+                  ) : null}
+                  {message.content ? (
+                    <div className="chat-message__content">{message.content}</div>
+                  ) : null}
+                  {message.streaming && !message.content ? (
+                    <div className="chat-message__content chat-message__content--placeholder">
+                      {t('ui.chat.awaitingReply')}
+                    </div>
+                  ) : null}
                 </div>
               )
 
