@@ -184,6 +184,11 @@ pub fn set_dev_status(task: &mut WorkTask, status: &str) {
     }
 }
 
+/// Sets the agent_task_id on a work task to link it with an agent execution task.
+pub fn set_agent_task_id(task: &mut WorkTask, agent_task_id: &str) {
+    task.agent_task_id = Some(agent_task_id.to_string());
+}
+
 pub fn save_work_task(workspace: &Path, task: &WorkTask) -> Result<(), String> {
     let path = work_task_path(workspace, &task.id);
     if let Some(parent) = path.parent() {

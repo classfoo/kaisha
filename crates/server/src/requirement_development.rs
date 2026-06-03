@@ -1,5 +1,6 @@
 use crate::{
     autonomy_trigger::mark_employee_for_autonomy,
+    dev_task_executor,
     employee::list_employee_records,
     i18n,
     requirement::{
@@ -489,9 +490,8 @@ fn create_feature_branch(workspace: &Path, feature_branch: &str) {
     if let Some(main_repo) = workspace
         .join("repos")
         .join("main")
-        .join("main")
         .exists()
-        .then(|| workspace.join("repos").join("main").join("main"))
+        .then(|| workspace.join("repos").join("main"))
     {
         let _ = std::process::Command::new("git")
             .current_dir(&main_repo)
@@ -504,9 +504,8 @@ fn create_task_branch(workspace: &Path, branch: &str) {
     if let Some(main_repo) = workspace
         .join("repos")
         .join("main")
-        .join("main")
         .exists()
-        .then(|| workspace.join("repos").join("main").join("main"))
+        .then(|| workspace.join("repos").join("main"))
     {
         let _ = std::process::Command::new("git")
             .current_dir(&main_repo)
@@ -979,6 +978,7 @@ pub async fn task_action(
         ));
     }
     let current = dev_status_of(&task);
+    let employee_id = task.assignee.clone().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| "system".to_string());
     let next = match payload.action.as_str() {
         "start_development" => {
             if current != DevTaskStatus::BranchCreated {
@@ -1023,9 +1023,9 @@ pub async fn task_action(
                     i18n::msg(&headers, "task_action_invalid"),
                 ));
             }
-            if let Some(main_repo) = workspace.join("repos").join("main").join("main")
+            if let Some(main_repo) = workspace.join("repos").join("main")
                 .exists()
-                .then(|| workspace.join("repos").join("main").join("main"))
+                .then(|| workspace.join("repos").join("main"))
             {
                 let branch = task_branch(&task).unwrap_or("").to_string();
                 let _ = std::process::Command::new("git")
@@ -1057,6 +1057,19 @@ pub async fn task_action(
         task.progress = progress;
         Ok(())
     });
+
+    // When task enters InDevelopment, trigger code agent execution with git repo as working directory
+    if next == DevTaskStatus::InDevelopment {
+        let tools = state.tools.read().expect("tools lock poisoned");
+        let _ = dev_task_executor::execute_dev_task(
+            &workspace,
+            &tools,
+            &task_id,
+            &id,
+            &employee_id,
+        );
+    }
+
     dev_state.current_task_id = Some(task_id);
     save_dev_state(&workspace, &id, &dev_state).map_err(|e| {
         (
