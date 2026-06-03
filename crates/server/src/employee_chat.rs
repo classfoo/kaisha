@@ -349,12 +349,13 @@ async fn run_streaming_agent(
     let tool_messages =
         build_requirement_agent_messages(workspace, user_input, &prior).map_err(|e| e.to_string())?;
 
-    let (delta_tx, delta_rx) = tokio::sync::mpsc::channel::<String>(64);
-    let forward = tokio::spawn(forward_sse_deltas(delta_rx, sse_tx.clone()));
+    let (event_tx, event_rx) =
+        tokio::sync::mpsc::channel::<crate::tools::driver::ChatStreamEvent>(64);
+    let forward = tokio::spawn(forward_sse_events(event_rx, sse_tx.clone()));
 
     let runner = TaskRunner::new(workspace);
     let result = runner
-        .run_code_chat_streaming(
+        .run_code_chat_streaming_events(
             tools,
             CodeAgentTaskParams {
                 kind: TaskKind::RequirementAgent,
@@ -365,7 +366,7 @@ async fn run_streaming_agent(
                 parent_task_id: None,
                 context: serde_json::json!({ "employee_id": employee_id }),
             },
-            delta_tx,
+            event_tx,
         )
         .await
         .map_err(|e| {
@@ -378,7 +379,7 @@ async fn run_streaming_agent(
             }
         });
     match result {
-        Ok((task, instance, tool_result)) => {
+        Ok((task, instance, tool_result, _events)) => {
             let _ = forward.await;
             Ok((instance, tool_result, Some(task.id), task.output_preview.clone()))
         }
@@ -586,16 +587,32 @@ pub async fn post_message(
     Ok(Json(res))
 }
 
-async fn forward_sse_deltas(
-    mut delta_rx: tokio::sync::mpsc::Receiver<String>,
+async fn forward_sse_events(
+    mut event_rx: tokio::sync::mpsc::Receiver<crate::tools::driver::ChatStreamEvent>,
     tx: tokio::sync::mpsc::Sender<Result<Event, Infallible>>,
 ) {
-    while let Some(chunk) = delta_rx.recv().await {
-        let Ok(payload) = serde_json::to_string(&serde_json::json!({ "text": chunk })) else {
-            continue;
+    use crate::tools::driver::ChatStreamEvent;
+    while let Some(event) = event_rx.recv().await {
+        // Pick a stable SSE event name per variant; payload is the serialized event.
+        let event_name = match &event {
+            ChatStreamEvent::Start { .. } => "start",
+            ChatStreamEvent::AssistantText { .. } => "delta",
+            ChatStreamEvent::Thinking { .. } => "thinking",
+            ChatStreamEvent::ToolUse { .. } => "tool_use",
+            ChatStreamEvent::ToolResult { .. } => "tool_result",
+            ChatStreamEvent::Result { .. } => "result",
+            ChatStreamEvent::Raw { .. } => "delta",
         };
+        // For backwards compatibility, the `delta` event still carries `{ "text": "..." }`.
+        let payload = match &event {
+            ChatStreamEvent::AssistantText { text } | ChatStreamEvent::Raw { text } => {
+                serde_json::to_string(&serde_json::json!({ "text": text }))
+            }
+            _ => serde_json::to_string(&event),
+        };
+        let Ok(data) = payload else { continue };
         if tx
-            .send(Ok(Event::default().event("delta").data(payload)))
+            .send(Ok(Event::default().event(event_name).data(data)))
             .await
             .is_err()
         {

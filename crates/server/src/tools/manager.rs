@@ -1,6 +1,6 @@
 use crate::tools::{
     chat_stream,
-    driver::{CodingToolDriver, ToolChatMessage, ToolExecutionResult, ToolSession},
+    driver::{ChatStreamEvent, CodingToolDriver, ToolChatMessage, ToolExecutionResult, ToolSession},
     model::{CreateToolInstanceRequest, ToolCatalogItem, ToolInstance, ToolKind, UpdateToolInstanceRequest},
     registry::ToolRegistry,
     store::ToolStore,
@@ -150,28 +150,40 @@ impl ToolManager {
         ))
     }
 
-    /// Streams stdout chunks through `delta_tx` while the tool runs.
-    pub async fn execute_code_chat_streaming(
+    /// Streams structured `ChatStreamEvent`s while the tool runs.
+    ///
+    /// The driver is responsible for parsing its stdout (e.g. Claude Code stream-json) into
+    /// semantic events. Drivers without structured streaming emit `ChatStreamEvent::Raw`
+    /// chunks so the rest of the UI still works.
+    pub async fn execute_code_chat_streaming_events(
         &self,
         workspace: &Path,
         messages: &[ToolChatMessage],
-        delta_tx: tokio::sync::mpsc::Sender<String>,
-    ) -> anyhow::Result<(ToolInstance, ToolExecutionResult)> {
+        event_tx: tokio::sync::mpsc::Sender<ChatStreamEvent>,
+    ) -> anyhow::Result<(ToolInstance, ToolExecutionResult, Vec<ChatStreamEvent>)> {
         let (instance, driver) = self
             .pick_enabled_chat_driver()
             .ok_or_else(|| anyhow::anyhow!("no_enabled_coding_tool"))?;
         let session: ToolSession = driver.create_session(&instance.config)?;
         let _ = session;
-        let spec = driver.chat_subprocess_spec(&instance.config, messages)?;
-        let (merged, exit_code) = chat_stream::stream_chat_subprocess(&spec, workspace, delta_tx).await?;
-        let usage = driver.collect_usage(&instance.config, messages, &merged)?;
+        let spec = driver.chat_subprocess_spec_stream(&instance.config, messages)?;
+        let (merged, exit_code, events) =
+            chat_stream::stream_chat_events(driver.clone(), &spec, workspace, event_tx).await?;
+        // Prefer the driver-derived assistant text (e.g. concatenated text_delta chunks) so
+        // we don't store the raw JSONL frames as the conversation reply.
+        let assistant_text = driver
+            .assistant_text_from_events(&events)
+            .filter(|t| !t.trim().is_empty())
+            .unwrap_or(merged.clone());
+        let usage = driver.collect_usage(&instance.config, messages, &assistant_text)?;
         Ok((
             instance,
             ToolExecutionResult {
-                output: merged,
+                output: assistant_text,
                 exit_code,
                 usage,
             },
+            events,
         ))
     }
 }

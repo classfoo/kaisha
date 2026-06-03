@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use crate::tools::model::{ToolFormSchema, ToolKind};
+use serde::Serialize;
 use serde_json::Value;
 use std::path::Path;
 use std::process::Command;
@@ -41,6 +42,79 @@ pub struct ChatSubprocessSpec {
     pub env: Vec<(String, String)>,
 }
 
+/// Structured event emitted by a streaming code-agent driver.
+///
+/// Drivers parse their tool-specific stdout (e.g. Claude Code stream-json JSONL) into
+/// these semantic events so the rest of the stack can surface them uniformly to the UI.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ChatStreamEvent {
+    /// Session is starting; carries model/tooling metadata if available.
+    Start {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        session_id: Option<String>,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        tools: Vec<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cwd: Option<String>,
+    },
+    /// Incremental assistant text chunk (already decoded; no JSON wrapping).
+    AssistantText { text: String },
+    /// Assistant "thinking" or reasoning block (Anthropic extended thinking, etc.).
+    Thinking { text: String },
+    /// Assistant requested a tool/sub-agent run.
+    ToolUse {
+        id: String,
+        name: String,
+        /// Pretty-printed JSON of the tool input (truncated by driver if needed).
+        input_summary: String,
+    },
+    /// Tool returned a result for a previously announced tool_use.
+    ToolResult {
+        tool_use_id: String,
+        /// Truncated text preview of the tool result content.
+        output_preview: String,
+        is_error: bool,
+    },
+    /// Final result event from the agent (after stop_reason etc.).
+    Result {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        summary: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
+        #[serde(default)]
+        prompt_tokens: u64,
+        #[serde(default)]
+        completion_tokens: u64,
+        #[serde(default)]
+        total_tokens: u64,
+        is_error: bool,
+    },
+    /// Fallback raw stdout chunk (drivers without structured streaming).
+    Raw { text: String },
+}
+
+/// Per-session stream parser state. Drivers may stash buffered partial-line data here.
+#[derive(Debug, Default)]
+pub struct StreamParseState {
+    pub buffer: String,
+    /// Track message ids that already emitted partial text deltas so the final
+    /// assistant message doesn't double-emit text.
+    pub messages_with_text_deltas: std::collections::HashSet<String>,
+}
+
+pub const TOOL_PREVIEW_MAX_CHARS: usize = 1200;
+
+pub fn truncate_for_preview(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    let head: String = s.chars().take(max).collect();
+    format!("{head}…")
+}
+
 pub fn join_chat_prompt(messages: &[ToolChatMessage]) -> String {
     messages
         .iter()
@@ -66,6 +140,64 @@ pub trait CodingToolDriver: Send + Sync {
 
     /// Build the subprocess used for `run_chat_for_code` and streaming execution.
     fn chat_subprocess_spec(&self, config: &Value, messages: &[ToolChatMessage]) -> anyhow::Result<ChatSubprocessSpec>;
+
+    /// Build a subprocess spec configured to emit structured streaming output (e.g. stream-json).
+    ///
+    /// Default returns the same spec as `chat_subprocess_spec`, meaning the driver streams raw
+    /// stdout chunks via `ChatStreamEvent::Raw`.
+    fn chat_subprocess_spec_stream(
+        &self,
+        config: &Value,
+        messages: &[ToolChatMessage],
+    ) -> anyhow::Result<ChatSubprocessSpec> {
+        self.chat_subprocess_spec(config, messages)
+    }
+
+    /// Parse a stdout chunk into structured events. State carries partial-line buffers.
+    ///
+    /// Default behaviour: emit the chunk verbatim as a `Raw` event.
+    fn parse_stream_chunk(
+        &self,
+        state: &mut StreamParseState,
+        chunk: &str,
+    ) -> Vec<ChatStreamEvent> {
+        let _ = state;
+        if chunk.is_empty() {
+            vec![]
+        } else {
+            vec![ChatStreamEvent::Raw {
+                text: chunk.to_string(),
+            }]
+        }
+    }
+
+    /// Flush any remaining buffered content when the subprocess closes stdout.
+    fn finalize_stream(&self, state: &mut StreamParseState) -> Vec<ChatStreamEvent> {
+        let tail = std::mem::take(&mut state.buffer);
+        if tail.trim().is_empty() {
+            vec![]
+        } else {
+            vec![ChatStreamEvent::Raw { text: tail }]
+        }
+    }
+
+    /// Build the final assistant message text from a sequence of stream events.
+    ///
+    /// Default joins `AssistantText` chunks; drivers may override to prefer a more
+    /// canonical representation (e.g. the `result.result` field).
+    fn assistant_text_from_events(&self, events: &[ChatStreamEvent]) -> Option<String> {
+        let mut buf = String::new();
+        for ev in events {
+            if let ChatStreamEvent::AssistantText { text } = ev {
+                buf.push_str(text);
+            }
+        }
+        if buf.trim().is_empty() {
+            None
+        } else {
+            Some(buf)
+        }
+    }
 
     // 1) Capability: check whether tool binary exists.
     fn check_installed(&self, config: &Value) -> anyhow::Result<bool> {
@@ -226,5 +358,26 @@ mod tests {
         assert!(merged.contains("out"));
         assert!(merged.contains("--- stderr ---"));
         assert!(merged.contains("warn"));
+    }
+
+    #[test]
+    fn truncate_for_preview_keeps_short_strings_intact() {
+        assert_eq!(truncate_for_preview("hi", 10), "hi");
+    }
+
+    #[test]
+    fn truncate_for_preview_appends_ellipsis_when_clipped() {
+        let s = "0123456789";
+        assert_eq!(truncate_for_preview(s, 4), "0123…");
+    }
+
+    #[test]
+    fn chat_stream_event_serializes_to_tagged_json() {
+        let ev = ChatStreamEvent::AssistantText {
+            text: "hello".into(),
+        };
+        let s = serde_json::to_string(&ev).expect("serialize");
+        assert!(s.contains("\"type\":\"assistant_text\""));
+        assert!(s.contains("\"text\":\"hello\""));
     }
 }

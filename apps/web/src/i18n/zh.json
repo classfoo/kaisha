@@ -165,6 +165,19 @@
         "tool": "工具",
         "tokens": "Token 用量",
         "outputPreview": "输出预览"
+      },
+      "streaming": {
+        "sessionStarted": "会话已开始",
+        "tools": "可用工具",
+        "thinking": "思考中",
+        "input": "输入",
+        "output": "输出",
+        "toolStatusRunning": "执行中",
+        "toolStatusSuccess": "已完成",
+        "toolStatusError": "失败",
+        "resultSuccess": "已完成",
+        "resultError": "失败",
+        "unknownTool": "工具"
       }
     },
     "leftPanel": {

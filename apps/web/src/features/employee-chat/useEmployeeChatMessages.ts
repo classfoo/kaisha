@@ -26,8 +26,74 @@ export type ChatResultMeta = {
   output_preview?: string | null
 }
 
+export type StreamingToolCall = {
+  id: string
+  name: string
+  inputSummary: string
+  outputPreview?: string
+  isError?: boolean
+  status: 'running' | 'success' | 'error'
+}
+
+export type StreamingSessionInfo = {
+  model?: string
+  sessionId?: string
+  tools: string[]
+  cwd?: string
+}
+
+export type StreamingResultSummary = {
+  summary?: string
+  model?: string
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  isError: boolean
+}
+
+export type StreamingAssistantState = {
+  text: string
+  thinking: string
+  toolCalls: StreamingToolCall[]
+  session: StreamingSessionInfo | null
+  result: StreamingResultSummary | null
+  /** Wall-clock when the first event arrived; useful for showing elapsed time. */
+  startedAtMs: number | null
+}
+
+const EMPTY_STREAM: StreamingAssistantState = {
+  text: '',
+  thinking: '',
+  toolCalls: [],
+  session: null,
+  result: null,
+  startedAtMs: null,
+}
+
 type MessagesResponse = { messages: ChatWireMessage[] }
 type PostMessageResponse = { messages: ChatWireMessage[]; last_result: ChatResultMeta }
+
+type StreamEventPayload =
+  | { type: 'start'; model?: string; session_id?: string; tools?: string[]; cwd?: string }
+  | { type: 'assistant_text'; text: string }
+  | { type: 'thinking'; text: string }
+  | { type: 'tool_use'; id: string; name: string; input_summary: string }
+  | {
+      type: 'tool_result'
+      tool_use_id: string
+      output_preview: string
+      is_error: boolean
+    }
+  | {
+      type: 'result'
+      summary?: string
+      model?: string
+      prompt_tokens?: number
+      completion_tokens?: number
+      total_tokens?: number
+      is_error?: boolean
+    }
+  | { type: 'raw'; text: string }
 
 function parseSseBuffer(buffer: string): { rest: string; events: { event: string; data: string }[] } {
   const parts = buffer.split('\n\n')
@@ -48,6 +114,116 @@ function parseSseBuffer(buffer: string): { rest: string; events: { event: string
   return { rest, events }
 }
 
+function nowMs(prev: number | null): number {
+  return prev ?? Date.now()
+}
+
+export function applyStreamingEvent(
+  prev: StreamingAssistantState,
+  event: { event: string; data: string },
+): StreamingAssistantState {
+  const startedAtMs = prev.startedAtMs ?? Date.now()
+  if (event.event === 'delta') {
+    try {
+      const j = JSON.parse(event.data) as { text?: string }
+      if (j.text) {
+        return { ...prev, text: prev.text + j.text, startedAtMs: nowMs(prev.startedAtMs) }
+      }
+    } catch {
+      /* ignore malformed delta */
+    }
+    return prev
+  }
+
+  let payload: StreamEventPayload | null = null
+  try {
+    payload = JSON.parse(event.data) as StreamEventPayload
+  } catch {
+    return prev
+  }
+  if (!payload || typeof payload !== 'object' || !('type' in payload)) {
+    return prev
+  }
+
+  switch (payload.type) {
+    case 'start':
+      return {
+        ...prev,
+        session: {
+          model: payload.model,
+          sessionId: payload.session_id,
+          tools: payload.tools ?? [],
+          cwd: payload.cwd,
+        },
+        startedAtMs,
+      }
+    case 'assistant_text':
+      return { ...prev, text: prev.text + payload.text, startedAtMs }
+    case 'thinking':
+      return { ...prev, thinking: prev.thinking + payload.text, startedAtMs }
+    case 'tool_use': {
+      const useId = payload.id
+      const existing = prev.toolCalls.find((tc) => tc.id === useId)
+      const next: StreamingToolCall = {
+        id: useId,
+        name: payload.name,
+        inputSummary: payload.input_summary,
+        status: existing?.status ?? 'running',
+        outputPreview: existing?.outputPreview,
+        isError: existing?.isError,
+      }
+      const toolCalls = existing
+        ? prev.toolCalls.map((tc) => (tc.id === useId ? next : tc))
+        : [...prev.toolCalls, next]
+      return { ...prev, toolCalls, startedAtMs }
+    }
+    case 'tool_result': {
+      const toolCalls = prev.toolCalls.map((tc) => {
+        if (tc.id !== payload.tool_use_id) return tc
+        return {
+          ...tc,
+          outputPreview: payload.output_preview,
+          isError: payload.is_error,
+          status: payload.is_error ? 'error' : 'success',
+        } satisfies StreamingToolCall
+      })
+      // If we received a tool_result before the matching tool_use (rare), add a stub.
+      const hasMatch = prev.toolCalls.some((tc) => tc.id === payload.tool_use_id)
+      const merged = hasMatch
+        ? toolCalls
+        : [
+            ...toolCalls,
+            {
+              id: payload.tool_use_id,
+              name: '',
+              inputSummary: '',
+              outputPreview: payload.output_preview,
+              isError: payload.is_error,
+              status: payload.is_error ? ('error' as const) : ('success' as const),
+            },
+          ]
+      return { ...prev, toolCalls: merged, startedAtMs }
+    }
+    case 'result':
+      return {
+        ...prev,
+        result: {
+          summary: payload.summary,
+          model: payload.model,
+          promptTokens: payload.prompt_tokens ?? 0,
+          completionTokens: payload.completion_tokens ?? 0,
+          totalTokens: payload.total_tokens ?? 0,
+          isError: Boolean(payload.is_error),
+        },
+        startedAtMs,
+      }
+    case 'raw':
+      return { ...prev, text: prev.text + payload.text, startedAtMs }
+    default:
+      return prev
+  }
+}
+
 export function useEmployeeChatMessages(
   apiBase: string,
   locale: string,
@@ -57,7 +233,8 @@ export function useEmployeeChatMessages(
 ) {
   const [serverMessages, setServerMessages] = React.useState<ChatWireMessage[]>([])
   const [optimisticUser, setOptimisticUser] = React.useState<ChatWireMessage | null>(null)
-  const [streamingAssistantText, setStreamingAssistantText] = React.useState('')
+  const [streamingAssistant, setStreamingAssistant] =
+    React.useState<StreamingAssistantState>(EMPTY_STREAM)
   const [loading, setLoading] = React.useState(false)
   const [sending, setSending] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -76,11 +253,11 @@ export function useEmployeeChatMessages(
       setLastResult(null)
       setError(null)
       setOptimisticUser(null)
-      setStreamingAssistantText('')
+      setStreamingAssistant(EMPTY_STREAM)
       return
     }
     setOptimisticUser(null)
-    setStreamingAssistantText('')
+    setStreamingAssistant(EMPTY_STREAM)
     setLastResult(null)
     setLoading(true)
     setError(null)
@@ -116,7 +293,7 @@ export function useEmployeeChatMessages(
         ...(senderProfile.avatarUrl ? { sender_avatar_url: senderProfile.avatarUrl } : {}),
       }
       setOptimisticUser(optimistic)
-      setStreamingAssistantText('')
+      setStreamingAssistant(EMPTY_STREAM)
       setSending(true)
       setError(null)
       try {
@@ -144,18 +321,11 @@ export function useEmployeeChatMessages(
         let buf = ''
         const applyEvents = (events: { event: string; data: string }[]) => {
           for (const ev of events) {
-            if (ev.event === 'delta') {
-              try {
-                const j = JSON.parse(ev.data) as { text?: string }
-                if (j.text) setStreamingAssistantText((s) => s + j.text)
-              } catch {
-                /* ignore malformed chunk */
-              }
-            } else if (ev.event === 'done') {
+            if (ev.event === 'done') {
               const data = JSON.parse(ev.data) as PostMessageResponse
               setServerMessages(data.messages ?? [])
               setLastResult(data.last_result ?? null)
-              setStreamingAssistantText('')
+              setStreamingAssistant(EMPTY_STREAM)
               setOptimisticUser(null)
               onStreamDone?.()
             } else if (ev.event === 'error') {
@@ -167,6 +337,8 @@ export function useEmployeeChatMessages(
                 /* use raw */
               }
               throw new Error(msg)
+            } else {
+              setStreamingAssistant((prev) => applyStreamingEvent(prev, ev))
             }
           }
         }
@@ -189,7 +361,7 @@ export function useEmployeeChatMessages(
       } finally {
         setSending(false)
         setOptimisticUser(null)
-        setStreamingAssistantText('')
+        setStreamingAssistant(EMPTY_STREAM)
       }
     },
     [apiBase, employeeId, headers, onStreamDone, senderProfile.name, senderProfile.avatarUrl],
@@ -198,7 +370,7 @@ export function useEmployeeChatMessages(
   return {
     serverMessages,
     optimisticUser,
-    streamingAssistantText,
+    streamingAssistant,
     loading,
     sending,
     error,

@@ -165,6 +165,19 @@
         "tool": "Tool",
         "tokens": "Tokens",
         "outputPreview": "Output Preview"
+      },
+      "streaming": {
+        "sessionStarted": "Session started",
+        "tools": "Tools",
+        "thinking": "Thinking",
+        "input": "Input",
+        "output": "Output",
+        "toolStatusRunning": "Running",
+        "toolStatusSuccess": "Done",
+        "toolStatusError": "Failed",
+        "resultSuccess": "Completed",
+        "resultError": "Failed",
+        "unknownTool": "Tool"
       }
     },
     "leftPanel": {
