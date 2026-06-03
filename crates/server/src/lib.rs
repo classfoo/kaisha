@@ -742,6 +742,14 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
             "/api/employees/:id/autonomy/explore",
             post(autonomy::api::run_employee_autonomy_explore_handler),
         )
+        .route(
+            "/api/employees/:id/autonomy/explore/stream",
+            post(autonomy::api::run_employee_autonomy_explore_stream_handler),
+        )
+        .route(
+            "/api/employees/:id/autonomy/run/stream",
+            post(autonomy::api::run_employee_autonomy_run_stream_handler),
+        )
         .route("/api/autonomy/tasks", get(autonomy::api::list_tasks_handler))
         .route("/api/autonomy/plans", get(autonomy::api::list_plans_handler))
         .route("/api/autonomy/workers", get(autonomy::api::list_workers_handler))
