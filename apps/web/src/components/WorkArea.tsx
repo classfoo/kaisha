@@ -31,6 +31,8 @@ type WorkAreaProps = {
   requirements: ReturnType<typeof useRequirementsWorkspace>
   requirementPhaseLabel: (phase: RequirementPhase) => string
   onEmployeeTasksRefresh?: () => void
+  /** When this counter changes, the chat panel will reload messages. */
+  chatMessagesRefreshTick?: number
   t: (key: string) => string
   onOpenSettings: () => void
   onSetWorkspaceInput: (value: string) => void
@@ -62,6 +64,7 @@ export function WorkArea({
   requirements,
   requirementPhaseLabel,
   onEmployeeTasksRefresh,
+  chatMessagesRefreshTick,
   t,
   onOpenSettings,
   onSetWorkspaceInput,
@@ -162,6 +165,7 @@ export function WorkArea({
           onMessageDraftChange={onMessageDraftChange}
           chatSenderProfile={chatSenderProfile}
           onEmployeeTasksRefresh={onEmployeeTasksRefresh}
+          chatMessagesRefreshTick={chatMessagesRefreshTick}
           t={t}
         />
       )

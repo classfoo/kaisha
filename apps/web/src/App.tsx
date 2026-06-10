@@ -138,6 +138,7 @@ export default function App() {
   const git = useGitWorkspace(API_BASE, locale, Boolean(workspace?.configured), refreshTick)
   const requirements = useRequirementsWorkspace(API_BASE, locale, Boolean(workspace?.configured), refreshTick)
   const [employeeTasksExploring, setEmployeeTasksExploring] = React.useState(false)
+  const [chatMessagesRefreshTick, setChatMessagesRefreshTick] = React.useState(0)
   const [employeeTasksExploreError, setEmployeeTasksExploreError] = React.useState<string | null>(null)
   const [rerunningTaskId, setRerunningTaskId] = React.useState<string | null>(null)
   const [employeeTaskRerunError, setEmployeeTaskRerunError] = React.useState<string | null>(null)
@@ -169,6 +170,8 @@ export default function App() {
     try {
       await employeeTasksApi.triggerExplore(selectedEmployeeId)
       void employeeTasks.refresh()
+      // Signal chat panel to refresh since the explore task writes to conversation.json
+      setChatMessagesRefreshTick((t) => t + 1)
     } catch (err) {
       setEmployeeTasksExploreError(
         err instanceof Error && err.message ? err.message : tt('ui.employeeTasks.exploreError'),
@@ -1191,6 +1194,7 @@ export default function App() {
         requirements={requirements}
         requirementPhaseLabel={requirementPhaseLabel}
         onEmployeeTasksRefresh={() => void employeeTasks.refresh()}
+        chatMessagesRefreshTick={chatMessagesRefreshTick}
         t={tt}
         onOpenSettings={() => setSettingsOpen(true)}
         onSetWorkspaceInput={setWorkspaceInput}

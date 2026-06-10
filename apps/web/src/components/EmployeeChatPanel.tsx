@@ -47,6 +47,8 @@ type EmployeeChatPanelProps = {
   onMessageDraftChange: (value: string) => void
   chatSenderProfile: ChatSenderProfile
   onEmployeeTasksRefresh?: () => void
+  /** When this counter changes, the chat panel will reload messages. */
+  chatMessagesRefreshTick?: number
   t: (key: string) => string
 }
 
@@ -211,12 +213,20 @@ export function EmployeeChatPanel({
   onMessageDraftChange,
   chatSenderProfile,
   onEmployeeTasksRefresh,
+  chatMessagesRefreshTick,
   t,
 }: EmployeeChatPanelProps) {
   const selectedEmployee = employees.find((item) => item.id === selectedEmployeeId) ?? null
   const imeEnterGuardRef = React.useRef(createImeEnterGuardState())
-  const { serverMessages, optimisticUser, streamingAssistant, loading, sending, error, lastResult, sendMessage } =
+  const { serverMessages, optimisticUser, streamingAssistant, loading, sending, error, lastResult, refresh, sendMessage } =
     useEmployeeChatMessages(apiBase, locale, selectedEmployeeId, chatSenderProfile, onEmployeeTasksRefresh)
+
+  // Refresh messages when parent signals a task completed
+  React.useEffect(() => {
+    if (chatMessagesRefreshTick) {
+      refresh()
+    }
+  }, [chatMessagesRefreshTick, refresh])
 
   const historyRef = React.useRef<HTMLDivElement>(null)
 

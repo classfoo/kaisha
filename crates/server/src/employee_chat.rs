@@ -29,29 +29,29 @@ use std::{
 use tokio_stream::wrappers::ReceiverStream;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct ConversationFile {
-    version: u32,
-    messages: Vec<StoredMessage>,
+pub(crate) struct ConversationFile {
+    pub(crate) version: u32,
+    pub(crate) messages: Vec<StoredMessage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct StoredMessage {
-    id: String,
-    role: String,
-    content: String,
-    created_at_ms: u64,
+pub(crate) struct StoredMessage {
+    pub(crate) id: String,
+    pub(crate) role: String,
+    pub(crate) content: String,
+    pub(crate) created_at_ms: u64,
     #[serde(default)]
-    sender_name: Option<String>,
+    pub(crate) sender_name: Option<String>,
     #[serde(default)]
-    sender_avatar_url: Option<String>,
+    pub(crate) sender_avatar_url: Option<String>,
     #[serde(default)]
-    task_id: Option<String>,
+    pub(crate) task_id: Option<String>,
     #[serde(default)]
-    task_status: Option<String>,
+    pub(crate) task_status: Option<String>,
     #[serde(default)]
-    stream_events: Option<Vec<serde_json::Value>>,
+    pub(crate) stream_events: Option<Vec<serde_json::Value>>,
     #[serde(default)]
-    result_meta: Option<PostMessageResultMeta>,
+    pub(crate) result_meta: Option<PostMessageResultMeta>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -135,7 +135,7 @@ fn workspace_dir(state: &AppState) -> Option<PathBuf> {
         .clone()
 }
 
-fn conversation_path(workspace: &Path, employee_id: &str) -> PathBuf {
+pub(crate) fn conversation_path(workspace: &Path, employee_id: &str) -> PathBuf {
     employee_root(workspace).join(employee_id).join("conversation.json")
 }
 
@@ -143,7 +143,7 @@ fn employee_profile_path(workspace: &Path, employee_id: &str) -> PathBuf {
     employee_root(workspace).join(employee_id).join("profile.json")
 }
 
-fn load_conversation(path: &Path) -> anyhow::Result<ConversationFile> {
+pub(crate) fn load_conversation(path: &Path) -> anyhow::Result<ConversationFile> {
     if !path.exists() {
         return Ok(ConversationFile {
             version: 1,
@@ -154,7 +154,7 @@ fn load_conversation(path: &Path) -> anyhow::Result<ConversationFile> {
     Ok(serde_json::from_str(&raw)?)
 }
 
-fn save_conversation(path: &Path, file: &ConversationFile) -> anyhow::Result<()> {
+pub(crate) fn save_conversation(path: &Path, file: &ConversationFile) -> anyhow::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -162,7 +162,7 @@ fn save_conversation(path: &Path, file: &ConversationFile) -> anyhow::Result<()>
     Ok(())
 }
 
-fn new_message_id(prefix: &str) -> String {
+pub(crate) fn new_message_id(prefix: &str) -> String {
     let ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis())

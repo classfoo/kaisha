@@ -6,59 +6,6 @@ use crate::tools::manager::ToolManager;
 use axum::http::HeaderMap;
 use std::path::{Path, PathBuf};
 
-/// Runs an autonomy execute for the given employee.
-/// This invokes the LLM agent to execute existing todos.
-pub fn run_execute(
-    workspace: &Path,
-    tools: &ToolManager,
-    employee_id: &str,
-    headers: &HeaderMap,
-) -> anyhow::Result<EmployeeTodoFile> {
-    let lang = i18n::resolve_lang(headers);
-
-    let system_prompt = build_system_prompt(headers, &lang);
-    let user_context = build_user_context(workspace, employee_id, headers, &lang);
-
-    let messages = vec![
-        ToolChatMessage {
-            role: "system".to_string(),
-            content: system_prompt,
-        },
-        ToolChatMessage {
-            role: "user".to_string(),
-            content: user_context,
-        },
-    ];
-
-    let content = i18n::format_msg(
-        &lang,
-        "task_content_autonomy_execute",
-        &[("employee_id", employee_id)],
-    );
-
-    let workdir = employee_todo::todo_path(workspace, employee_id)
-        .parent()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| workspace.to_path_buf());
-
-    let params = CodeAgentTaskParams {
-        kind: TaskKind::AutonomyExecute,
-        content,
-        workdir,
-        messages,
-        executor_id: Some(employee_id.to_string()),
-        parent_task_id: None,
-        context: serde_json::json!({
-            "employee_id": employee_id,
-            "plan_trigger": "manual",
-        }),
-    };
-
-    let runner = TaskRunner::new(workspace);
-    let _ = runner.run_code_chat(tools, params);
-    employee_todo::load_todos(workspace, employee_id)
-}
-
 /// Runs an autonomy execute with streaming events.
 /// Invokes the LLM agent and streams execution events through `event_tx`.
 pub async fn run_execute_streaming(
