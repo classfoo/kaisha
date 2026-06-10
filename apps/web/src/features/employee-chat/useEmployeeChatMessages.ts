@@ -386,6 +386,23 @@ export function reconstructStreamingState(streamEvents: StreamEventPayload[]): S
   return state
 }
 
+/** Upserts incoming messages into the existing list by id, preserving order and
+ *  appending any messages not seen before. Used to apply incremental updates
+ *  pushed from the conversation-watch SSE stream. */
+export function mergeMessages(
+  prev: ChatWireMessage[],
+  incoming: ChatWireMessage[],
+): ChatWireMessage[] {
+  if (incoming.length === 0) return prev
+  const incomingById = new Map(incoming.map((m) => [m.id, m]))
+  const result = prev.map((m) => incomingById.get(m.id) ?? m)
+  const existingIds = new Set(prev.map((m) => m.id))
+  for (const m of incoming) {
+    if (!existingIds.has(m.id)) result.push(m)
+  }
+  return result
+}
+
 export function useEmployeeChatMessages(
   apiBase: string,
   locale: string,
@@ -401,6 +418,13 @@ export function useEmployeeChatMessages(
   const [sending, setSending] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [lastResult, setLastResult] = React.useState<ChatResultMeta | null>(null)
+
+  // Mirror `sending` into a ref so the conversation-watch subscription can avoid
+  // fighting the active POST stream (which renders its own live overlay).
+  const sendingRef = React.useRef(false)
+  React.useEffect(() => {
+    sendingRef.current = sending
+  }, [sending])
 
   const headers = React.useMemo(
     () => ({
@@ -441,6 +465,32 @@ export function useEmployeeChatMessages(
   React.useEffect(() => {
     void refresh()
   }, [refresh])
+
+  // Subscribe to the conversation watch stream so output written to the
+  // conversation file (by interactive chat, autonomy execute/explore, or any
+  // background task run) appears in the message list in real time. Updates are
+  // skipped while a POST stream is active to avoid double-rendering the reply.
+  React.useEffect(() => {
+    if (!employeeId) return
+    const url = `${apiBase}/api/employees/${encodeURIComponent(employeeId)}/conversation/stream`
+    const source = new EventSource(url)
+    const onUpdate = (event: MessageEvent) => {
+      if (sendingRef.current) return
+      try {
+        const data = JSON.parse(event.data) as { messages?: ChatWireMessage[] }
+        if (data.messages && data.messages.length > 0) {
+          setServerMessages((prev) => mergeMessages(prev, data.messages ?? []))
+        }
+      } catch {
+        /* ignore malformed update */
+      }
+    }
+    source.addEventListener('update', onUpdate as EventListener)
+    return () => {
+      source.removeEventListener('update', onUpdate as EventListener)
+      source.close()
+    }
+  }, [apiBase, employeeId])
 
   const sendMessage = React.useCallback(
     async (body: string) => {
