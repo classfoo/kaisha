@@ -209,9 +209,10 @@ enum AutonomyTaskKind {
     Explore,
 }
 
-/// Runs an autonomy task (explore/execute) with streaming events,
-/// creates a task_process message, persists events to conversation.json,
-/// and returns the resulting EmployeeTodoFile.
+/// Runs an autonomy task (explore/execute) with streaming events bridged into
+/// the employee conversation (via [`crate::conversation_task::run_with_conversation`])
+/// so the chat panel renders the process in real time, then returns the
+/// resulting EmployeeTodoFile.
 async fn run_autonomy_task_with_conversation(
     workspace: &std::path::Path,
     employee_id: &str,
@@ -224,120 +225,29 @@ async fn run_autonomy_task_with_conversation(
         guard.map(|g| g.clone()).map_err(|_| "tools lock poisoned".to_string())
     }.map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
-    // Load conversation and create task_process message
-    let conv_path = conversation_path(workspace, employee_id);
-    let mut conv = load_conversation(&conv_path).unwrap_or_else(|_| ConversationFile {
-        version: 1,
-        messages: vec![],
-    });
-    let now_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
-    let task_process_idx = conv.messages.len();
-    conv.messages.push(StoredMessage {
-        id: new_message_id("msg_task_process"),
-        role: "task_process".to_string(),
-        content: "".to_string(),
-        created_at_ms: now_ms,
-        sender_name: None,
-        sender_avatar_url: None,
-        task_id: None,
-        task_status: Some("running".to_string()),
-        stream_events: None,
-        result_meta: None,
-    });
-    if let Err(e) = save_conversation(&conv_path, &conv) {
-        tracing::warn!(error = %e, "failed to save conversation before autonomy task");
-    }
-
-    // Create a channel for streaming events
-    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<crate::tools::driver::ChatStreamEvent>(32);
-
-    // Collect events and persist to conversation
-    let conv_path_clone = conv_path.clone();
-    let collect_handle = tokio::spawn(async move {
-        let mut collected_events: Vec<serde_json::Value> = Vec::new();
-        let mut events_since_save = 0;
-        let save_interval = crate::employee_chat::STREAM_PERSIST_INTERVAL;
-
-        // Reload conversation from disk (the task_process message was already saved)
-        let mut conv = load_conversation(&conv_path_clone).unwrap_or_else(|_| ConversationFile {
-            version: 1,
-            messages: vec![],
-        });
-
-        while let Some(event) = event_rx.recv().await {
-            let event_value = serde_json::to_value(&event).ok();
-
-            // Store event for persistence
-            if let Some(val) = event_value {
-                collected_events.push(val);
-                events_since_save += 1;
-
-                // Update the task_process message with collected events
-                if task_process_idx < conv.messages.len() {
-                    conv.messages[task_process_idx].stream_events = Some(collected_events.clone());
-                }
-
-                // Periodic save
-                if events_since_save >= save_interval {
-                    if let Err(e) = save_conversation(&conv_path_clone, &conv) {
-                        tracing::warn!(error = %e, "failed to save conversation during autonomy task");
-                    }
-                    events_since_save = 0;
-                }
-            }
-        }
-
-        // Final save
-        if let Err(e) = save_conversation(&conv_path_clone, &conv) {
-            tracing::warn!(error = %e, "failed to save conversation at end of autonomy task");
-        }
-    });
-
-    // Run the appropriate autonomy task
     let headers_ref = headers.clone();
     let workspace_ref = workspace.to_path_buf();
     let employee_id_ref = employee_id.to_string();
-    let task_result = match kind {
-        AutonomyTaskKind::Explore => {
-            crate::autonomy::explore::run_explore_streaming(
-                &workspace_ref,
-                &tools,
-                &employee_id_ref,
-                &headers_ref,
-                event_tx,
-            ).await
-        }
-    };
 
-    // Wait for the collector to finish
-    let _ = collect_handle.await;
-
-    // Reload conversation and update task_process message
-    let mut conv = load_conversation(&conv_path).unwrap_or_else(|_| ConversationFile {
-        version: 1,
-        messages: vec![],
-    });
-    match &task_result {
-        Ok(task) => {
-            if task_process_idx < conv.messages.len() {
-                conv.messages[task_process_idx].task_id = Some(task.id.clone());
-                conv.messages[task_process_idx].task_status = Some("completed".to_string());
-                if conv.messages[task_process_idx].content.is_empty() {
-                    conv.messages[task_process_idx].content = task.content.clone();
+    let _ = crate::conversation_task::run_with_conversation(
+        workspace,
+        employee_id,
+        move |event_tx| async move {
+            match kind {
+                AutonomyTaskKind::Explore => {
+                    crate::autonomy::explore::run_explore_streaming(
+                        &workspace_ref,
+                        &tools,
+                        &employee_id_ref,
+                        &headers_ref,
+                        event_tx,
+                    )
+                    .await
                 }
             }
-        }
-        Err(e) => {
-            if task_process_idx < conv.messages.len() {
-                conv.messages[task_process_idx].task_status = Some("failed".to_string());
-                conv.messages[task_process_idx].content = e.to_string();
-            }
-        }
-    }
-    let _ = save_conversation(&conv_path, &conv);
+        },
+    )
+    .await;
 
     // Load and return todos
     crate::employee_todo::load_todos(workspace, employee_id)

@@ -59,14 +59,16 @@ Do not modify files outside of the intended scope of this task."#
     Ok(prompt)
 }
 
-/// Executes a development task using the code agent.
+/// Executes a development task using the code agent, streaming its progress into
+/// the assignee's conversation so the employee chat panel renders the process in
+/// real time.
 ///
 /// This function:
 /// 1. Resolves the git repository as the working directory
 /// 2. Builds the task prompt from task metadata
-/// 3. Invokes the code agent with the correct working directory
-/// 4. Returns the agent task record for tracking
-pub fn execute_dev_task(
+/// 3. Invokes the code agent (streaming) bridged to the employee conversation
+/// 4. Links the resulting agent task to the work task and returns its record
+pub async fn execute_dev_task_streaming(
     workspace: &Path,
     tools: &ToolManager,
     task_id: &str,
@@ -82,23 +84,33 @@ pub fn execute_dev_task(
         content: prompt.clone(),
     }];
 
-    let runner = TaskRunner::new(workspace);
-    let (task, _instance, _result) = runner.run_code_chat(
-        tools,
-        CodeAgentTaskParams {
-            kind: TaskKind::WorkTaskExecute,
-            content: prompt.clone(),
-            workdir: workdir.clone(),
-            messages,
-            executor_id: Some(employee_id.to_string()),
-            parent_task_id: None,
-            context: serde_json::json!({
-                "employee_id": employee_id,
-                "task_id": task_id,
-                "requirement_id": requirement_id,
-            }),
+    let params = CodeAgentTaskParams {
+        kind: TaskKind::WorkTaskExecute,
+        content: prompt,
+        workdir,
+        messages,
+        executor_id: Some(employee_id.to_string()),
+        parent_task_id: None,
+        context: serde_json::json!({
+            "employee_id": employee_id,
+            "task_id": task_id,
+            "requirement_id": requirement_id,
+        }),
+    };
+
+    let ws_for_runner = workspace.to_path_buf();
+    let tools = tools.clone();
+    let task = crate::conversation_task::run_with_conversation(
+        workspace,
+        employee_id,
+        move |tx| async move {
+            let runner = TaskRunner::new(&ws_for_runner);
+            let (task, _instance, _result, _events) =
+                runner.run_code_chat_streaming_events(&tools, params, tx).await?;
+            Ok(task)
         },
-    )?;
+    )
+    .await?;
 
     // Link agent task to work task
     let _ = link_agent_task_to_work_task(workspace, task_id, &task.id);

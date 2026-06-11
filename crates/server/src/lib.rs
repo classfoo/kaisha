@@ -8,6 +8,7 @@ mod agent_locale;
 mod autonomy;
 mod autonomy_task;
 mod autonomy_trigger;
+mod conversation_task;
 mod dev_task_executor;
 mod git;
 mod i18n;

@@ -195,6 +195,8 @@ export default function App() {
     try {
       await employeeTasksApi.rerun(taskId)
       void employeeTasks.refresh()
+      // Signal chat panel to refresh since the rerun streams into conversation.json
+      setChatMessagesRefreshTick((t) => t + 1)
     } catch (err) {
       setEmployeeTaskRerunError(
         err instanceof Error && err.message ? err.message : tt('ui.employeeTasks.rerunError'),
