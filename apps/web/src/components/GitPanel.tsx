@@ -1,5 +1,8 @@
 import React from 'react'
 import type { useGitWorkspace } from '../features/git/useGitWorkspace'
+import type { GitFileContent } from '../features/git/gitApi'
+import { GitFileTree } from './GitFileTree'
+import { GitFileDialog } from './GitFileDialog'
 
 type GitWorkspace = ReturnType<typeof useGitWorkspace>
 
@@ -8,26 +11,79 @@ type GitPanelProps = {
   t: (key: string) => string
 }
 
+const REMOTE_PREFIX = 'remote:'
+
 export function GitPanel({ git, t }: GitPanelProps) {
   const {
     selectedRepo,
     status,
+    branches,
+    currentBranch,
     loading,
     busy,
     error,
     lastOutput,
     runOperation,
+    checkoutBranch,
+    listTree,
+    readFile,
   } = git
 
+  const [treeReloadKey, setTreeReloadKey] = React.useState(0)
+  const [commitOpen, setCommitOpen] = React.useState(false)
   const [commitMessage, setCommitMessage] = React.useState('')
-  const [branchTarget, setBranchTarget] = React.useState('')
-  const [remoteName, setRemoteName] = React.useState('origin')
-  const [remoteUrl, setRemoteUrl] = React.useState('')
-  const [rawArgs, setRawArgs] = React.useState('status')
+  const [branchOpen, setBranchOpen] = React.useState(false)
+  const [newBranch, setNewBranch] = React.useState('')
+  const [outputOpen, setOutputOpen] = React.useState(false)
 
-  const run = (op: Parameters<typeof runOperation>[0]) => {
-    void runOperation(op)
-  }
+  const [fileOpen, setFileOpen] = React.useState(false)
+  const [fileTitle, setFileTitle] = React.useState('')
+  const [fileLoading, setFileLoading] = React.useState(false)
+  const [fileError, setFileError] = React.useState<string | null>(null)
+  const [fileContent, setFileContent] = React.useState<GitFileContent | null>(null)
+
+  const reloadTree = React.useCallback(() => setTreeReloadKey((k) => k + 1), [])
+
+  const run = React.useCallback(
+    async (op: Parameters<typeof runOperation>[0]) => {
+      const out = await runOperation(op)
+      reloadTree()
+      return out
+    },
+    [runOperation, reloadTree],
+  )
+
+  const handleOpenFile = React.useCallback(
+    async (path: string, name: string) => {
+      setFileOpen(true)
+      setFileTitle(path || name)
+      setFileLoading(true)
+      setFileError(null)
+      setFileContent(null)
+      try {
+        const file = await readFile(path)
+        setFileContent(file)
+      } catch (e) {
+        setFileError(e instanceof Error ? e.message : String(e))
+      } finally {
+        setFileLoading(false)
+      }
+    },
+    [readFile],
+  )
+
+  const handleBranchChange = React.useCallback(
+    async (value: string) => {
+      if (!value) return
+      const target = value.startsWith(REMOTE_PREFIX)
+        ? value.slice(REMOTE_PREFIX.length).split('/').slice(1).join('/')
+        : value
+      if (!target || target === currentBranch) return
+      await checkoutBranch(target)
+      reloadTree()
+    },
+    [checkoutBranch, currentBranch, reloadTree],
+  )
 
   if (loading) {
     return <div className="git-panel__status">{t('ui.git.loading')}</div>
@@ -36,6 +92,30 @@ export function GitPanel({ git, t }: GitPanelProps) {
   if (!selectedRepo) {
     return <div className="git-panel__empty">{t('ui.git.selectRepo')}</div>
   }
+
+  const localBranches = branches.filter((b) => !b.remote)
+  const localNames = new Set(localBranches.map((b) => b.name))
+  const remoteBranches = branches.filter(
+    (b) => b.remote && !localNames.has(b.name.split('/').slice(1).join('/')),
+  )
+
+  const selectValue = localNames.has(currentBranch) ? currentBranch : ''
+
+  const statusSummary = status
+    ? status.clean
+      ? t('ui.git.clean')
+      : t('ui.git.dirtySummary')
+          .replace('{staged}', String(status.staged))
+          .replace('{unstaged}', String(status.unstaged))
+          .replace('{untracked}', String(status.untracked))
+    : ''
+
+  const syncSummary =
+    status && (status.ahead > 0 || status.behind > 0)
+      ? t('ui.git.aheadBehind')
+          .replace('{ahead}', String(status.ahead))
+          .replace('{behind}', String(status.behind))
+      : ''
 
   const outputText = lastOutput
     ? [lastOutput.stdout, lastOutput.stderr].filter((s) => s.trim().length > 0).join('\n')
@@ -53,198 +133,175 @@ export function GitPanel({ git, t }: GitPanelProps) {
 
       {error ? <div className="git-panel__error">{error}</div> : null}
 
-      {status ? (
-        <section className="git-panel__section">
-          <h3 className="git-panel__section-title">{t('ui.git.statusTitle')}</h3>
-          <div className="git-panel__status-grid">
-            <span>{t('ui.git.branch')}</span>
-            <span>{status.branch}</span>
-            <span>{t('ui.git.worktree')}</span>
-            <span>
-              {status.clean
-                ? t('ui.git.clean')
-                : t('ui.git.dirtySummary')
-                    .replace('{staged}', String(status.staged))
-                    .replace('{unstaged}', String(status.unstaged))
-                    .replace('{untracked}', String(status.untracked))}
-            </span>
-            {(status.ahead > 0 || status.behind > 0) ? (
-              <>
-                <span>{t('ui.git.sync')}</span>
-                <span>
-                  {t('ui.git.aheadBehind')
-                    .replace('{ahead}', String(status.ahead))
-                    .replace('{behind}', String(status.behind))}
-                </span>
-              </>
+      <div className="git-panel__bar">
+        <label className="git-panel__branch">
+          <span className="git-panel__branch-icon" aria-hidden="true">⎇</span>
+          <select
+            className="git-panel__branch-select"
+            value={selectValue}
+            disabled={busy || branches.length === 0}
+            onChange={(e) => void handleBranchChange(e.target.value)}
+            aria-label={t('ui.git.branchSwitch')}
+          >
+            {selectValue === '' ? (
+              <option value="">{currentBranch || t('ui.git.detached')}</option>
             ) : null}
-          </div>
-          {status.porcelain.trim() ? (
-            <pre className="git-panel__porcelain">{status.porcelain}</pre>
-          ) : null}
-        </section>
-      ) : null}
+            {localBranches.length > 0 ? (
+              <optgroup label={t('ui.git.localBranches')}>
+                {localBranches.map((b) => (
+                  <option key={b.name} value={b.name}>
+                    {b.name}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+            {remoteBranches.length > 0 ? (
+              <optgroup label={t('ui.git.remoteBranches')}>
+                {remoteBranches.map((b) => (
+                  <option key={b.name} value={`${REMOTE_PREFIX}${b.name}`}>
+                    {b.name}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+          </select>
+        </label>
+        {statusSummary ? <span className="git-panel__bar-status">{statusSummary}</span> : null}
+        {syncSummary ? <span className="git-panel__bar-sync">{syncSummary}</span> : null}
+      </div>
 
-      <section className="git-panel__section">
-        <h3 className="git-panel__section-title">{t('ui.git.actionsTitle')}</h3>
-        <div className="git-panel__actions">
-          <button type="button" className="action-btn" disabled={busy} onClick={() => run({ operation: 'status' })}>
-            {t('ui.git.action.status')}
-          </button>
-          <button type="button" className="action-btn" disabled={busy} onClick={() => run({ operation: 'add', all: true })}>
-            {t('ui.git.action.stageAll')}
-          </button>
-          <button type="button" className="action-btn" disabled={busy} onClick={() => run({ operation: 'fetch', prune: true })}>
-            {t('ui.git.action.fetch')}
-          </button>
-          <button
-            type="button"
-            className="action-btn"
-            disabled={busy}
-            onClick={() => run({ operation: 'pull', remote: remoteName || undefined })}
-          >
-            {t('ui.git.action.pull')}
-          </button>
-          <button
-            type="button"
-            className="action-btn"
-            disabled={busy}
-            onClick={() =>
-              run({
-                operation: 'push',
-                remote: remoteName || undefined,
-                set_upstream: true,
-              })
-            }
-          >
-            {t('ui.git.action.push')}
-          </button>
-          <button type="button" className="action-btn" disabled={busy} onClick={() => run({ operation: 'branch', list: true })}>
-            {t('ui.git.action.branches')}
-          </button>
-          <button type="button" className="action-btn" disabled={busy} onClick={() => run({ operation: 'log', max_count: 20 })}>
-            {t('ui.git.action.log')}
-          </button>
-          <button type="button" className="action-btn" disabled={busy} onClick={() => run({ operation: 'stash', action: 'list' })}>
-            {t('ui.git.action.stashList')}
-          </button>
-          <button type="button" className="action-btn" disabled={busy} onClick={() => run({ operation: 'remote', list: true })}>
-            {t('ui.git.action.remotes')}
-          </button>
-        </div>
-      </section>
-
-      <section className="git-panel__section">
-        <h3 className="git-panel__section-title">{t('ui.git.commitTitle')}</h3>
-        <textarea
-          className="git-panel__input git-panel__textarea"
-          value={commitMessage}
-          onChange={(e) => setCommitMessage(e.target.value)}
-          placeholder={t('ui.git.commitPlaceholder')}
-          rows={3}
-        />
+      <div className="git-panel__toolbar">
+        <button type="button" className="action-btn" disabled={busy} onClick={() => void run({ operation: 'status' })}>
+          {t('ui.git.action.refresh')}
+        </button>
+        <button type="button" className="action-btn" disabled={busy} onClick={() => void run({ operation: 'add', all: true })}>
+          {t('ui.git.action.stageAll')}
+        </button>
         <button
           type="button"
-          className="action-btn"
-          disabled={busy || !commitMessage.trim()}
-          onClick={() => {
-            run({ operation: 'commit', message: commitMessage.trim() })
-            setCommitMessage('')
-          }}
+          className={`action-btn${commitOpen ? ' action-btn--active' : ''}`}
+          disabled={busy}
+          onClick={() => setCommitOpen((v) => !v)}
         >
           {t('ui.git.action.commit')}
         </button>
-      </section>
+        <button type="button" className="action-btn" disabled={busy} onClick={() => void run({ operation: 'fetch', prune: true })}>
+          {t('ui.git.action.fetch')}
+        </button>
+        <button type="button" className="action-btn" disabled={busy} onClick={() => void run({ operation: 'pull' })}>
+          {t('ui.git.action.pull')}
+        </button>
+        <button
+          type="button"
+          className="action-btn"
+          disabled={busy}
+          onClick={() => void run({ operation: 'push', set_upstream: true })}
+        >
+          {t('ui.git.action.push')}
+        </button>
+        <button
+          type="button"
+          className={`action-btn${branchOpen ? ' action-btn--active' : ''}`}
+          disabled={busy}
+          onClick={() => setBranchOpen((v) => !v)}
+        >
+          {t('ui.git.action.checkoutNew')}
+        </button>
+        <button
+          type="button"
+          className="action-btn"
+          disabled={busy}
+          onClick={() => {
+            void run({ operation: 'log', max_count: 30 })
+            setOutputOpen(true)
+          }}
+        >
+          {t('ui.git.action.log')}
+        </button>
+      </div>
 
-      <section className="git-panel__section git-panel__section--row">
-        <div className="git-panel__field">
-          <label className="git-panel__label">{t('ui.git.branchTitle')}</label>
+      {commitOpen ? (
+        <div className="git-panel__inline">
+          <textarea
+            className="git-panel__input git-panel__textarea"
+            value={commitMessage}
+            onChange={(e) => setCommitMessage(e.target.value)}
+            placeholder={t('ui.git.commitPlaceholder')}
+            rows={2}
+          />
+          <button
+            type="button"
+            className="action-btn"
+            disabled={busy || !commitMessage.trim()}
+            onClick={async () => {
+              await run({ operation: 'commit', message: commitMessage.trim() })
+              setCommitMessage('')
+              setCommitOpen(false)
+            }}
+          >
+            {t('ui.git.action.commit')}
+          </button>
+        </div>
+      ) : null}
+
+      {branchOpen ? (
+        <div className="git-panel__inline">
           <input
             className="git-panel__input"
-            value={branchTarget}
-            onChange={(e) => setBranchTarget(e.target.value)}
+            value={newBranch}
+            onChange={(e) => setNewBranch(e.target.value)}
             placeholder={t('ui.git.branchPlaceholder')}
           />
-        </div>
-        <div className="git-panel__field-actions">
           <button
             type="button"
             className="action-btn"
-            disabled={busy || !branchTarget.trim()}
-            onClick={() => run({ operation: 'checkout', target: branchTarget.trim() })}
-          >
-            {t('ui.git.action.checkout')}
-          </button>
-          <button
-            type="button"
-            className="action-btn"
-            disabled={busy || !branchTarget.trim()}
-            onClick={() => run({ operation: 'checkout', target: branchTarget.trim(), create: true })}
+            disabled={busy || !newBranch.trim()}
+            onClick={async () => {
+              await checkoutBranch(newBranch.trim(), true)
+              reloadTree()
+              setNewBranch('')
+              setBranchOpen(false)
+            }}
           >
             {t('ui.git.action.checkoutNew')}
           </button>
         </div>
-      </section>
+      ) : null}
 
-      <section className="git-panel__section git-panel__section--row">
-        <div className="git-panel__field">
-          <label className="git-panel__label">{t('ui.git.remoteTitle')}</label>
-          <input
-            className="git-panel__input"
-            value={remoteName}
-            onChange={(e) => setRemoteName(e.target.value)}
-            placeholder={t('ui.git.remoteNamePlaceholder')}
-          />
-          <input
-            className="git-panel__input"
-            value={remoteUrl}
-            onChange={(e) => setRemoteUrl(e.target.value)}
-            placeholder={t('ui.git.remoteUrlPlaceholder')}
-          />
+      <section className="git-panel__section git-panel__section--grow">
+        <div className="git-panel__section-head">
+          <h3 className="git-panel__section-title">{t('ui.git.filesTitle')}</h3>
+          <button type="button" className="git-panel__link" disabled={busy} onClick={reloadTree}>
+            {t('ui.git.tree.refresh')}
+          </button>
         </div>
-        <button
-          type="button"
-          className="action-btn"
-          disabled={busy || !remoteName.trim() || !remoteUrl.trim()}
-          onClick={() =>
-            run({
-              operation: 'remote',
-              name: remoteName.trim(),
-              url: remoteUrl.trim(),
-            })
-          }
-        >
-          {t('ui.git.action.addRemote')}
-        </button>
-      </section>
-
-      <section className="git-panel__section">
-        <h3 className="git-panel__section-title">{t('ui.git.rawTitle')}</h3>
-        <input
-          className="git-panel__input"
-          value={rawArgs}
-          onChange={(e) => setRawArgs(e.target.value)}
-          placeholder={t('ui.git.rawPlaceholder')}
-        />
-        <button
-          type="button"
-          className="action-btn"
-          disabled={busy || !rawArgs.trim()}
-          onClick={() => {
-            const args = rawArgs.trim().split(/\s+/).filter(Boolean)
-            run({ operation: 'raw', args })
-          }}
-        >
-          {t('ui.git.action.runRaw')}
-        </button>
+        <p className="git-panel__hint">{t('ui.git.tree.hint')}</p>
+        <div className="git-panel__tree">
+          <GitFileTree listTree={listTree} onOpenFile={handleOpenFile} reloadKey={treeReloadKey} t={t} />
+        </div>
       </section>
 
       {outputText ? (
         <section className="git-panel__section">
-          <h3 className="git-panel__section-title">{t('ui.git.outputTitle')}</h3>
-          <pre className="git-panel__output">{outputText}</pre>
+          <div className="git-panel__section-head">
+            <h3 className="git-panel__section-title">{t('ui.git.outputTitle')}</h3>
+            <button type="button" className="git-panel__link" onClick={() => setOutputOpen((v) => !v)}>
+              {outputOpen ? t('ui.git.hide') : t('ui.git.show')}
+            </button>
+          </div>
+          {outputOpen ? <pre className="git-panel__output">{outputText}</pre> : null}
         </section>
       ) : null}
+
+      <GitFileDialog
+        open={fileOpen}
+        loading={fileLoading}
+        error={fileError}
+        title={fileTitle}
+        file={fileContent}
+        t={t}
+        onClose={() => setFileOpen(false)}
+      />
     </div>
   )
 }

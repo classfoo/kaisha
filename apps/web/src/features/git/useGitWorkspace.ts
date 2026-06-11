@@ -1,5 +1,14 @@
 import * as React from 'react'
-import { createGitApi, type GitCommandOutput, type GitOperation, type GitRepo, type GitRepoStatus } from './gitApi'
+import {
+  createGitApi,
+  type GitBranch,
+  type GitCommandOutput,
+  type GitFileContent,
+  type GitOperation,
+  type GitRepo,
+  type GitRepoStatus,
+  type GitTreeListing,
+} from './gitApi'
 
 export function useGitWorkspace(
   apiBase: string,
@@ -12,6 +21,8 @@ export function useGitWorkspace(
   const [mainRepoId, setMainRepoId] = React.useState('main')
   const [selectedRepoId, setSelectedRepoId] = React.useState<string | null>(null)
   const [status, setStatus] = React.useState<GitRepoStatus | null>(null)
+  const [branches, setBranches] = React.useState<GitBranch[]>([])
+  const [currentBranch, setCurrentBranch] = React.useState('')
   const [loading, setLoading] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -20,13 +31,33 @@ export function useGitWorkspace(
   const selectedRepoIdRef = React.useRef(selectedRepoId)
   selectedRepoIdRef.current = selectedRepoId
 
+  const loadBranches = React.useCallback(
+    async (repoId: string) => {
+      try {
+        const list = await api.listBranches(repoId)
+        setBranches(list.branches)
+        setCurrentBranch(list.current)
+      } catch {
+        setBranches([])
+        setCurrentBranch('')
+      }
+    },
+    [api],
+  )
+
   const loadRepoDetail = React.useCallback(
     async (repoId: string) => {
       const detail = await api.getRepo(repoId)
       setStatus(detail.status)
+      if (detail.repo.initialized) {
+        await loadBranches(repoId)
+      } else {
+        setBranches([])
+        setCurrentBranch('')
+      }
       return detail
     },
-    [api],
+    [api, loadBranches],
   )
 
   const refresh = React.useCallback(async () => {
@@ -34,6 +65,8 @@ export function useGitWorkspace(
       setRepos([])
       setSelectedRepoId(null)
       setStatus(null)
+      setBranches([])
+      setCurrentBranch('')
       setError(null)
       return
     }
@@ -54,11 +87,15 @@ export function useGitWorkspace(
       } else {
         setSelectedRepoId(null)
         setStatus(null)
+        setBranches([])
+        setCurrentBranch('')
       }
     } catch (e) {
       setRepos([])
       setSelectedRepoId(null)
       setStatus(null)
+      setBranches([])
+      setCurrentBranch('')
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
@@ -131,6 +168,29 @@ export function useGitWorkspace(
     [api, loadRepoDetail, selectedRepoId],
   )
 
+  const checkoutBranch = React.useCallback(
+    async (branch: string, create = false) => {
+      return runOperation({ operation: 'checkout', target: branch, create })
+    },
+    [runOperation],
+  )
+
+  const listTree = React.useCallback(
+    async (path: string): Promise<GitTreeListing | null> => {
+      if (!selectedRepoId) return null
+      return api.listTree(selectedRepoId, path)
+    },
+    [api, selectedRepoId],
+  )
+
+  const readFile = React.useCallback(
+    async (path: string): Promise<GitFileContent | null> => {
+      if (!selectedRepoId) return null
+      return api.readFile(selectedRepoId, path)
+    },
+    [api, selectedRepoId],
+  )
+
   const selectedRepo = repos.find((r) => r.id === selectedRepoId) ?? null
 
   return {
@@ -139,6 +199,8 @@ export function useGitWorkspace(
     selectedRepo,
     selectedRepoId,
     status,
+    branches,
+    currentBranch,
     loading,
     busy,
     error,
@@ -147,5 +209,8 @@ export function useGitWorkspace(
     selectRepo,
     createRepo,
     runOperation,
+    checkoutBranch,
+    listTree,
+    readFile,
   }
 }

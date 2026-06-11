@@ -287,8 +287,32 @@
       "rawTitle": "Custom command",
       "rawPlaceholder": "git arguments, e.g. status --short",
       "outputTitle": "Command output",
+      "branchSwitch": "Switch branch",
+      "localBranches": "Local branches",
+      "remoteBranches": "Remote branches",
+      "detached": "Detached HEAD",
+      "filesTitle": "Files",
+      "show": "Show",
+      "hide": "Hide",
+      "tree": {
+        "loading": "Loading…",
+        "empty": "No files",
+        "emptyDir": "Empty folder",
+        "openHint": "Double-click to view file",
+        "hint": "Double-click a file to view its content",
+        "refresh": "Refresh"
+      },
+      "file": {
+        "title": "File content",
+        "loading": "Loading file…",
+        "close": "Close",
+        "binary": "Binary file is not previewable",
+        "truncated": "File is large and has been truncated",
+        "emptyFile": "Empty file"
+      },
       "action": {
         "status": "Status",
+        "refresh": "Refresh",
         "stageAll": "Stage all",
         "fetch": "Fetch",
         "pull": "Pull",

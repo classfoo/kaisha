@@ -287,8 +287,32 @@
       "rawTitle": "自定义命令",
       "rawPlaceholder": "git 参数，例如 status --short",
       "outputTitle": "命令输出",
+      "branchSwitch": "切换分支",
+      "localBranches": "本地分支",
+      "remoteBranches": "远程分支",
+      "detached": "游离 HEAD",
+      "filesTitle": "文件",
+      "show": "展开",
+      "hide": "收起",
+      "tree": {
+        "loading": "加载中…",
+        "empty": "暂无文件",
+        "emptyDir": "空文件夹",
+        "openHint": "双击查看文件",
+        "hint": "双击文件可查看内容",
+        "refresh": "刷新"
+      },
+      "file": {
+        "title": "文件内容",
+        "loading": "正在加载文件…",
+        "close": "关闭",
+        "binary": "二进制文件无法预览",
+        "truncated": "文件较大，已截断显示",
+        "emptyFile": "空文件"
+      },
       "action": {
         "status": "状态",
+        "refresh": "刷新",
         "stageAll": "全部暂存",
         "fetch": "拉取远程",
         "pull": "合并拉取",
