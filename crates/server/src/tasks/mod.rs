@@ -179,9 +179,51 @@ pub async fn rerun_task(
 
     let params = build_rerun_params(&source);
     let tools = state.tools.read().expect("tools lock poisoned").clone();
+
+    // For employee-owned tasks, stream the rerun into the employee's conversation
+    // so the chat panel shows the live process (matching the explore flow). The
+    // task is reset synchronously so the handler returns an accurate (running)
+    // status immediately, while the long-lived agent run streams off the request
+    // path.
+    if let Some(employee_id) = source.executor_id.clone() {
+        let runner = TaskRunner::new(&workspace);
+        let running_task = runner.prepare_rerun(&task_id).map_err(|err| {
+            let key = err.to_string();
+            if key == "task_cannot_rerun" {
+                (
+                    axum::http::StatusCode::BAD_REQUEST,
+                    i18n::msg(&headers, "task_cannot_rerun"),
+                )
+            } else {
+                (axum::http::StatusCode::INTERNAL_SERVER_ERROR, key)
+            }
+        })?;
+
+        let workspace_bg = workspace.clone();
+        let task_id_bg = task_id.clone();
+        tokio::spawn(async move {
+            let ws_for_runner = workspace_bg.clone();
+            let res = crate::conversation_task::run_with_conversation(
+                &workspace_bg,
+                &employee_id,
+                move |tx| async move {
+                    let runner = TaskRunner::new(&ws_for_runner);
+                    runner
+                        .execute_rerun_streaming_events(&tools, &task_id_bg, params, tx)
+                        .await
+                },
+            )
+            .await;
+            if let Err(err) = res {
+                tracing::warn!(error = %err, "rerun streaming task failed");
+            }
+        });
+
+        return Ok(Json(running_task));
+    }
+
     let workspace_bg = workspace.clone();
     let task_id_bg = task_id.clone();
-
     let (task, _, _) = tokio::task::spawn_blocking(move || {
         let runner = TaskRunner::new(&workspace_bg);
         runner.rerun_code_chat(&tools, &task_id_bg, params)

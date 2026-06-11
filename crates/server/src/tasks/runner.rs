@@ -371,45 +371,120 @@ impl TaskRunner {
             .await
         {
             Ok((instance, result, events)) => {
-                task.complete_with_result(&instance, &result, now_ms());
-                self.store.save(&task)?;
-                if !result.output.is_empty() {
-                    let _ = self.store.save_output(&task.id, &result.output);
-                }
-                if matches!(
-                    params.kind,
-                    TaskKind::AutonomyExplore
-                        | TaskKind::AutonomyExecute
-                        | TaskKind::WorkTaskExecute
-                ) {
-                    let _ = crate::autonomy_task::sync_work_task_status(
-                        self.store.workspace(),
-                        &task.id,
-                        &task.status,
-                    );
-                }
-                self.notify_autonomy_if_needed(&params.kind, &task);
+                self.finalize_streaming_success(&params.kind, &mut task, &instance, &result)?;
                 Ok((task, instance, result, events))
             }
             Err(err) => {
-                task.fail(err.to_string(), now_ms());
-                self.store.save(&task)?;
-                if matches!(
-                    params.kind,
-                    TaskKind::AutonomyExplore
-                        | TaskKind::AutonomyExecute
-                        | TaskKind::WorkTaskExecute
-                ) {
-                    let _ = crate::autonomy_task::sync_work_task_status(
-                        self.store.workspace(),
-                        &task.id,
-                        &task.status,
-                    );
-                }
-                self.notify_autonomy_if_needed(&params.kind, &task);
+                self.finalize_streaming_error(&params.kind, &mut task, err.to_string())?;
                 Err(err)
             }
         }
+    }
+
+    /// Resets an existing task so it can be rerun, returning the now-running
+    /// record. Splitting this out from execution lets the HTTP handler respond
+    /// immediately with an accurate (running) status while the agent runs off the
+    /// request path via [`Self::execute_rerun_streaming_events`].
+    pub fn prepare_rerun(&self, task_id: &str) -> anyhow::Result<AgentTaskRecord> {
+        self.ensure_shop_open()?;
+
+        let mut task = self.store.load(task_id)?;
+        if !can_rerun_task(&task) {
+            anyhow::bail!("task_cannot_rerun");
+        }
+
+        if can_stop_task(&task) {
+            task_runtime_handle().request_stop(task_id);
+        }
+
+        let started = now_ms();
+        task.reset_for_rerun(started);
+        self.store.save(&task)?;
+        task_runtime_handle().track(&task.id);
+        Ok(task)
+    }
+
+    /// Executes an already-prepared (running) rerun while streaming its events,
+    /// mirroring the live output into the caller-provided channel. Unlike
+    /// [`Self::rerun_code_chat`] this uses the structured streaming driver so the
+    /// employee chat panel can render the process in real time.
+    ///
+    /// Callers must invoke [`Self::prepare_rerun`] first.
+    pub async fn execute_rerun_streaming_events(
+        &self,
+        tools: &ToolManager,
+        task_id: &str,
+        params: CodeAgentTaskParams,
+        event_tx: tokio::sync::mpsc::Sender<ChatStreamEvent>,
+    ) -> anyhow::Result<AgentTaskRecord> {
+        let mut task = self.store.load(task_id)?;
+
+        let lang = crate::agent_locale::resolve_lang_for_workspace(self.store.workspace());
+        let messages =
+            crate::agent_locale::ensure_language_system_message(params.messages.clone(), lang);
+
+        let result = tools
+            .execute_code_chat_streaming_events(&params.workdir, &messages, event_tx)
+            .await;
+        task_runtime_handle().unregister(&task.id);
+        match result {
+            Ok((instance, exec_result, _events)) => {
+                self.finalize_streaming_success(&params.kind, &mut task, &instance, &exec_result)?;
+                Ok(task)
+            }
+            Err(err) => {
+                self.finalize_streaming_error(&params.kind, &mut task, err.to_string())?;
+                Err(err)
+            }
+        }
+    }
+
+    fn finalize_streaming_success(
+        &self,
+        kind: &TaskKind,
+        task: &mut AgentTaskRecord,
+        instance: &ToolInstance,
+        result: &ToolExecutionResult,
+    ) -> anyhow::Result<()> {
+        task.complete_with_result(instance, result, now_ms());
+        self.store.save(task)?;
+        if !result.output.is_empty() {
+            let _ = self.store.save_output(&task.id, &result.output);
+        }
+        if matches!(
+            kind,
+            TaskKind::AutonomyExplore | TaskKind::AutonomyExecute | TaskKind::WorkTaskExecute
+        ) {
+            let _ = crate::autonomy_task::sync_work_task_status(
+                self.store.workspace(),
+                &task.id,
+                &task.status,
+            );
+        }
+        self.notify_autonomy_if_needed(kind, task);
+        Ok(())
+    }
+
+    fn finalize_streaming_error(
+        &self,
+        kind: &TaskKind,
+        task: &mut AgentTaskRecord,
+        error: String,
+    ) -> anyhow::Result<()> {
+        task.fail(error, now_ms());
+        self.store.save(task)?;
+        if matches!(
+            kind,
+            TaskKind::AutonomyExplore | TaskKind::AutonomyExecute | TaskKind::WorkTaskExecute
+        ) {
+            let _ = crate::autonomy_task::sync_work_task_status(
+                self.store.workspace(),
+                &task.id,
+                &task.status,
+            );
+        }
+        self.notify_autonomy_if_needed(kind, task);
+        Ok(())
     }
 
     fn notify_autonomy_if_needed(&self, kind: &TaskKind, task: &AgentTaskRecord) {

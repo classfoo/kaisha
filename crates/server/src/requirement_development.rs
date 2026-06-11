@@ -1070,14 +1070,18 @@ pub async fn task_action(
         let run_task_id = task_id.clone();
         let run_requirement_id = id.clone();
         let run_employee_id = employee_id.clone();
-        tokio::task::spawn_blocking(move || {
-            let _ = dev_task_executor::execute_dev_task(
+        tokio::spawn(async move {
+            if let Err(err) = dev_task_executor::execute_dev_task_streaming(
                 &workspace_path,
                 &tools,
                 &run_task_id,
                 &run_requirement_id,
                 &run_employee_id,
-            );
+            )
+            .await
+            {
+                tracing::warn!(error = %err, "dev task streaming execution failed");
+            }
         });
     }
 
