@@ -17,6 +17,49 @@ pub async fn run_explore_streaming(
 ) -> anyhow::Result<AgentTaskRecord> {
     let lang = i18n::resolve_lang(headers);
 
+    // Priority 1: pick up an existing pending development task and actually start
+    // working on it. Exploration used to only plan todos, so unstarted requirement
+    // development tasks were never advanced. Claim the highest-priority pending task
+    // (assigned to this employee first, then unassigned) and run the development
+    // agent on it, streaming through the same channel as the planner would.
+    if let Some(task) =
+        crate::requirement_development::list_claimable_dev_tasks(workspace, employee_id)
+            .into_iter()
+            .next()
+    {
+        match crate::requirement_development::claim_dev_task(workspace, &task.id, employee_id) {
+            Ok(requirement_id) => {
+                let announce = i18n::format_msg(
+                    &lang,
+                    "autonomy_explore_claimed_dev_task",
+                    &[("title", task.title.as_str())],
+                );
+                let _ = event_tx
+                    .send(ChatStreamEvent::AssistantText {
+                        text: format!("{announce}\n\n"),
+                    })
+                    .await;
+                return crate::dev_task_executor::run_dev_task_agent_streaming(
+                    workspace,
+                    tools,
+                    &task.id,
+                    &requirement_id,
+                    employee_id,
+                    event_tx,
+                )
+                .await;
+            }
+            Err(err) => {
+                tracing::warn!(
+                    error = %err,
+                    task_id = %task.id,
+                    "failed to claim pending dev task during explore; falling back to planning",
+                );
+            }
+        }
+    }
+
+    // Priority 2: no pending development task to advance, so plan/discover new work.
     let system_prompt = build_system_prompt(headers, &lang);
     let user_context = build_user_context(workspace, employee_id, headers, &lang);
 
