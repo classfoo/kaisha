@@ -1058,16 +1058,27 @@ pub async fn task_action(
         Ok(())
     });
 
-    // When task enters InDevelopment, trigger code agent execution with git repo as working directory
+    // When task enters InDevelopment, trigger code agent execution with git repo as working directory.
+    // The agent run is long-running (it spawns and waits on an external coding CLI), so it MUST run
+    // off the request path. Running it inline here previously blocked the Tokio worker thread and held
+    // the `tools` read lock for the whole duration, which starved every other HTTP request (e.g.
+    // `/api/workspace`, `/api/employees`) until the app was restarted. Clone the tools to release the
+    // lock immediately and execute on the blocking thread pool, returning the response right away.
     if next == DevTaskStatus::InDevelopment {
-        let tools = state.tools.read().expect("tools lock poisoned");
-        let _ = dev_task_executor::execute_dev_task(
-            &workspace,
-            &tools,
-            &task_id,
-            &id,
-            &employee_id,
-        );
+        let tools = state.tools.read().expect("tools lock poisoned").clone();
+        let workspace_path = workspace.clone();
+        let run_task_id = task_id.clone();
+        let run_requirement_id = id.clone();
+        let run_employee_id = employee_id.clone();
+        tokio::task::spawn_blocking(move || {
+            let _ = dev_task_executor::execute_dev_task(
+                &workspace_path,
+                &tools,
+                &run_task_id,
+                &run_requirement_id,
+                &run_employee_id,
+            );
+        });
     }
 
     dev_state.current_task_id = Some(task_id);
