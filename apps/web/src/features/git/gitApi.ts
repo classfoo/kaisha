@@ -24,6 +24,37 @@ export type GitCommandOutput = {
   exit_code: number
 }
 
+export type GitBranch = {
+  name: string
+  current: boolean
+  remote: boolean
+}
+
+export type GitBranchList = {
+  current: string
+  branches: GitBranch[]
+}
+
+export type GitTreeEntry = {
+  name: string
+  path: string
+  is_dir: boolean
+  size: number
+}
+
+export type GitTreeListing = {
+  path: string
+  entries: GitTreeEntry[]
+}
+
+export type GitFileContent = {
+  path: string
+  content: string
+  size: number
+  binary: boolean
+  truncated: boolean
+}
+
 export type GitOperation =
   | { operation: 'status' }
   | { operation: 'add'; paths?: string[]; all?: boolean }
@@ -80,6 +111,28 @@ export function createGitApi(apiBase: string, locale: string) {
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify(op),
       })
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async listBranches(repoId: string): Promise<GitBranchList> {
+      const res = await fetch(`${apiBase}/api/git/repos/${encodeURIComponent(repoId)}/branches`, {
+        headers,
+      })
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async listTree(repoId: string, path: string): Promise<GitTreeListing> {
+      const url = `${apiBase}/api/git/repos/${encodeURIComponent(repoId)}/tree?path=${encodeURIComponent(path)}`
+      const res = await fetch(url, { headers })
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async readFile(repoId: string, path: string): Promise<GitFileContent> {
+      const url = `${apiBase}/api/git/repos/${encodeURIComponent(repoId)}/file?path=${encodeURIComponent(path)}`
+      const res = await fetch(url, { headers })
       if (!res.ok) throw new Error(await readError(res))
       return res.json()
     },

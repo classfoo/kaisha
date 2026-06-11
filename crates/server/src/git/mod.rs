@@ -1,3 +1,4 @@
+mod explorer;
 mod registry;
 mod service;
 
@@ -5,10 +6,11 @@ pub(crate) use registry::{list_repos, repo_dir, MAIN_REPO_ID};
 
 use crate::{i18n, AppState};
 use axum::{
-    extract::{Path as AxumPath, State},
+    extract::{Path as AxumPath, Query, State},
     http::HeaderMap,
     Json,
 };
+use explorer::{BranchList, FileContent, TreeListing};
 use registry::{
     add_repo, ensure_main_repo, find_repo, validate_repo_id, validate_repo_name,
     GitRepoRecord,
@@ -49,6 +51,12 @@ pub struct RepoDetailResponse {
 pub struct GitOperationRequest {
     #[serde(flatten)]
     pub operation: GitOperation,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct PathQuery {
+    #[serde(default)]
+    pub path: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -108,6 +116,10 @@ fn map_err(headers: &HeaderMap, err: anyhow::Error) -> (axum::http::StatusCode, 
         "git_project_empty",
         "git_project_invalid",
         "git_project_not_found",
+        "git_path_invalid",
+        "git_path_not_found",
+        "git_path_not_directory",
+        "git_path_not_file",
     ];
     if key == "git_repo_not_found" || key == "git_project_not_found" {
         return (
@@ -235,6 +247,57 @@ pub async fn run_git_operation(
         execute_operation(&dir, &payload.operation).map_err(|e| map_err(&headers, e))?
     };
     Ok(Json(output))
+}
+
+pub async fn list_git_branches(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    AxumPath(repo_id): AxumPath<String>,
+) -> Result<Json<BranchList>, (axum::http::StatusCode, String)> {
+    let dir = resolve_initialized_repo(&headers, &state, &repo_id)?;
+    let branches = explorer::list_branches(&dir).map_err(|e| map_err(&headers, e))?;
+    Ok(Json(branches))
+}
+
+pub async fn list_git_tree(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    AxumPath(repo_id): AxumPath<String>,
+    Query(query): Query<PathQuery>,
+) -> Result<Json<TreeListing>, (axum::http::StatusCode, String)> {
+    let dir = resolve_initialized_repo(&headers, &state, &repo_id)?;
+    let listing = explorer::list_tree(&dir, &query.path).map_err(|e| map_err(&headers, e))?;
+    Ok(Json(listing))
+}
+
+pub async fn read_git_file(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    AxumPath(repo_id): AxumPath<String>,
+    Query(query): Query<PathQuery>,
+) -> Result<Json<FileContent>, (axum::http::StatusCode, String)> {
+    let dir = resolve_initialized_repo(&headers, &state, &repo_id)?;
+    let file = explorer::read_file(&dir, &query.path).map_err(|e| map_err(&headers, e))?;
+    Ok(Json(file))
+}
+
+fn resolve_initialized_repo(
+    headers: &HeaderMap,
+    state: &AppState,
+    repo_id: &str,
+) -> Result<PathBuf, (axum::http::StatusCode, String)> {
+    let Some(workspace) = workspace_root(state) else {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            i18n::msg(headers, "workspace_not_configured"),
+        ));
+    };
+    let record = find_repo(&workspace, repo_id).map_err(|e| map_err(headers, e))?;
+    let dir = repo_dir(&workspace, &record.id);
+    if !dir.join(".git").exists() {
+        return Err(map_err(headers, anyhow::anyhow!("git_not_initialized")));
+    }
+    Ok(dir)
 }
 
 fn run_clone(
