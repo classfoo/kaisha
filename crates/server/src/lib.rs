@@ -1,5 +1,6 @@
 mod employee;
 mod employee_chat;
+mod employee_conversation_stream;
 mod employee_intent_router;
 mod employee_requirement_agent;
 mod employee_todo;
@@ -639,6 +640,10 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
         .route(
             "/api/employees/:id/messages/stream",
             post(employee_chat::post_message_stream),
+        )
+        .route(
+            "/api/employees/:id/conversation/stream",
+            get(employee_conversation_stream::conversation_stream_handler),
         )
         .route("/api/tools/catalog", get(get_tool_catalog))
         .route("/api/tools/instances", get(list_tool_instances).post(create_tool_instance))

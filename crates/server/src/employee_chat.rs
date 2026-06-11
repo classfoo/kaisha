@@ -28,6 +28,11 @@ use std::{
 };
 use tokio_stream::wrappers::ReceiverStream;
 
+/// Number of streamed events to buffer before flushing the conversation file.
+/// Kept at 1 so the file reflects code-agent output incrementally, which the
+/// conversation watch endpoint relays to the frontend in real time.
+pub(crate) const STREAM_PERSIST_INTERVAL: usize = 1;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ConversationFile {
     pub(crate) version: u32,
@@ -887,7 +892,7 @@ async fn run_stream_turn_inner(
             conv_path: conv_path.clone(),
             conv: conv.clone(),
             task_process_msg_idx: task_process_idx,
-            save_interval: 10,
+            save_interval: STREAM_PERSIST_INTERVAL,
         };
         let result = run_streaming_agent(
             &workspace,
@@ -1059,6 +1064,10 @@ mod tests {
             created_at_ms: 9,
             sender_name: Some("Alice".into()),
             sender_avatar_url: Some("https://example.com/a.png".into()),
+            task_id: None,
+            task_status: None,
+            stream_events: None,
+            result_meta: None,
         };
         let w = WireMessage::from(&m);
         assert_eq!(w.sender_name.as_deref(), Some("Alice"));

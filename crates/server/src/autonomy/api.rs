@@ -259,7 +259,7 @@ async fn run_autonomy_task_with_conversation(
     let collect_handle = tokio::spawn(async move {
         let mut collected_events: Vec<serde_json::Value> = Vec::new();
         let mut events_since_save = 0;
-        let save_interval = 10;
+        let save_interval = crate::employee_chat::STREAM_PERSIST_INTERVAL;
 
         // Reload conversation from disk (the task_process message was already saved)
         let mut conv = load_conversation(&conv_path_clone).unwrap_or_else(|_| ConversationFile {
@@ -417,7 +417,7 @@ pub async fn run_employee_autonomy_explore_stream_handler(
                 conv_path_for_spawn,
                 conv,
                 task_process_idx,
-                10,
+                crate::employee_chat::STREAM_PERSIST_INTERVAL,
             ).await;
         });
 
@@ -553,7 +553,7 @@ pub async fn run_employee_autonomy_run_stream_handler(
                 conv_path_for_spawn,
                 conv,
                 task_process_idx,
-                10,
+                crate::employee_chat::STREAM_PERSIST_INTERVAL,
             ).await;
         });
 
