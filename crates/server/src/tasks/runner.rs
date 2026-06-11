@@ -77,13 +77,14 @@ impl TaskRunner {
         Ok(task)
     }
 
-    fn ensure_shop_open(&self) -> anyhow::Result<()> {
+    /// Checks shop status and returns `true` if the shop is closed,
+    /// signaling that the task should be queued rather than failed.
+    fn shop_is_closed(&self) -> bool {
         if let Ok(status) = crate::shop_status::load_shop_status(self.store.workspace()) {
-            if !status.is_open {
-                anyhow::bail!("shop_is_closed");
-            }
+            !status.is_open
+        } else {
+            false
         }
-        Ok(())
     }
 
     fn execute_code_chat_inner(
@@ -96,29 +97,48 @@ impl TaskRunner {
         let messages =
             crate::agent_locale::ensure_language_system_message(params.messages.clone(), lang);
         let runtime = task_runtime_handle();
-        match tools.execute_code_chat_for_task(
-            &params.workdir,
-            &messages,
-            &task.id,
-            runtime.as_ref(),
-        ) {
-            Ok(result) => Ok(result),
-            Err(err) => {
-                if err.to_string().contains("task_cancelled") {
-                    if let Ok(current) = self.store.load(&task.id) {
-                        if current.status == TaskStatus::Cancelled {
-                            runtime.unregister(&task.id);
-                            anyhow::bail!("task_cancelled");
+
+        // Retry on transient errors like no_enabled_coding_tool (tool might be initializing)
+        const MAX_RETRIES: u32 = 2;
+        const RETRY_DELAY_MS: u64 = 500;
+        let mut last_err = None;
+
+        for attempt in 0..=MAX_RETRIES {
+            match tools.execute_code_chat_for_task(
+                &params.workdir,
+                &messages,
+                &task.id,
+                runtime.as_ref(),
+            ) {
+                Ok(result) => return Ok(result),
+                Err(err) => {
+                    let msg = err.to_string();
+                    if msg.contains("task_cancelled") {
+                        if let Ok(current) = self.store.load(&task.id) {
+                            if current.status == TaskStatus::Cancelled {
+                                runtime.unregister(&task.id);
+                                anyhow::bail!("task_cancelled");
+                            }
                         }
+                        task.cancel(now_ms());
+                        self.store.save(task)?;
+                        runtime.unregister(&task.id);
+                        anyhow::bail!("task_cancelled");
                     }
-                    task.cancel(now_ms());
-                    self.store.save(task)?;
-                    runtime.unregister(&task.id);
-                    anyhow::bail!("task_cancelled");
+                    // Only retry for no_enabled_coding_tool (transient - tool config might be loading)
+                    if msg.contains("no_enabled_coding_tool") && attempt < MAX_RETRIES {
+                        tracing::warn!(attempt = attempt, "no coding tool available, retrying...");
+                        std::thread::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS));
+                        last_err = Some(err);
+                        continue;
+                    }
+                    last_err = Some(err);
+                    break;
                 }
-                Err(err)
             }
         }
+
+        Err(last_err.unwrap_or_else(|| anyhow::anyhow!("execute_failed")))
     }
 
     fn finalize_task_success(
@@ -243,7 +263,16 @@ impl TaskRunner {
         tools: &ToolManager,
         params: CodeAgentTaskParams,
     ) -> anyhow::Result<(AgentTaskRecord, ToolInstance, ToolExecutionResult)> {
-        self.ensure_shop_open()?;
+        // If shop is closed, create task as pending instead of failing immediately.
+        // The task will be picked up when the shop reopens via queued rerun drain.
+        if self.shop_is_closed() {
+            let created = now_ms();
+            let id = new_task_id();
+            let mut task = AgentTaskRecord::new(&params, id, created);
+            task.status = TaskStatus::Pending;
+            self.store.save(&task)?;
+            anyhow::bail!("shop_is_closed");
+        }
 
         let created = now_ms();
         let id = new_task_id();
@@ -292,7 +321,31 @@ impl TaskRunner {
         task_id: &str,
         params: CodeAgentTaskParams,
     ) -> anyhow::Result<(AgentTaskRecord, ToolInstance, ToolExecutionResult)> {
-        self.ensure_shop_open()?;
+        // If shop is closed, queue for rerun instead of failing.
+        if self.shop_is_closed() {
+            return self.queue_rerun(task_id).map(|t| {
+                // Return a placeholder result - the task will be executed when shop reopens
+                let instance = ToolInstance {
+                    id: "queued".to_string(),
+                    kind: crate::tools::model::ToolKind::ClaudeCode,
+                    name: "Queued".to_string(),
+                    enabled: true,
+                    version: 1,
+                    config: serde_json::json!({}),
+                };
+                let result = ToolExecutionResult {
+                    output: "Task queued - shop is closed".to_string(),
+                    exit_code: 0,
+                    usage: crate::tools::driver::ToolUsage {
+                        model: "queued".to_string(),
+                        prompt_tokens: 0,
+                        completion_tokens: 0,
+                        total_tokens: 0,
+                    },
+                };
+                (t, instance, result)
+            });
+        }
 
         let mut task = self.store.load(task_id)?;
         if !can_rerun_task(&task) {
@@ -334,11 +387,14 @@ impl TaskRunner {
         event_tx: tokio::sync::mpsc::Sender<ChatStreamEvent>,
     ) -> anyhow::Result<(AgentTaskRecord, ToolInstance, ToolExecutionResult, Vec<ChatStreamEvent>)>
     {
-        // Check shop status - skip execution when closed
-        if let Ok(status) = crate::shop_status::load_shop_status(self.store.workspace()) {
-            if !status.is_open {
-                return Err(anyhow::anyhow!("shop_is_closed"));
-            }
+        // If shop is closed, create task as pending instead of failing immediately.
+        if self.shop_is_closed() {
+            let created = now_ms();
+            let id = new_task_id();
+            let mut task = AgentTaskRecord::new(&params, id, created);
+            task.status = TaskStatus::Pending;
+            self.store.save(&task)?;
+            return Err(anyhow::anyhow!("shop_is_closed"));
         }
 
         let created = now_ms();
@@ -366,19 +422,40 @@ impl TaskRunner {
         let messages =
             crate::agent_locale::ensure_language_system_message(params.messages.clone(), lang);
 
-        match tools
-            .execute_code_chat_streaming_events(&params.workdir, &messages, event_tx)
-            .await
-        {
-            Ok((instance, result, events)) => {
-                self.finalize_streaming_success(&params.kind, &mut task, &instance, &result)?;
-                Ok((task, instance, result, events))
-            }
-            Err(err) => {
-                self.finalize_streaming_error(&params.kind, &mut task, err.to_string())?;
-                Err(err)
+        // Retry on transient errors like no_enabled_coding_tool
+        const MAX_RETRIES: u32 = 2;
+        const RETRY_DELAY_MS: u64 = 500;
+        let mut last_err = None;
+
+        for attempt in 0..=MAX_RETRIES {
+            match tools
+                .execute_code_chat_streaming_events(&params.workdir, &messages, event_tx.clone())
+                .await
+            {
+                Ok((instance, result, events)) => {
+                    self.finalize_streaming_success(&params.kind, &mut task, &instance, &result)?;
+                    return Ok((task, instance, result, events));
+                }
+                Err(err) => {
+                    let msg = err.to_string();
+                    if msg.contains("no_enabled_coding_tool") && attempt < MAX_RETRIES {
+                        tracing::warn!(attempt = attempt, "no coding tool available (streaming), retrying...");
+                        tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                        last_err = Some(err);
+                        continue;
+                    }
+                    last_err = Some(err);
+                    break;
+                }
             }
         }
+
+        let err_msg = last_err
+            .as_ref()
+            .map(|e| e.to_string())
+            .unwrap_or_else(|| "execute_failed".to_string());
+        self.finalize_streaming_error(&params.kind, &mut task, err_msg)?;
+        Err(last_err.unwrap_or_else(|| anyhow::anyhow!("execute_failed")))
     }
 
     /// Resets an existing task so it can be rerun, returning the now-running
@@ -386,7 +463,10 @@ impl TaskRunner {
     /// immediately with an accurate (running) status while the agent runs off the
     /// request path via [`Self::execute_rerun_streaming_events`].
     pub fn prepare_rerun(&self, task_id: &str) -> anyhow::Result<AgentTaskRecord> {
-        self.ensure_shop_open()?;
+        // If shop is closed, queue for rerun instead of failing.
+        if self.shop_is_closed() {
+            return self.queue_rerun(task_id);
+        }
 
         let mut task = self.store.load(task_id)?;
         if !can_rerun_task(&task) {

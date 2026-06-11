@@ -155,8 +155,21 @@ pub(crate) fn load_conversation(path: &Path) -> anyhow::Result<ConversationFile>
             messages: vec![],
         });
     }
-    let raw = fs::read_to_string(path)?;
-    Ok(serde_json::from_str(&raw)?)
+    // Retry on transient read errors (e.g. file being written concurrently).
+    let mut last_error = None;
+    for attempt in 0..3 {
+        match fs::read_to_string(path) {
+            Ok(raw) => match serde_json::from_str(&raw) {
+                Ok(conv) => return Ok(conv),
+                Err(e) => last_error = Some(e.into()),
+            },
+            Err(e) => last_error = Some(e.into()),
+        }
+        if attempt < 2 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    }
+    Err(last_error.unwrap_or_else(|| anyhow::anyhow!("conversation_load_failed")))
 }
 
 pub(crate) fn save_conversation(path: &Path, file: &ConversationFile) -> anyhow::Result<()> {
@@ -445,10 +458,14 @@ fn map_process_error(err: String) -> &'static str {
     if err == "no_enabled_coding_tool" || err == "chat_tool_missing" {
         return "chat_tool_missing";
     }
+    if err == "shop_is_closed" {
+        return "shop_is_closed";
+    }
     match err.as_str() {
         "employee_not_found" => "employee_not_found",
         "chat_prompt_empty" => "chat_prompt_empty",
         "chat_tool_missing" => "chat_tool_missing",
+        "shop_is_closed" => "shop_is_closed",
         _ => "chat_tool_run_failed",
     }
 }
@@ -546,6 +563,7 @@ fn status_for_process_key(key: &str) -> axum::http::StatusCode {
         "employee_not_found" => axum::http::StatusCode::NOT_FOUND,
         "chat_prompt_empty" => axum::http::StatusCode::BAD_REQUEST,
         "chat_tool_missing" => axum::http::StatusCode::CONFLICT,
+        "shop_is_closed" => axum::http::StatusCode::SERVICE_UNAVAILABLE,
         _ => axum::http::StatusCode::BAD_GATEWAY,
     }
 }
@@ -576,12 +594,15 @@ pub async fn get_messages(
         ));
     }
     let conv_path = conversation_path(&workspace, &employee_id);
-    let conv = load_conversation(&conv_path).map_err(|_e| {
-        (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            i18n::msg(&headers, "chat_conversation_load_failed"),
-        )
-    })?;
+    // If conversation fails to load, return empty messages instead of an error
+    // to avoid breaking the chat UI. The user can still send new messages.
+    let conv = load_conversation(&conv_path).unwrap_or_else(|_| {
+        tracing::warn!(path = ?conv_path, "failed to load conversation, returning empty");
+        ConversationFile {
+            version: 1,
+            messages: vec![],
+        }
+    });
     Ok(Json(MessagesResponse {
         messages: conv.messages.iter().map(WireMessage::from).collect(),
     }))

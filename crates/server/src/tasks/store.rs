@@ -88,9 +88,20 @@ impl TaskStore {
             if path.extension().and_then(|e| e.to_str()) != Some("json") {
                 continue;
             }
-            let raw = fs::read_to_string(&path)?;
-            if let Ok(task) = serde_json::from_str::<AgentTaskRecord>(&raw) {
-                items.push(task);
+            // Skip corrupted or partially-written task files gracefully.
+            // This can happen when a task file is being written by one thread
+            // while another reads it, or if the process crashes mid-write.
+            match fs::read_to_string(&path) {
+                Ok(raw) => {
+                    if let Ok(task) = serde_json::from_str::<AgentTaskRecord>(&raw) {
+                        items.push(task);
+                    } else {
+                        tracing::warn!(path = ?path, "skipping corrupted task file");
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(path = ?path, error = %e, "skipping unreadable task file");
+                }
             }
         }
         items.sort_by(|a, b| b.created_at_ms.cmp(&a.created_at_ms));
