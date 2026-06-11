@@ -652,6 +652,9 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
         .route("/api/git/repos", get(git::list_git_repos).post(git::create_git_repo))
         .route("/api/git/repos/:id", get(git::get_git_repo))
         .route("/api/git/repos/:id/op", axum::routing::post(git::run_git_operation))
+        .route("/api/git/repos/:id/branches", get(git::list_git_branches))
+        .route("/api/git/repos/:id/tree", get(git::list_git_tree))
+        .route("/api/git/repos/:id/file", get(git::read_git_file))
         .route("/api/git/init", axum::routing::post(git::init_git_project))
         .route("/api/git/exec", axum::routing::post(git::exec_git))
         .route(
