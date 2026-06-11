@@ -82,6 +82,53 @@ function ChatMessageAvatar(props: {
   )
 }
 
+function CopyButton({ text, t }: { text: string; t: (key: string) => string }) {
+  const [copied, setCopied] = React.useState(false)
+  const handleCopy = React.useCallback(() => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }, [text])
+  return (
+    <button
+      type="button"
+      className="chat-message__copy-btn"
+      onClick={handleCopy}
+      title={copied ? t('ui.chat.copy.copied') : t('ui.chat.copy.title')}
+      aria-label={copied ? t('ui.chat.copy.copied') : t('ui.chat.copy.title')}
+    >
+      {copied ? t('ui.chat.copy.checkmark') : t('ui.chat.copy.icon')}
+    </button>
+  )
+}
+
+function extractCopyableContent(message: DisplayMessage): string {
+  const parts: string[] = []
+  if (message.content) parts.push(message.content)
+  if (message.streaming) {
+    for (const block of message.streaming.blocks) {
+      if (block.type === 'text') parts.push(block.text)
+      else if (block.type === 'thinking') parts.push(block.text)
+      else if (block.type === 'tool_call') {
+        if (block.inputSummary) parts.push(`[${block.name} input]\n${block.inputSummary}`)
+        if (block.outputPreview) parts.push(`[${block.name} output]\n${block.outputPreview}`)
+      }
+    }
+  }
+  return parts.join('\n\n')
+}
+
+function MessageCopyButton({ message, t }: { message: DisplayMessage; t: (key: string) => string }) {
+  const content = extractCopyableContent(message)
+  if (!content) return null
+  return (
+    <div className="chat-message__bubble-actions">
+      <CopyButton text={content} t={t} />
+    </div>
+  )
+}
+
 function buildSeedMessages(
   employee: EmployeeDirectoryRecord,
   sender: ChatSenderProfile,
@@ -155,26 +202,100 @@ function StreamingToolCallCard({
       : call.status === 'error'
         ? 'ui.chat.streaming.toolStatusError'
         : 'ui.chat.streaming.toolStatusSuccess'
+
+  const toolName = call.name || t('ui.chat.streaming.unknownTool')
+  const toolNameLower = toolName.toLowerCase()
+
+  // TodoWrite tool: parse JSON and show as checkbox list
+  if (toolNameLower === 'todowrite') {
+    const todoItems = parseTodoItems(call.inputSummary)
+    return (
+      <div className={`stream-tool-call stream-tool-call--${call.status} stream-tool-call--todowrite`}>
+        <div className="stream-tool-call__header">
+          <span className="stream-tool-call__name">{toolName}</span>
+          <span className="stream-tool-call__status">{t(statusKey)}</span>
+        </div>
+        {todoItems.length > 0 ? (
+          <div className="stream-tool-call__todo-list">
+            {todoItems.map((todo, idx) => (
+              <div key={idx} className={`stream-tool-call__todo-item${todo.done ? ' stream-tool-call__todo-item--done' : ''}`}>
+                <span className="stream-tool-call__todo-checkbox">{todo.done ? '☑' : '☐'}</span>
+                <span className="stream-tool-call__todo-text">{todo.text}</span>
+              </div>
+            ))}
+          </div>
+        ) : call.inputSummary ? (
+          <pre className="stream-tool-call__pre">{call.inputSummary}</pre>
+        ) : null}
+        {call.outputPreview ? (
+          <div className="stream-tool-call__inline-section">
+            <span className="stream-tool-call__label">{t('ui.chat.streaming.output')}</span>
+            <pre className="stream-tool-call__pre">{call.outputPreview}</pre>
+          </div>
+        ) : null}
+      </div>
+    )
+  }
+
+  // All other tools: show input/output inline without collapsing
   return (
     <div className={`stream-tool-call stream-tool-call--${call.status}`}>
       <div className="stream-tool-call__header">
-        <span className="stream-tool-call__name">{call.name || t('ui.chat.streaming.unknownTool')}</span>
+        <span className="stream-tool-call__name">{toolName}</span>
         <span className="stream-tool-call__status">{t(statusKey)}</span>
       </div>
       {call.inputSummary ? (
-        <details className="stream-tool-call__details">
-          <summary className="stream-tool-call__summary">{t('ui.chat.streaming.input')}</summary>
+        <div className="stream-tool-call__inline-section">
+          <span className="stream-tool-call__label">{t('ui.chat.streaming.input')}</span>
           <pre className="stream-tool-call__pre">{call.inputSummary}</pre>
-        </details>
+        </div>
       ) : null}
       {call.outputPreview ? (
-        <details className="stream-tool-call__details" open={call.status === 'error'}>
-          <summary className="stream-tool-call__summary">{t('ui.chat.streaming.output')}</summary>
+        <div className="stream-tool-call__inline-section">
+          <span className="stream-tool-call__label">{t('ui.chat.streaming.output')}</span>
           <pre className="stream-tool-call__pre">{call.outputPreview}</pre>
-        </details>
+        </div>
       ) : null}
     </div>
   )
+}
+
+type TodoItem = { text: string; done: boolean }
+
+function parseTodoItems(raw: string): TodoItem[] {
+  const items: TodoItem[] = []
+  try {
+    // Try parsing as JSON first (most common format from Claude Code)
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) {
+      for (const entry of parsed) {
+        if (entry && typeof entry === 'object' && 'content' in entry) {
+          items.push({ text: String(entry.content), done: Boolean(entry.done) })
+        } else if (entry && typeof entry === 'object' && 'text' in entry) {
+          items.push({ text: String(entry.text), done: Boolean(entry.done) })
+        }
+      }
+      if (items.length > 0) return items
+    }
+  } catch {
+    // not JSON, try line-by-line parsing
+  }
+
+  // Fall back to line-based parsing
+  const lines = raw.split('\n').filter((l) => l.trim())
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (trimmed.startsWith('- [x]') || trimmed.startsWith('- [X]')) {
+      items.push({ text: trimmed.replace(/^- \[[xX]\]\s*/, '').trim(), done: true })
+    } else if (trimmed.startsWith('- [ ]')) {
+      items.push({ text: trimmed.replace(/^- \[ \]\s*/, '').trim(), done: false })
+    } else if (trimmed.startsWith('- ')) {
+      items.push({ text: trimmed.replace(/^- /, '').trim(), done: false })
+    } else {
+      items.push({ text: trimmed, done: false })
+    }
+  }
+  return items
 }
 
 function TaskResultPanel({ result, t }: { result: ChatResultMeta | null; t: (key: string) => string }) {
@@ -353,6 +474,7 @@ export function EmployeeChatPanel({
 
               const bubble = (
                 <div className="chat-message__bubble">
+                  <MessageCopyButton message={message} t={t} />
                   {message.streaming ? (
                     <>
                       {message.streaming.session ? (

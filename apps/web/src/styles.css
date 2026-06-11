@@ -1384,7 +1384,8 @@ select,
 .chat-message__bubble {
   min-width: 0;
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 10px 32px 10px 12px;
+  position: relative;
 }
 
 .chat-message--employee .chat-message__bubble {
@@ -1406,6 +1407,44 @@ select,
 .chat-message--pending .chat-message__bubble {
   opacity: 0.88;
   font-style: italic;
+}
+
+.chat-message__bubble-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.chat-message__bubble:hover .chat-message__bubble-actions {
+  opacity: 1;
+}
+
+.chat-message__copy-btn {
+  background: rgba(40, 60, 90, 0.6);
+  border: 1px solid rgba(80, 110, 160, 0.4);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #9fb0cb;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s;
+}
+
+.chat-message__copy-btn:hover {
+  background: rgba(60, 80, 120, 0.7);
+  color: #dbe6f5;
+}
+
+.chat-message__copy-btn[title="Copied"],
+.chat-message__copy-btn[title="已复制"],
+.chat-message__copy-btn[title="コピーしました"] {
+  color: #6ecb85;
+  border-color: rgba(76, 175, 80, 0.5);
 }
 
 .chat-message__avatar {
@@ -3149,6 +3188,82 @@ select,
   white-space: pre-wrap;
   word-break: break-word;
   color: #cfd8e6;
+}
+
+/* Inline sections for Read, Glob, etc. (no collapse) */
+.stream-tool-call__inline-section {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 4px;
+}
+
+.stream-tool-call__label {
+  font-size: 11px;
+  color: #9fb0cb;
+  user-select: none;
+  display: block;
+  margin-bottom: 4px;
+}
+
+/* TodoWrite specific styles */
+.stream-tool-call__todo-list {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.stream-tool-call__todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 3px 4px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #cfd8e6;
+  transition: background 0.15s;
+}
+
+.stream-tool-call__todo-item:hover {
+  background: rgba(40, 60, 90, 0.3);
+}
+
+.stream-tool-call__todo-item--done {
+  color: #7a9ab8;
+}
+
+.stream-tool-call__todo-checkbox {
+  flex-shrink: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #9fb0cb;
+}
+
+.stream-tool-call__todo-item--done .stream-tool-call__todo-checkbox {
+  color: #6ecb85;
+}
+
+.stream-tool-call__todo-text {
+  flex: 1;
+}
+
+.stream-tool-call__todo-item--done .stream-tool-call__todo-text {
+  text-decoration: line-through;
+  opacity: 0.75;
+}
+
+/* Tool-specific background accents */
+.stream-tool-call--read {
+  background: rgba(40, 80, 60, 0.2);
+}
+
+.stream-tool-call--glob {
+  background: rgba(60, 50, 100, 0.25);
+}
+
+.stream-tool-call--todowrite {
+  background: rgba(80, 70, 40, 0.2);
 }
 
 /* Block-based streaming sections */

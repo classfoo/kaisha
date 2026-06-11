@@ -178,6 +178,12 @@
         "resultSuccess": "Completed",
         "resultError": "Failed",
         "unknownTool": "Tool"
+      },
+      "copy": {
+        "title": "Copy message",
+        "copied": "Copied",
+        "icon": "📋",
+        "checkmark": "✓"
       }
     },
     "leftPanel": {

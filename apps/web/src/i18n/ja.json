@@ -178,6 +178,12 @@
         "resultSuccess": "完了",
         "resultError": "失敗",
         "unknownTool": "ツール"
+      },
+      "copy": {
+        "title": "メッセージをコピー",
+        "copied": "コピーしました",
+        "icon": "📋",
+        "checkmark": "✓"
       }
     },
     "leftPanel": {

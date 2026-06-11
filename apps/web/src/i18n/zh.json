@@ -178,6 +178,12 @@
         "resultSuccess": "已完成",
         "resultError": "失败",
         "unknownTool": "工具"
+      },
+      "copy": {
+        "title": "复制消息",
+        "copied": "已复制",
+        "icon": "📋",
+        "checkmark": "✓"
       }
     },
     "leftPanel": {
