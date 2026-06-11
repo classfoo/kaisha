@@ -456,6 +456,84 @@ fn dev_status_of(task: &WorkTask) -> DevTaskStatus {
         .unwrap_or(DevTaskStatus::BranchCreated)
 }
 
+/// Returns development work tasks that are still pending (`branch_created`) and can
+/// be picked up by `employee_id` during exploration.
+///
+/// Ordering reflects the exploration priority: tasks already assigned to the
+/// employee come first (oldest first), followed by unassigned tasks (oldest
+/// first). Tasks assigned to a different employee, non-development tasks, tasks
+/// that are not auto-executable, and tasks that have already moved past
+/// `branch_created` are excluded.
+pub fn list_claimable_dev_tasks(workspace: &Path, employee_id: &str) -> Vec<WorkTask> {
+    let mut assigned: Vec<WorkTask> = Vec::new();
+    let mut unassigned: Vec<WorkTask> = Vec::new();
+    for task in list_work_tasks(workspace).unwrap_or_default() {
+        if !is_development_task(&task) || !task.auto_executable {
+            continue;
+        }
+        if task.status != WorkTaskStatus::Pending {
+            continue;
+        }
+        if dev_status_of(&task) != DevTaskStatus::BranchCreated {
+            continue;
+        }
+        match task
+            .assignee
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            Some(owner) if owner == employee_id => assigned.push(task),
+            Some(_) => continue,
+            None => unassigned.push(task),
+        }
+    }
+    assigned.sort_by(|a, b| a.created_at_ms.cmp(&b.created_at_ms));
+    unassigned.sort_by(|a, b| a.created_at_ms.cmp(&b.created_at_ms));
+    assigned.into_iter().chain(unassigned).collect()
+}
+
+/// Claims a pending development work task for `employee_id` and transitions it into
+/// the `in_development` state so the development agent can begin execution.
+///
+/// Mirrors the `start_development` branch of [`task_action`]: assigns the employee
+/// when the task is unassigned, advances the dev/work status, and records the task
+/// as the requirement's current task. Returns the requirement id so callers can run
+/// the development agent against the correct branch and repository.
+pub fn claim_dev_task(
+    workspace: &Path,
+    task_id: &str,
+    employee_id: &str,
+) -> Result<String, String> {
+    let task = load_work_task(workspace, task_id)?;
+    if !is_development_task(&task) {
+        return Err("task_not_found".to_string());
+    }
+    if dev_status_of(&task) != DevTaskStatus::BranchCreated {
+        return Err("task_action_invalid".to_string());
+    }
+    let requirement_id = task.biz_id.clone();
+    update_work_task(workspace, task_id, |task| {
+        if task
+            .assignee
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or("")
+            .is_empty()
+        {
+            task.assignee = Some(employee_id.to_string());
+        }
+        set_dev_status(task, DevTaskStatus::InDevelopment.as_str());
+        task.status = DevTaskStatus::InDevelopment.to_work_status();
+        Ok(())
+    })?;
+    if let Ok(mut state) = load_dev_state(workspace, &requirement_id) {
+        state.current_task_id = Some(task_id.to_string());
+        let _ = save_dev_state(workspace, &requirement_id, &state);
+    }
+    Ok(requirement_id)
+}
+
 fn wire_task(task: &WorkTask) -> DevTaskWire {
     DevTaskWire {
         id: task.id.clone(),
@@ -1276,6 +1354,125 @@ mod tests {
         assert!(path.exists());
         let raw = fs::read_to_string(path).unwrap();
         assert!(raw.contains("# Title"));
+        let _ = fs::remove_dir_all(&workspace);
+    }
+
+    fn make_dev_work_task(
+        workspace: &Path,
+        id: &str,
+        requirement_id: &str,
+        assignee: Option<&str>,
+        dev_status: DevTaskStatus,
+        work_status: WorkTaskStatus,
+    ) {
+        use crate::work_task::save_work_task;
+        let ts = work_task_now_ms();
+        let task = WorkTask {
+            id: id.to_string(),
+            biz_type: BIZ_TYPE_REQUIREMENT.to_string(),
+            biz_id: requirement_id.to_string(),
+            title: format!("Title {id}"),
+            description: String::new(),
+            assignee: assignee.map(str::to_string),
+            status: work_status,
+            progress: 0,
+            auto_executable: true,
+            metadata: serde_json::json!({
+                "task_kind": TASK_KIND_DEVELOPMENT,
+                "branch": format!("feat-{requirement_id}-{id}"),
+                "dev_status": dev_status.as_str(),
+            }),
+            created_at_ms: ts,
+            updated_at_ms: ts,
+            agent_task_id: None,
+        };
+        save_work_task(workspace, &task).unwrap();
+    }
+
+    #[test]
+    fn list_claimable_dev_tasks_prioritizes_assigned_then_unassigned() {
+        let workspace = temp_workspace();
+        fs::create_dir_all(work_tasks_root(&workspace)).unwrap();
+        make_dev_work_task(
+            &workspace,
+            "task-unassigned",
+            "auth",
+            None,
+            DevTaskStatus::BranchCreated,
+            WorkTaskStatus::Pending,
+        );
+        make_dev_work_task(
+            &workspace,
+            "task-alice",
+            "auth",
+            Some("alice"),
+            DevTaskStatus::BranchCreated,
+            WorkTaskStatus::Pending,
+        );
+        make_dev_work_task(
+            &workspace,
+            "task-bob",
+            "auth",
+            Some("bob"),
+            DevTaskStatus::BranchCreated,
+            WorkTaskStatus::Pending,
+        );
+        make_dev_work_task(
+            &workspace,
+            "task-running",
+            "auth",
+            Some("alice"),
+            DevTaskStatus::InDevelopment,
+            WorkTaskStatus::InProgress,
+        );
+
+        let claimable = list_claimable_dev_tasks(&workspace, "alice");
+        let ids: Vec<&str> = claimable.iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(ids, vec!["task-alice", "task-unassigned"]);
+
+        let _ = fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn claim_dev_task_assigns_employee_and_starts_development() {
+        let workspace = temp_workspace();
+        fs::create_dir_all(work_tasks_root(&workspace)).unwrap();
+        make_dev_work_task(
+            &workspace,
+            "task-001",
+            "auth",
+            None,
+            DevTaskStatus::BranchCreated,
+            WorkTaskStatus::Pending,
+        );
+
+        let requirement_id = claim_dev_task(&workspace, "task-001", "alice").unwrap();
+        assert_eq!(requirement_id, "auth");
+
+        let claimed = load_work_task(&workspace, "task-001").unwrap();
+        assert_eq!(claimed.assignee.as_deref(), Some("alice"));
+        assert_eq!(claimed.status, WorkTaskStatus::InProgress);
+        assert_eq!(dev_status_of(&claimed), DevTaskStatus::InDevelopment);
+
+        let _ = fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn claim_dev_task_rejects_non_pending_task() {
+        let workspace = temp_workspace();
+        fs::create_dir_all(work_tasks_root(&workspace)).unwrap();
+        make_dev_work_task(
+            &workspace,
+            "task-001",
+            "auth",
+            Some("alice"),
+            DevTaskStatus::InDevelopment,
+            WorkTaskStatus::InProgress,
+        );
+
+        let err = claim_dev_task(&workspace, "task-001", "alice").unwrap_err();
+        assert_eq!(err, "task_action_invalid");
+
         let _ = fs::remove_dir_all(&workspace);
     }
 

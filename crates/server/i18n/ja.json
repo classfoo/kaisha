@@ -76,6 +76,7 @@
   "autonomy_explore_section_git_context": "## Git コンテキスト",
   "autonomy_explore_section_existing_todos": "## 既存の従業員 ToDo",
   "autonomy_explore_existing_todos_none": "（なし）",
+  "autonomy_explore_claimed_dev_task": "保留中の開発タスク `{title}` を引き継ぎ、今すぐ開発を開始します。",
   "autonomy_execute_system": "あなたは {name}、{role} として割り当てられた ToDo を実行しています。\n\n作業ディレクトリは workspace ルートです。必要に応じてファイルツールと git を使ってください。\n完了後、変更内容または得られた知見を要約してください。\n\n{ctx}",
   "autonomy_execute_user_prompt": "この ToDo を今すぐ実行してください：{title}",
   "autonomy_execute_context_header": "従業員：{name}（{role}）\nToDo：{title}\n説明：{description}\n",

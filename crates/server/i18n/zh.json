@@ -76,6 +76,7 @@
   "autonomy_explore_section_git_context": "## Git 上下文",
   "autonomy_explore_section_existing_todos": "## 现有员工待办",
   "autonomy_explore_existing_todos_none": "（无）",
+  "autonomy_explore_claimed_dev_task": "正在认领待处理的开发任务 `{title}`，立即开始开发。",
   "autonomy_execute_system": "你是 {name}，担任 {role}，正在执行一项已分配的待办。\n\n工作目录是 workspace 根目录。按需使用文件工具和 git。\n完成后，总结你做了哪些改动或获得了哪些信息。\n\n{ctx}",
   "autonomy_execute_user_prompt": "请立即执行此待办：{title}",
   "autonomy_execute_context_header": "员工：{name}（{role}）\n待办：{title}\n描述：{description}\n",

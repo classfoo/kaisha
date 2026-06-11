@@ -76,6 +76,7 @@
   "autonomy_explore_section_git_context": "## Git context",
   "autonomy_explore_section_existing_todos": "## Existing employee todos",
   "autonomy_explore_existing_todos_none": "(none)",
+  "autonomy_explore_claimed_dev_task": "Picking up pending development task `{title}` and starting development now.",
   "autonomy_execute_system": "You are {name}, a {role} executing one assigned todo.\n\nWorking directory is the workspace root. Use file tools and git as needed.\nWhen finished, summarize what you changed or learned.\n\n{ctx}",
   "autonomy_execute_user_prompt": "Execute this todo now: {title}",
   "autonomy_execute_context_header": "Employee: {name} ({role})\nTodo: {title}\nDescription: {description}\n",

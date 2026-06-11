@@ -2,7 +2,7 @@ use crate::git::{repo_dir, MAIN_REPO_ID};
 use crate::tasks::{
     AgentTaskRecord, CodeAgentTaskParams, TaskKind, TaskRunner,
 };
-use crate::tools::driver::ToolChatMessage;
+use crate::tools::driver::{ChatStreamEvent, ToolChatMessage};
 use crate::tools::manager::ToolManager;
 use crate::work_task::{load_work_task, task_branch, update_work_task};
 use std::path::{Path, PathBuf};
@@ -75,6 +75,45 @@ pub async fn execute_dev_task_streaming(
     requirement_id: &str,
     employee_id: &str,
 ) -> anyhow::Result<AgentTaskRecord> {
+    let ws_for_runner = workspace.to_path_buf();
+    let tools = tools.clone();
+    let task_id = task_id.to_string();
+    let requirement_id = requirement_id.to_string();
+    let employee_id_owned = employee_id.to_string();
+    crate::conversation_task::run_with_conversation(
+        workspace,
+        employee_id,
+        move |tx| async move {
+            run_dev_task_agent_streaming(
+                &ws_for_runner,
+                &tools,
+                &task_id,
+                &requirement_id,
+                &employee_id_owned,
+                tx,
+            )
+            .await
+        },
+    )
+    .await
+}
+
+/// Runs the development task code agent, streaming its progress through the
+/// caller-provided `event_tx` channel without managing any conversation state.
+///
+/// This is the shared primitive used both by [`execute_dev_task_streaming`]
+/// (which wraps it in conversation bookkeeping) and by the autonomy exploration
+/// flow (which streams into an already-open `task_process` message). It builds the
+/// task prompt, executes the code agent in the git repository working directory,
+/// links the resulting agent task to the work task, and returns the record.
+pub async fn run_dev_task_agent_streaming(
+    workspace: &Path,
+    tools: &ToolManager,
+    task_id: &str,
+    requirement_id: &str,
+    employee_id: &str,
+    event_tx: tokio::sync::mpsc::Sender<ChatStreamEvent>,
+) -> anyhow::Result<AgentTaskRecord> {
     let workdir = dev_task_workdir(workspace);
     let prompt = build_dev_task_prompt(workspace, task_id, requirement_id)
         .map_err(|e| anyhow::anyhow!("{}", e))?;
@@ -98,19 +137,10 @@ pub async fn execute_dev_task_streaming(
         }),
     };
 
-    let ws_for_runner = workspace.to_path_buf();
-    let tools = tools.clone();
-    let task = crate::conversation_task::run_with_conversation(
-        workspace,
-        employee_id,
-        move |tx| async move {
-            let runner = TaskRunner::new(&ws_for_runner);
-            let (task, _instance, _result, _events) =
-                runner.run_code_chat_streaming_events(&tools, params, tx).await?;
-            Ok(task)
-        },
-    )
-    .await?;
+    let runner = TaskRunner::new(workspace);
+    let (task, _instance, _result, _events) = runner
+        .run_code_chat_streaming_events(tools, params, event_tx)
+        .await?;
 
     // Link agent task to work task
     let _ = link_agent_task_to_work_task(workspace, task_id, &task.id);
