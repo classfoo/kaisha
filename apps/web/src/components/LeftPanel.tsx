@@ -66,6 +66,8 @@ type LeftPanelProps = {
   employeeTasksError: string | null
   employeeTasksExploring: boolean
   onEmployeeTasksExplore: () => void
+  employeeTasksRefreshing: boolean
+  onEmployeeTasksRefresh: () => void
   rerunningTaskId: string | null
   onRerunEmployeeTask: (taskId: string) => void
   stoppingTaskId: string | null
@@ -132,6 +134,8 @@ export function LeftPanel({
   employeeTasksError,
   employeeTasksExploring,
   onEmployeeTasksExplore,
+  employeeTasksRefreshing,
+  onEmployeeTasksRefresh,
   rerunningTaskId,
   onRerunEmployeeTask,
   stoppingTaskId,
@@ -202,6 +206,8 @@ export function LeftPanel({
                 locale={locale}
                 exploring={employeeTasksExploring}
                 onExplore={onEmployeeTasksExplore}
+                refreshing={employeeTasksRefreshing}
+                onRefresh={onEmployeeTasksRefresh}
                 rerunningTaskId={rerunningTaskId}
                 onRerunTask={onRerunEmployeeTask}
                 stoppingTaskId={stoppingTaskId}

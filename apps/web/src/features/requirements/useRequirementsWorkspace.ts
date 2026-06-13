@@ -28,9 +28,6 @@ export function useRequirementsWorkspace(
   const [reviewRunning, setReviewRunning] = React.useState(false)
   const [reviewForcePassing, setReviewForcePassing] = React.useState(false)
   const [opinionActionKey, setOpinionActionKey] = React.useState<string | null>(null)
-  const [confirming, setConfirming] = React.useState(false)
-  const [abandoning, setAbandoning] = React.useState(false)
-  const [reconfirming, setReconfirming] = React.useState(false)
   const [archivedItems, setArchivedItems] = React.useState<RequirementSummary[]>([])
   const [showArchived, setShowArchived] = React.useState(false)
   const [abandoningId, setAbandoningId] = React.useState<string | null>(null)
@@ -288,44 +285,9 @@ export function useRequirementsWorkspace(
     [api, loadDetail],
   )
 
-  const confirmRequirement = React.useCallback(
-    async (id: string) => {
-      setConfirming(true)
-      setError(null)
-      try {
-        const updated = await api.confirm(id)
-        setDetail(updated)
-        setItems((prev) =>
-          prev.map((item) =>
-            item.id === updated.id
-              ? {
-                  id: updated.id,
-                  title: updated.title,
-                  phase: updated.phase,
-                  confirm_status: updated.confirm_status,
-                  created_at_ms: updated.created_at_ms,
-                  updated_at_ms: updated.updated_at_ms,
-                  dir_path: updated.dir_path,
-                }
-              : item,
-          ),
-        )
-        return updated
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        setError(msg)
-        throw e
-      } finally {
-        setConfirming(false)
-      }
-    },
-    [api],
-  )
-
   const abandonRequirement = React.useCallback(
     async (id: string) => {
       setAbandoningId(id)
-      setAbandoning(true)
       setError(null)
       try {
         const updated = await api.abandon(id)
@@ -335,10 +297,13 @@ export function useRequirementsWorkspace(
             id: updated.id,
             title: updated.title,
             phase: updated.phase,
-            confirm_status: updated.confirm_status,
             created_at_ms: updated.created_at_ms,
             updated_at_ms: updated.updated_at_ms,
             dir_path: updated.dir_path,
+          }
+          const existing = prev.find((s) => s.id === summary.id)
+          if (existing) {
+            return prev.map((s) => s.id === summary.id ? summary : s)
           }
           const next = [...prev, summary]
           next.sort((a, b) => b.updated_at_ms - a.updated_at_ms)
@@ -354,42 +319,7 @@ export function useRequirementsWorkspace(
         setError(msg)
         throw e
       } finally {
-        setAbandoning(false)
         setAbandoningId(null)
-      }
-    },
-    [api],
-  )
-
-  const reconfirmRequirement = React.useCallback(
-    async (id: string) => {
-      setReconfirming(true)
-      setError(null)
-      try {
-        const updated = await api.reconfirm(id)
-        setDetail(updated)
-        setItems((prev) =>
-          prev.map((item) =>
-            item.id === updated.id
-              ? {
-                  id: updated.id,
-                  title: updated.title,
-                  phase: updated.phase,
-                  confirm_status: updated.confirm_status,
-                  created_at_ms: updated.created_at_ms,
-                  updated_at_ms: updated.updated_at_ms,
-                  dir_path: updated.dir_path,
-                }
-              : item,
-          ),
-        )
-        return updated
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        setError(msg)
-        throw e
-      } finally {
-        setReconfirming(false)
       }
     },
     [api],
@@ -523,7 +453,6 @@ export function useRequirementsWorkspace(
             id: updated.id,
             title: updated.title,
             phase: updated.phase,
-            confirm_status: updated.confirm_status,
             created_at_ms: updated.created_at_ms,
             updated_at_ms: updated.updated_at_ms,
             dir_path: updated.dir_path,
@@ -578,9 +507,6 @@ export function useRequirementsWorkspace(
     reviewRunning,
     reviewForcePassing,
     opinionActionKey,
-    confirming,
-    abandoning,
-    reconfirming,
     archivedItems,
     showArchived,
     setShowArchived,
@@ -599,9 +525,7 @@ export function useRequirementsWorkspace(
     forcePassReview,
     opinionAction,
     loadReview,
-    confirmRequirement,
     abandonRequirement,
-    reconfirmRequirement,
     reinstateRequirement,
     hardDeleteRequirement,
     loadDevelopment,

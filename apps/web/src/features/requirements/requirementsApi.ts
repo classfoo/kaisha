@@ -1,18 +1,13 @@
 export type RequirementPhase =
   | 'collection'
-  | 'review'
-  | 'confirm'
   | 'development'
   | 'testing'
   | 'release'
-
-export type RequirementConfirmStatus = 'pending' | 'confirmed' | 'abandoned'
 
 export type RequirementSummary = {
   id: string
   title: string
   phase: RequirementPhase
-  confirm_status?: RequirementConfirmStatus
   created_at_ms: number
   updated_at_ms: number
   dir_path: string
@@ -185,11 +180,8 @@ export function createRequirementsApi(apiBase: string, locale: string) {
       return res.json()
     },
 
-    async confirm(id: string): Promise<RequirementDetail> {
-      const res = await fetch(
-        `${apiBase}/api/requirements/${encodeURIComponent(id)}/confirm`,
-        { method: 'POST', headers },
-      )
+    async listArchived(): Promise<RequirementSummary[]> {
+      const res = await fetch(`${apiBase}/api/requirements/archived`, { headers })
       if (!res.ok) throw new Error(await readError(res))
       return res.json()
     },
@@ -199,21 +191,6 @@ export function createRequirementsApi(apiBase: string, locale: string) {
         `${apiBase}/api/requirements/${encodeURIComponent(id)}/abandon`,
         { method: 'POST', headers },
       )
-      if (!res.ok) throw new Error(await readError(res))
-      return res.json()
-    },
-
-    async reconfirm(id: string): Promise<RequirementDetail> {
-      const res = await fetch(
-        `${apiBase}/api/requirements/${encodeURIComponent(id)}/reconfirm`,
-        { method: 'POST', headers },
-      )
-      if (!res.ok) throw new Error(await readError(res))
-      return res.json()
-    },
-
-    async listArchived(): Promise<RequirementSummary[]> {
-      const res = await fetch(`${apiBase}/api/requirements/archived`, { headers })
       if (!res.ok) throw new Error(await readError(res))
       return res.json()
     },
@@ -311,8 +288,6 @@ export function createRequirementsApi(apiBase: string, locale: string) {
 
 export const REQUIREMENT_PHASES: RequirementPhase[] = [
   'collection',
-  'review',
-  'confirm',
   'development',
   'testing',
   'release',

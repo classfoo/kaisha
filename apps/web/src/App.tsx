@@ -116,6 +116,7 @@ export default function App() {
   const [refreshTick, setRefreshTick] = React.useState(0)
   const [sidePanelWidth, setSidePanelWidth] = React.useState(260)
   const [resizingPanel, setResizingPanel] = React.useState(false)
+  const [employeeTasksRefreshing, setEmployeeTasksRefreshing] = React.useState(false)
   const resizeStartXRef = React.useRef(0)
   const resizeStartWidthRef = React.useRef(260)
   const tt = React.useCallback((key: string) => t(locale, key), [locale])
@@ -1171,6 +1172,11 @@ export default function App() {
             employeeTasksError={employeeTasksExploreError ?? employeeTaskRerunError ?? employeeTaskStopError ?? employeeTasks.error}
             employeeTasksExploring={employeeTasksExploring}
             onEmployeeTasksExplore={() => void runEmployeeExplore()}
+            employeeTasksRefreshing={employeeTasksRefreshing}
+            onEmployeeTasksRefresh={() => {
+              setEmployeeTasksRefreshing(true)
+              void employeeTasks.refresh().finally(() => setEmployeeTasksRefreshing(false))
+            }}
             rerunningTaskId={rerunningTaskId}
             onRerunEmployeeTask={(taskId) => void rerunEmployeeTask(taskId)}
             stoppingTaskId={stoppingTaskId}
@@ -1195,7 +1201,10 @@ export default function App() {
         git={git}
         requirements={requirements}
         requirementPhaseLabel={requirementPhaseLabel}
-        onEmployeeTasksRefresh={() => void employeeTasks.refresh()}
+        onEmployeeTasksRefresh={() => {
+          setEmployeeTasksRefreshing(true)
+          void employeeTasks.refresh().finally(() => setEmployeeTasksRefreshing(false))
+        }}
         chatMessagesRefreshTick={chatMessagesRefreshTick}
         t={tt}
         onOpenSettings={() => setSettingsOpen(true)}

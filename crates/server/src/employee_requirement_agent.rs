@@ -81,8 +81,6 @@ updated_at_ms: 1710000000000
 
 ## Phases (use exactly these values in frontmatter)
 - collection — gathering information
-- review — under review
-- confirm — confirmed scope
 - development — implementation
 - testing — QA / verification
 - release — shipped / closed
@@ -160,7 +158,6 @@ mod tests {
             id: id.to_string(),
             title: format!("Title {id}"),
             phase,
-            confirm_status: None,
             created_at_ms: 1,
             updated_at_ms: 2,
         }

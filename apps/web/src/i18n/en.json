@@ -97,6 +97,8 @@
       },
       "explore": "Explore",
       "exploring": "Exploring…",
+      "refresh": "Refresh",
+      "refreshing": "Refreshing…",
       "exploreError": "Failed to start exploration",
       "menu": "Task menu",
       "rerun": "Rerun",
@@ -369,34 +371,14 @@
       "saving": "Saving…",
       "phases": {
         "collection": "Collection",
-        "review": "Review",
-        "confirm": "Confirm",
         "development": "Development",
         "testing": "Testing",
         "release": "Release"
       },
       "phaseViews": {
-        "confirm": { "empty": "Confirm-stage content will be available in a future release." },
         "development": { "empty": "Development-stage content will be available in a future release." },
         "testing": { "empty": "Testing-stage content will be available in a future release." },
         "release": { "empty": "Release-stage content will be available in a future release." }
-      },
-      "confirm": {
-        "sectionTitle": "Requirement confirmation",
-        "statusLabel": "Status",
-        "statusPending": "Pending",
-        "statusConfirmed": "Confirmed",
-        "statusAbandoned": "Abandoned",
-        "confirmAction": "Confirm requirement",
-        "abandonAction": "Abandon requirement",
-        "reconfirmAction": "Reconfirm",
-        "confirmDialogTitle": "Confirm requirement",
-        "confirmDialogText": "Confirm this requirement and proceed to development?",
-        "abandonDialogTitle": "Abandon requirement",
-        "abandonDialogText": "This requirement will not enter development. You can reconfirm it later. Continue?",
-        "reconfirmDialogTitle": "Reconfirm requirement",
-        "reconfirmDialogText": "Reconfirm this abandoned requirement and proceed to development?",
-        "processing": "Processing\u2026"
       },
       "development": {
         "sectionTitle": "Development",

@@ -97,6 +97,8 @@
       },
       "explore": "探索",
       "exploring": "探索中…",
+      "refresh": "更新",
+      "refreshing": "更新中…",
       "exploreError": "探索の開始に失敗しました",
       "menu": "タスクメニュー",
       "rerun": "再実行",
@@ -369,14 +371,11 @@
       "saving": "保存中…",
       "phases": {
         "collection": "収集",
-        "review": "レビュー",
-        "confirm": "確認",
         "development": "開発",
         "testing": "テスト",
         "release": "リリース"
       },
       "phaseViews": {
-        "confirm": { "empty": "確認フェーズの内容は今後のバージョンで表示されます。" },
         "development": { "empty": "開発フェーズの内容は今後のバージョンで表示されます。" },
         "testing": { "empty": "テストフェーズの内容は今後のバージョンで表示されます。" },
         "release": { "empty": "リリースフェーズの内容は今後のバージョンで表示されます。" }

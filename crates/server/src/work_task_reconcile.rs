@@ -94,8 +94,7 @@ mod tests {
                 &RequirementMeta {
                     id: "auth".into(),
                     title: "User auth".into(),
-                    phase: RequirementPhase::Confirm,
-                    confirm_status: None,
+                    phase: RequirementPhase::Collection,
                     created_at_ms: 1,
                     updated_at_ms: 2,
                 },

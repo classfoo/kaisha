@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs,
     path::{Path, PathBuf},
-    str::FromStr,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -16,8 +15,6 @@ pub const REQUIREMENT_FILE: &str = "requirement.md";
 
 const PHASES: &[&str] = &[
     "collection",
-    "review",
-    "confirm",
     "development",
     "testing",
     "release",
@@ -27,8 +24,6 @@ const PHASES: &[&str] = &[
 #[serde(rename_all = "snake_case")]
 pub enum RequirementPhase {
     Collection,
-    Review,
-    Confirm,
     Development,
     Testing,
     Release,
@@ -38,8 +33,6 @@ impl RequirementPhase {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Collection => "collection",
-            Self::Review => "review",
-            Self::Confirm => "confirm",
             Self::Development => "development",
             Self::Testing => "testing",
             Self::Release => "release",
@@ -47,44 +40,12 @@ impl RequirementPhase {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum RequirementConfirmStatus {
-    Pending,
-    Confirmed,
-    Abandoned,
-}
-
-impl RequirementConfirmStatus {
-    #[allow(dead_code)]
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Pending => "pending",
-            Self::Confirmed => "confirmed",
-            Self::Abandoned => "abandoned",
-        }
-    }
-}
-
-impl FromStr for RequirementConfirmStatus {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "pending" => Ok(Self::Pending),
-            "confirmed" => Ok(Self::Confirmed),
-            "abandoned" => Ok(Self::Abandoned),
-            _ => Err(format!("unknown confirm status: {s}")),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequirementMeta {
     pub id: String,
     pub title: String,
     pub phase: RequirementPhase,
-    #[serde(default)]
-    pub confirm_status: Option<RequirementConfirmStatus>,
     pub created_at_ms: u64,
     pub updated_at_ms: u64,
 }
@@ -94,7 +55,6 @@ pub struct RequirementSummary {
     pub id: String,
     pub title: String,
     pub phase: RequirementPhase,
-    pub confirm_status: Option<RequirementConfirmStatus>,
     pub created_at_ms: u64,
     pub updated_at_ms: u64,
     pub dir_path: String,
@@ -105,7 +65,6 @@ pub struct RequirementDetail {
     pub id: String,
     pub title: String,
     pub phase: RequirementPhase,
-    pub confirm_status: Option<RequirementConfirmStatus>,
     pub created_at_ms: u64,
     pub updated_at_ms: u64,
     pub dir_path: String,
@@ -141,9 +100,6 @@ pub fn requirements_root(workspace: &Path) -> PathBuf {
     workspace.join("requirements")
 }
 
-pub fn archived_requirement_root(workspace: &Path) -> PathBuf {
-    workspace.join("requirements").join("archived")
-}
 
 pub fn ensure_requirements_root(workspace: &Path) -> anyhow::Result<PathBuf> {
     let root = requirements_root(workspace);
@@ -278,7 +234,6 @@ pub(crate) fn load_requirement_detail(workspace: &Path, id: &str) -> anyhow::Res
         id: meta.id,
         title: meta.title,
         phase: meta.phase,
-        confirm_status: meta.confirm_status,
         created_at_ms: meta.created_at_ms,
         updated_at_ms: meta.updated_at_ms,
         dir_path: format!("requirements/{id}"),
@@ -293,7 +248,6 @@ fn load_summary(workspace: &Path, id: &str) -> anyhow::Result<RequirementSummary
         id: detail.id,
         title: detail.title,
         phase: detail.phase,
-        confirm_status: detail.confirm_status,
         created_at_ms: detail.created_at_ms,
         updated_at_ms: detail.updated_at_ms,
         dir_path: detail.dir_path,
@@ -373,16 +327,10 @@ pub async fn create_requirement(
     let now = now_ms();
     let phase = payload.phase.unwrap_or(RequirementPhase::Collection);
     let content = payload.content.unwrap_or_default();
-    let confirm_status = if matches!(phase, RequirementPhase::Confirm) {
-        Some(RequirementConfirmStatus::Pending)
-    } else {
-        None
-    };
     let meta = RequirementMeta {
         id: id.clone(),
         title: title.to_string(),
         phase,
-        confirm_status,
         created_at_ms: now,
         updated_at_ms: now,
     };
@@ -435,9 +383,6 @@ pub async fn update_requirement(
         meta.title = trimmed.to_string();
     }
     if let Some(phase) = payload.phase {
-        if matches!(phase, RequirementPhase::Confirm) && meta.confirm_status.is_none() {
-            meta.confirm_status = Some(RequirementConfirmStatus::Pending);
-        }
         meta.phase = phase;
     }
     if let Some(body) = payload.content {
@@ -454,161 +399,8 @@ fn internal_err(err: std::io::Error) -> (axum::http::StatusCode, String) {
     (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
 }
 
-pub async fn confirm_requirement(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-    AxumPath(id): AxumPath<String>,
-) -> Result<Json<RequirementDetail>, (axum::http::StatusCode, String)> {
-    let Some(workspace) = workspace_root(&state) else {
-        return Err((
-            axum::http::StatusCode::CONFLICT,
-            i18n::msg(&headers, "workspace_not_configured"),
-        ));
-    };
-    let id = normalize_requirement_id(&id).map_err(map_requirement_err(&headers))?;
-    let file_path = requirement_file_path(&workspace, &id);
-    if !file_path.exists() {
-        return Err((
-            axum::http::StatusCode::NOT_FOUND,
-            i18n::msg(&headers, "requirement_not_found"),
-        ));
-    }
-    let raw = fs::read_to_string(&file_path).map_err(internal_err)?;
-    let (mut meta, content) =
-        parse_requirement_md(&raw).map_err(|_| {
-            (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                i18n::msg(&headers, "requirement_parse_failed"),
-            )
-        })?;
-    meta.confirm_status = Some(RequirementConfirmStatus::Confirmed);
-    meta.phase = RequirementPhase::Development;
-    meta.updated_at_ms = now_ms();
-    fs::write(&file_path, format_requirement_md(&meta, &content)).map_err(internal_err)?;
-    load_requirement_detail(&workspace, &id)
-        .map(Json)
-        .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
-}
-
-pub async fn abandon_requirement(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-    AxumPath(id): AxumPath<String>,
-) -> Result<Json<RequirementDetail>, (axum::http::StatusCode, String)> {
-    let Some(workspace) = workspace_root(&state) else {
-        return Err((
-            axum::http::StatusCode::CONFLICT,
-            i18n::msg(&headers, "workspace_not_configured"),
-        ));
-    };
-    let id = normalize_requirement_id(&id).map_err(map_requirement_err(&headers))?;
-    let file_path = requirement_file_path(&workspace, &id);
-    if !file_path.exists() {
-        return Err((
-            axum::http::StatusCode::NOT_FOUND,
-            i18n::msg(&headers, "requirement_not_found"),
-        ));
-    }
-    let raw = fs::read_to_string(&file_path).map_err(internal_err)?;
-    let (mut meta, content) =
-        parse_requirement_md(&raw).map_err(|_| {
-            (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                i18n::msg(&headers, "requirement_parse_failed"),
-            )
-        })?;
-    meta.confirm_status = Some(RequirementConfirmStatus::Abandoned);
-    meta.updated_at_ms = now_ms();
-    fs::write(&file_path, format_requirement_md(&meta, &content)).map_err(internal_err)?;
-
-    // Move requirement directory to archived directory
-    let archived_root = archived_requirement_root(&workspace);
-    fs::create_dir_all(&archived_root)
-        .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
-    let active_dir = requirement_dir(&workspace, &id);
-    let archived_dir = archived_root.join(&id);
-    if archived_dir.exists() {
-        fs::remove_dir_all(&archived_dir)
-            .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
-    }
-    fs::rename(&active_dir, &archived_dir)
-        .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
-
-    // Load summary from archived location
-    let summary = load_archived_summary(&workspace, &id)
-        .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
-    Ok(Json(RequirementDetail {
-        id: summary.id,
-        title: summary.title,
-        phase: summary.phase,
-        confirm_status: summary.confirm_status,
-        created_at_ms: summary.created_at_ms,
-        updated_at_ms: summary.updated_at_ms,
-        dir_path: summary.dir_path,
-        content,
-        subdirs: Vec::new(),
-    }))
-}
-
-pub async fn reconfirm_requirement(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-    AxumPath(id): AxumPath<String>,
-) -> Result<Json<RequirementDetail>, (axum::http::StatusCode, String)> {
-    let Some(workspace) = workspace_root(&state) else {
-        return Err((
-            axum::http::StatusCode::CONFLICT,
-            i18n::msg(&headers, "workspace_not_configured"),
-        ));
-    };
-    let id = normalize_requirement_id(&id).map_err(map_requirement_err(&headers))?;
-
-    // The requirement file is now in the archived directory
-    let archived_root = archived_requirement_root(&workspace);
-    let archived_dir = archived_root.join(&id);
-    let archived_file_path = archived_dir.join(REQUIREMENT_FILE);
-    if !archived_file_path.exists() {
-        return Err((
-            axum::http::StatusCode::NOT_FOUND,
-            i18n::msg(&headers, "requirement_not_found"),
-        ));
-    }
-
-    let raw = fs::read_to_string(&archived_file_path).map_err(internal_err)?;
-    let (mut meta, content) =
-        parse_requirement_md(&raw).map_err(|_| {
-            (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                i18n::msg(&headers, "requirement_parse_failed"),
-            )
-        })?;
-    if !matches!(meta.confirm_status, Some(RequirementConfirmStatus::Abandoned)) {
-        return Err((
-            axum::http::StatusCode::BAD_REQUEST,
-            i18n::msg(&headers, "requirement_phase_invalid"),
-        ));
-    }
-    meta.confirm_status = Some(RequirementConfirmStatus::Confirmed);
-    meta.phase = RequirementPhase::Development;
-    meta.updated_at_ms = now_ms();
-
-    // Move from archived back to active directory
-    let active_dir = requirement_dir(&workspace, &id);
-    if active_dir.exists() {
-        return Err((
-            axum::http::StatusCode::CONFLICT,
-            i18n::msg(&headers, "requirement_already_exists"),
-        ));
-    }
-    fs::rename(&archived_dir, &active_dir)
-        .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
-
-    // Write updated file in active directory
-    let active_file_path = active_dir.join(REQUIREMENT_FILE);
-    fs::write(&active_file_path, format_requirement_md(&meta, &content)).map_err(internal_err)?;
-    load_requirement_detail(&workspace, &id)
-        .map(Json)
-        .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
+pub fn archived_requirement_root(workspace: &Path) -> PathBuf {
+    workspace.join("requirements").join("archived")
 }
 
 /// Lists archived (abandoned) requirements from the archived directory.
@@ -645,7 +437,6 @@ fn load_archived_summary(workspace: &Path, id: &str) -> anyhow::Result<Requireme
         id: meta.id,
         title: meta.title,
         phase: meta.phase,
-        confirm_status: meta.confirm_status,
         created_at_ms: meta.created_at_ms,
         updated_at_ms: meta.updated_at_ms,
         dir_path: format!("requirements/archived/{id}"),
@@ -667,7 +458,63 @@ pub async fn list_archived_requirements(
     Ok(Json(items))
 }
 
-/// Reinstates an archived (abandoned) requirement: moves it back from the archived folder.
+pub async fn abandon_requirement(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<Json<RequirementDetail>, (axum::http::StatusCode, String)> {
+    let Some(workspace) = workspace_root(&state) else {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            i18n::msg(&headers, "workspace_not_configured"),
+        ));
+    };
+    let id = normalize_requirement_id(&id).map_err(map_requirement_err(&headers))?;
+    let file_path = requirement_file_path(&workspace, &id);
+    if !file_path.exists() {
+        return Err((
+            axum::http::StatusCode::NOT_FOUND,
+            i18n::msg(&headers, "requirement_not_found"),
+        ));
+    }
+    let raw = fs::read_to_string(&file_path).map_err(internal_err)?;
+    let (mut meta, content) =
+        parse_requirement_md(&raw).map_err(|_| {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                i18n::msg(&headers, "requirement_parse_failed"),
+            )
+        })?;
+    meta.updated_at_ms = now_ms();
+    fs::write(&file_path, format_requirement_md(&meta, &content)).map_err(internal_err)?;
+
+    let archived_root = archived_requirement_root(&workspace);
+    fs::create_dir_all(&archived_root)
+        .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    let active_dir = requirement_dir(&workspace, &id);
+    let archived_dir = archived_root.join(&id);
+    if archived_dir.exists() {
+        fs::remove_dir_all(&archived_dir)
+            .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    }
+    fs::rename(&active_dir, &archived_dir)
+        .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+
+    let summary = load_archived_summary(&workspace, &id)
+        .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    Ok(Json(RequirementDetail {
+        id: summary.id,
+        title: summary.title,
+        phase: summary.phase,
+        created_at_ms: summary.created_at_ms,
+        updated_at_ms: summary.updated_at_ms,
+        dir_path: summary.dir_path,
+        content,
+        subdirs: Vec::new(),
+    }))
+}
+
+/// Reinstates an archived requirement: moves it back from the archived folder.
 pub async fn reinstate_requirement(
     headers: HeaderMap,
     State(state): State<AppState>,
@@ -699,7 +546,6 @@ pub async fn reinstate_requirement(
     fs::rename(&archived_dir, &active_dir)
         .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
-    // Restore confirm_status to abandoned so it can be reconfirmed
     let file_path = active_dir.join(REQUIREMENT_FILE);
     let raw = fs::read_to_string(&file_path).map_err(internal_err)?;
     let (mut meta, content) = parse_requirement_md(&raw).map_err(|_| {
@@ -708,7 +554,6 @@ pub async fn reinstate_requirement(
             i18n::msg(&headers, "requirement_parse_failed"),
         )
     })?;
-    meta.confirm_status = Some(RequirementConfirmStatus::Abandoned);
     meta.updated_at_ms = now_ms();
     fs::write(&file_path, format_requirement_md(&meta, &content)).map_err(internal_err)?;
 
@@ -717,7 +562,7 @@ pub async fn reinstate_requirement(
         .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
 }
 
-/// Permanently deletes an archived (abandoned) requirement.
+/// Permanently deletes an archived requirement.
 pub async fn hard_delete_requirement(
     headers: HeaderMap,
     State(state): State<AppState>,
@@ -744,6 +589,10 @@ pub async fn hard_delete_requirement(
 
     Ok((axum::http::StatusCode::NO_CONTENT, Json(serde_json::json!({}))))
 }
+
+
+
+
 
 fn map_requirement_err(
     headers: &HeaderMap,
@@ -787,8 +636,7 @@ mod tests {
         let meta = RequirementMeta {
             id: "auth-login".to_string(),
             title: "Auth login".to_string(),
-            phase: RequirementPhase::Review,
-            confirm_status: None,
+            phase: RequirementPhase::Development,
             created_at_ms: 1,
             updated_at_ms: 2,
         };
@@ -796,7 +644,7 @@ mod tests {
         let md = format_requirement_md(&meta, content);
         let (parsed, body) = parse_requirement_md(&md).expect("parse");
         assert_eq!(parsed.id, "auth-login");
-        assert_eq!(parsed.phase, RequirementPhase::Review);
+        assert_eq!(parsed.phase, RequirementPhase::Development);
         assert_eq!(body, content);
     }
 
@@ -838,21 +686,15 @@ mod tests {
     }
 
     #[test]
-    fn confirm_may_advance_from_any_phase() {
+    fn phase_can_be_updated() {
         let mut meta = RequirementMeta {
             id: "feat-a".to_string(),
             title: "Feature".to_string(),
             phase: RequirementPhase::Collection,
-            confirm_status: None,
             created_at_ms: 1,
             updated_at_ms: 1,
         };
-        meta.confirm_status = Some(RequirementConfirmStatus::Confirmed);
         meta.phase = RequirementPhase::Development;
         assert_eq!(meta.phase, RequirementPhase::Development);
-        assert_eq!(
-            meta.confirm_status,
-            Some(RequirementConfirmStatus::Confirmed)
-        );
     }
 }

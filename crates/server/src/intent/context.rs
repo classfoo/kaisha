@@ -80,7 +80,6 @@ mod tests {
             id: "auth".into(),
             title: "Auth".into(),
             phase: crate::requirement::RequirementPhase::Collection,
-            confirm_status: None,
             created_at_ms: 1,
             updated_at_ms: 2,
         };

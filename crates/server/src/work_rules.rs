@@ -51,8 +51,6 @@ pub fn default_work_rules() -> WorkRulesFile {
             ],
             duties: phase_duties(
                 "Clarify user value and scope",
-                "Assess problem-solution fit and acceptance criteria",
-                "Confirm scope boundaries and success metrics",
                 "Break down user stories",
                 "Validate shipped behavior vs goals",
                 "Publish release notes and rollout plan",
@@ -72,8 +70,6 @@ pub fn default_work_rules() -> WorkRulesFile {
             ],
             duties: phase_duties(
                 "Estimate feasibility and dependencies",
-                "Review architecture, risks, and implementation approach",
-                "Commit to technical plan and interfaces",
                 "Implement and document changes",
                 "Support test automation and defect fixes",
                 "Operate and monitor production",
@@ -92,8 +88,6 @@ pub fn default_work_rules() -> WorkRulesFile {
             ],
             duties: phase_duties(
                 "Identify test scenarios early",
-                "Review testability and quality risks",
-                "Sign off test strategy",
                 "Execute tests and report defects",
                 "Regression and release verification",
                 "Post-release quality summary",
@@ -111,8 +105,6 @@ pub fn default_work_rules() -> WorkRulesFile {
             ],
             duties: phase_duties(
                 "Capture operational constraints",
-                "Review rollout, support, and compliance impact",
-                "Confirm operational readiness",
                 "Coordinate launch activities",
                 "Smoke test in production-like env",
                 "Runbook and incident readiness",
@@ -124,16 +116,12 @@ pub fn default_work_rules() -> WorkRulesFile {
 
 fn phase_duties(
     collection: &str,
-    review: &str,
-    confirm: &str,
     development: &str,
     testing: &str,
     release: &str,
 ) -> BTreeMap<String, String> {
     let mut m = BTreeMap::new();
     m.insert("collection".into(), collection.into());
-    m.insert("review".into(), review.into());
-    m.insert("confirm".into(), confirm.into());
     m.insert("development".into(), development.into());
     m.insert("testing".into(), testing.into());
     m.insert("release".into(), release.into());

@@ -97,6 +97,8 @@
       },
       "explore": "探索",
       "exploring": "探索中…",
+      "refresh": "刷新",
+      "refreshing": "刷新中…",
       "exploreError": "启动探索失败",
       "menu": "任务菜单",
       "rerun": "重跑",
@@ -369,34 +371,14 @@
       "saving": "保存中…",
       "phases": {
         "collection": "收集",
-        "review": "评审",
-        "confirm": "确认",
         "development": "开发",
         "testing": "测试",
         "release": "发布"
       },
       "phaseViews": {
-        "confirm": { "empty": "确认阶段内容将在后续版本中展示。" },
         "development": { "empty": "开发阶段内容将在后续版本中展示。" },
         "testing": { "empty": "测试阶段内容将在后续版本中展示。" },
         "release": { "empty": "发布阶段内容将在后续版本中展示。" }
-      },
-      "confirm": {
-        "sectionTitle": "需求确认",
-        "statusLabel": "确认状态",
-        "statusPending": "待确认",
-        "statusConfirmed": "已确认",
-        "statusAbandoned": "已放弃",
-        "confirmAction": "确认需求",
-        "abandonAction": "放弃需求",
-        "reconfirmAction": "重新确认",
-        "confirmDialogTitle": "确认需求",
-        "confirmDialogText": "确认将此需求推进至开发阶段？",
-        "abandonDialogTitle": "放弃需求",
-        "abandonDialogText": "放弃后需求将不进入开发，可随时重新确认。是否继续？",
-        "reconfirmDialogTitle": "重新确认",
-        "reconfirmDialogText": "将已放弃的需求重新确认并推进至开发阶段？",
-        "processing": "处理中…"
       },
       "development": {
         "sectionTitle": "开发阶段",

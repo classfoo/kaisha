@@ -11,6 +11,8 @@ type EmployeeTaskListProps = {
   locale: string
   exploring: boolean
   onExplore: () => void
+  refreshing: boolean
+  onRefresh: () => void
   rerunningTaskId: string | null
   onRerunTask: (taskId: string) => void
   stoppingTaskId: string | null
@@ -80,6 +82,8 @@ export function EmployeeTaskList({
   locale,
   exploring,
   onExplore,
+  refreshing,
+  onRefresh,
   rerunningTaskId,
   onRerunTask,
   stoppingTaskId,
@@ -142,17 +146,30 @@ export function EmployeeTaskList({
     <div className="employee-task-list__toolbar">
       <h4 className="employee-task-list__title">{t('ui.employeeTasks.title')}</h4>
       {selectedEmployeeId ? (
-        <button
-          type="button"
-          className="employee-task-list__tool-btn"
-          title={t('ui.employeeTasks.explore')}
-          aria-label={t('ui.employeeTasks.explore')}
-          onClick={onExplore}
-          disabled={exploreDisabled}
-        >
-          <i className="iconfont icon-filmetotaosuo" aria-hidden="true" />
-          <span>{exploring ? t('ui.employeeTasks.exploring') : t('ui.employeeTasks.explore')}</span>
-        </button>
+        <>
+          <button
+            type="button"
+            className="employee-task-list__tool-btn"
+            title={t('ui.employeeTasks.refresh')}
+            aria-label={t('ui.employeeTasks.refresh')}
+            onClick={onRefresh}
+            disabled={refreshing}
+          >
+            <i className={`iconfont ${refreshing ? 'icon-loading' : 'icon-filmeicon'}`} aria-hidden="true" />
+            <span>{refreshing ? t('ui.employeeTasks.refreshing') : t('ui.employeeTasks.refresh')}</span>
+          </button>
+          <button
+            type="button"
+            className="employee-task-list__tool-btn"
+            title={t('ui.employeeTasks.explore')}
+            aria-label={t('ui.employeeTasks.explore')}
+            onClick={onExplore}
+            disabled={exploreDisabled}
+          >
+            <i className="iconfont icon-filmetotaosuo" aria-hidden="true" />
+            <span>{exploring ? t('ui.employeeTasks.exploring') : t('ui.employeeTasks.explore')}</span>
+          </button>
+        </>
       ) : null}
     </div>
   )

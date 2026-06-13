@@ -215,7 +215,6 @@ pub fn start_review(workspace: &Path, requirement_id: &str) -> anyhow::Result<Re
         abandoned_participants: Vec::new(),
     };
     fs::write(state_path(workspace, &id), serde_json::to_string_pretty(&state)?)?;
-    set_requirement_phase(workspace, &id, RequirementPhase::Review)?;
     ensure_review_work_tasks(workspace, &id, &state, &employees)?;
     Ok(state)
 }
@@ -688,7 +687,6 @@ fn reopen_review_if_completed(workspace: &Path, state: &mut ReviewStateFile) -> 
     state.current_reviewer_id = None;
     state.current_task = None;
     save_state(workspace, state)?;
-    set_requirement_phase(workspace, &state.requirement_id, RequirementPhase::Review)?;
     Ok(())
 }
 
@@ -1053,7 +1051,7 @@ pub fn run_requirement_review(
             .unwrap_or(ReviewConclusion::Supplement);
 
         let next_phase = match conclusion {
-            ReviewConclusion::Adopt => RequirementPhase::Confirm,
+            ReviewConclusion::Adopt => RequirementPhase::Development,
             ReviewConclusion::Supplement => RequirementPhase::Collection,
         };
         set_requirement_phase(workspace, &id, next_phase)?;
@@ -1504,7 +1502,7 @@ pub fn force_pass_review(workspace: &Path, requirement_id: &str) -> anyhow::Resu
     state.current_task = None;
     save_state(workspace, &state)?;
 
-    set_requirement_phase(workspace, &id, RequirementPhase::Confirm)?;
+    set_requirement_phase(workspace, &id, RequirementPhase::Development)?;
     load_review_wire(workspace, &id)
 }
 
@@ -1827,8 +1825,7 @@ mod tests {
                 &RequirementMeta {
                     id: "auth".into(),
                     title: "User auth".into(),
-                    phase: RequirementPhase::Review,
-                    confirm_status: None,
+                    phase: RequirementPhase::Collection,
                     created_at_ms: 1,
                     updated_at_ms: 2,
                 },

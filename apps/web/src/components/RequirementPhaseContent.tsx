@@ -2,8 +2,6 @@ import React from 'react'
 import type { useRequirementsWorkspace } from '../features/requirements/useRequirementsWorkspace'
 import type { RequirementPhase } from '../features/requirements/requirementsApi'
 import { phaseViewKind } from '../features/requirements/requirementPhaseView'
-import { RequirementReviewSection } from './RequirementReviewSection'
-import { RequirementConfirmSection } from './RequirementConfirmSection'
 import { RequirementDevelopmentSection } from './RequirementDevelopmentSection'
 
 type RequirementPhaseContentProps = {
@@ -23,13 +21,7 @@ export function RequirementPhaseContent({
   requirements,
   t,
 }: RequirementPhaseContentProps) {
-  const { detail, loadReview } = requirements
   const kind = phaseViewKind(viewPhase)
-
-  React.useEffect(() => {
-    if (!detail || kind !== 'review') return
-    void loadReview(detail.id).catch(() => undefined)
-  }, [detail?.id, kind, loadReview])
 
   if (kind === 'collection') {
     return (
@@ -44,24 +36,6 @@ export function RequirementPhaseContent({
           onChange={(e) => onContentChange(e.target.value)}
           placeholder={t('ui.requirements.contentPlaceholder')}
         />
-      </section>
-    )
-  }
-
-  if (kind === 'review') {
-    return (
-      <section className="requirement-detail__stage requirement-detail__stage--review">
-        <h3 className="requirement-detail__label">{t('ui.requirements.review.sectionTitle')}</h3>
-        <RequirementReviewSection requirements={requirements} t={t} />
-      </section>
-    )
-  }
-
-  if (kind === 'confirm') {
-    return (
-      <section className="requirement-detail__stage requirement-detail__stage--confirm">
-        <h3 className="requirement-detail__label">{t('ui.requirements.confirm.sectionTitle')}</h3>
-        <RequirementConfirmSection requirements={requirements} t={t} />
       </section>
     )
   }
