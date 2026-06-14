@@ -25,7 +25,7 @@ type EmployeeListProps = {
   hardDeletingEmployeeId: string | null
 }
 
-export function EmployeeList({
+export const EmployeeList = React.memo(function EmployeeList({
   employees,
   selectedEmployeeId,
   onSelectEmployee,
@@ -227,4 +227,4 @@ export function EmployeeList({
       />
     </div>
   )
-}
+})

@@ -73,7 +73,7 @@ function isTaskOutputPending(status: AgentTaskStatus): boolean {
   return status === 'pending' || status === 'running' || status === 'queued_rerun'
 }
 
-export function EmployeeTaskList({
+export const EmployeeTaskList = React.memo(function EmployeeTaskList({
   tasks,
   loading,
   error,
@@ -297,4 +297,4 @@ export function EmployeeTaskList({
       />
     </div>
   )
-}
+})

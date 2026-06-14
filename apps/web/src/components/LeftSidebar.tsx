@@ -61,7 +61,7 @@ function SidebarIcon({ menu }: { menu: NavMenu }) {
   )
 }
 
-export function LeftSidebar({
+export const LeftSidebar = React.memo(function LeftSidebar({
   activeNav,
   topNavItems,
   bottomNavItems,
@@ -148,4 +148,4 @@ export function LeftSidebar({
       </nav>
     </aside>
   )
-}
+})

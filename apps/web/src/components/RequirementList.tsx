@@ -17,7 +17,7 @@ type RequirementListProps = {
   hardDeletingId?: string | null
 }
 
-export function RequirementList({
+export const RequirementList = React.memo(function RequirementList({
   items,
   selectedId,
   onSelect,
@@ -177,4 +177,4 @@ export function RequirementList({
       />
     </div>
   )
-}
+})

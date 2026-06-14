@@ -13,7 +13,7 @@ type GitPanelProps = {
 
 const REMOTE_PREFIX = 'remote:'
 
-export function GitPanel({ git, t }: GitPanelProps) {
+export const GitPanel = React.memo(function GitPanel({ git, t }: GitPanelProps) {
   const {
     selectedRepo,
     status,
@@ -304,4 +304,4 @@ export function GitPanel({ git, t }: GitPanelProps) {
       />
     </div>
   )
-}
+})

@@ -411,6 +411,8 @@ export function useEmployeeChatMessages(
   onStreamDone?: () => void,
 ) {
   const [serverMessages, setServerMessages] = React.useState<ChatWireMessage[]>([])
+  const serverMessagesRef = React.useRef(serverMessages)
+  serverMessagesRef.current = serverMessages
   const [optimisticUser, setOptimisticUser] = React.useState<ChatWireMessage | null>(null)
   const [streamingAssistant, setStreamingAssistant] =
     React.useState<StreamingAssistantState>(EMPTY_STREAM)
@@ -496,18 +498,18 @@ export function useEmployeeChatMessages(
   const [processAliveStatus, setProcessAliveStatus] = React.useState<Map<string, boolean>>(new Map())
 
   React.useEffect(() => {
-    // Extract task_ids from messages that are running
-    const runningTaskIds = serverMessages
-      .filter(m => m.role === 'task_process' && m.task_status === 'running' && m.task_id)
-      .map(m => m.task_id as string)
-
-    if (runningTaskIds.length === 0) {
-      setProcessAliveStatus(new Map())
-      return
-    }
-
     const pollInterval = 2000 // 2 seconds
     const poll = async () => {
+      // Read latest messages from ref to avoid re-running effect on every SSE update
+      const runningTaskIds = serverMessagesRef.current
+        .filter(m => m.role === 'task_process' && m.task_status === 'running' && m.task_id)
+        .map(m => m.task_id as string)
+
+      if (runningTaskIds.length === 0) {
+        setProcessAliveStatus(new Map())
+        return
+      }
+
       const newStatus = new Map<string, boolean>()
       for (const taskId of runningTaskIds) {
         try {
@@ -517,11 +519,9 @@ export function useEmployeeChatMessages(
             const data = await res.json() as { alive: boolean }
             newStatus.set(taskId, data.alive)
           } else {
-            // Task not found or error - consider it dead
             newStatus.set(taskId, false)
           }
         } catch {
-          // Network error - consider it dead
           newStatus.set(taskId, false)
         }
       }
@@ -532,7 +532,7 @@ export function useEmployeeChatMessages(
     void poll()
     const timer = setInterval(poll, pollInterval)
     return () => clearInterval(timer)
-  }, [apiBase, serverMessages, headers])
+  }, [apiBase, headers])
 
   const isProcessAlive = React.useCallback((taskId: string): boolean => {
     return processAliveStatus.get(taskId) ?? false

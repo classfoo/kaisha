@@ -76,7 +76,7 @@ type LeftPanelProps = {
   locale: string
 }
 
-export function LeftPanel({
+export const LeftPanel = React.memo(function LeftPanel({
   panelKey,
   sidePanelWidth,
   employees,
@@ -320,4 +320,4 @@ export function LeftPanel({
       <div className="side-panel-resizer" onMouseDown={onResizeMouseDown} />
     </div>
   )
-}
+})

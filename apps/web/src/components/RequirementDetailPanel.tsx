@@ -10,7 +10,7 @@ type RequirementDetailPanelProps = {
   t: (key: string) => string
 }
 
-export function RequirementDetailPanel({ requirements, phaseLabel, t }: RequirementDetailPanelProps) {
+export const RequirementDetailPanel = React.memo(function RequirementDetailPanel({ requirements, phaseLabel, t }: RequirementDetailPanelProps) {
   const { detail, loading, busy, error, saveRequirement } = requirements
   const [titleDraft, setTitleDraft] = React.useState('')
   const [phaseDraft, setPhaseDraft] = React.useState<RequirementPhase>('collection')
@@ -236,4 +236,4 @@ export function RequirementDetailPanel({ requirements, phaseLabel, t }: Requirem
       />
     </div>
   )
-}
+})

@@ -8,7 +8,7 @@ type GitRepoListProps = {
   t: (key: string) => string
 }
 
-export function GitRepoList({ repos, selectedRepoId, onSelectRepo, t }: GitRepoListProps) {
+export const GitRepoList = React.memo(function GitRepoList({ repos, selectedRepoId, onSelectRepo, t }: GitRepoListProps) {
   return (
     <div className="git-repo-list" role="listbox" aria-label={t('ui.git.repoList')}>
       {repos.length === 0 ? (
@@ -39,4 +39,4 @@ export function GitRepoList({ repos, selectedRepoId, onSelectRepo, t }: GitRepoL
       )}
     </div>
   )
-}
+})

@@ -40,10 +40,10 @@ type WorkAreaProps = {
   onMessageDraftChange: (value: string) => void
   onCloseSettings: () => void
   onSetSettingsSection: (value: 'tools' | 'departments' | 'roles' | 'employees' | 'work_rules' | 'language') => void
-  renderSettingsCards: () => React.ReactNode
+  settingsCards: React.ReactNode
 }
 
-export function WorkArea({
+export const WorkArea = React.memo(function WorkArea({
   workAreaKey,
   activeNav,
   splitPane,
@@ -72,7 +72,7 @@ export function WorkArea({
   onMessageDraftChange,
   onCloseSettings,
   onSetSettingsSection,
-  renderSettingsCards,
+  settingsCards,
 }: WorkAreaProps) {
   const needsWorkspaceSetup = workspaceConfigured === false
   const usesSplitLayout = splitPane !== null
@@ -306,11 +306,11 @@ export function WorkArea({
               </button>
             </aside>
             <section className="settings-content">
-              {renderSettingsCards()}
+              {settingsCards}
             </section>
           </div>
         </div>
       ) : null}
     </>
   )
-}
+})

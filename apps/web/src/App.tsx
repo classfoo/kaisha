@@ -9,7 +9,7 @@ import { LeftPanel } from './components/LeftPanel'
 import { useEmployeeTasks } from './features/employee-tasks/useEmployeeTasks'
 import { createEmployeeTasksApi } from './features/employee-tasks/employeeTasksApi'
 import { WorkArea } from './components/WorkArea'
-import { WorkRulesSettings } from './components/WorkRulesSettings'
+import { SettingsCards } from './components/SettingsCards'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8080'
 
@@ -44,18 +44,10 @@ type ToolKind =
   | 'cursor_cli'
   | 'kimi_cli'
   | 'codex'
-type ToolFieldSchema = {
-  key: string
-  label: string
-  field_type: 'text' | 'number' | 'boolean' | 'select' | 'password'
-  required: boolean
-  options: string[]
-  placeholder?: string
-}
 type ToolCatalogItem = {
   kind: ToolKind
   display_name: string
-  schema: { title: string; fields: ToolFieldSchema[] }
+  schema: { title: string; fields: { key: string; label: string; field_type: 'text' | 'number' | 'boolean' | 'select' | 'password'; required: boolean; options: string[]; placeholder?: string }[] }
 }
 type ToolInstance = {
   id: string
@@ -426,7 +418,7 @@ export default function App() {
 
   const nextId = React.useRef(1)
 
-  const createTool = async () => {
+  const createTool = React.useCallback(async () => {
     setToolError('')
     try {
       const response = await fetch(`${API_BASE}/api/tools/instances`, {
@@ -445,15 +437,9 @@ export default function App() {
     } catch (err) {
       setToolError(err instanceof Error ? err.message : tt('ui.settings.tools.saveError'))
     }
-  }
+  }, [locale, toolKindDraft, toolInstances, tt])
 
-  const activeTool = toolInstances.find((item) => item.id === activeToolId) ?? null
-  const activeCatalog =
-    toolCatalog.find((item) => item.kind === activeTool?.kind) ??
-    toolCatalog.find((item) => item.kind === toolKindDraft) ??
-    null
-
-  const saveActiveTool = async () => {
+  const saveActiveTool = React.useCallback(async () => {
     if (!activeToolId) return
     setToolSaving(true)
     setToolError('')
@@ -475,9 +461,9 @@ export default function App() {
     } finally {
       setToolSaving(false)
     }
-  }
+  }, [activeToolId, locale, toolNameDraft, toolEnabledDraft, toolConfigDraft, tt])
 
-  const addDepartment = () => {
+  const addDepartment = React.useCallback(() => {
     if (!departmentForm.name.trim() || !departmentForm.lead.trim()) return
     setDepartments((prev) => [
       ...prev,
@@ -488,9 +474,9 @@ export default function App() {
       },
     ])
     setDepartmentForm({ name: '', lead: '' })
-  }
+  }, [departmentForm.name, departmentForm.lead])
 
-  const addRole = () => {
+  const addRole = React.useCallback(() => {
     if (!roleName.trim()) return
     setRoles((prev) => [
       ...prev,
@@ -502,9 +488,9 @@ export default function App() {
     ])
     setRoleName('')
     setRoleForm('mid')
-  }
+  }, [roleName, roleForm])
 
-  const addEmployee = async () => {
+  const addEmployee = React.useCallback(async () => {
     console.debug('[employee:create] settings add requested', {
       workspaceConfigured: workspace?.configured ?? false,
       creatingEmployee,
@@ -565,9 +551,9 @@ export default function App() {
     } finally {
       setCreatingEmployee(false)
     }
-  }
+  }, [workspace?.configured, creatingEmployee, employeeForm, locale, tt])
 
-  const hireEmployee = async () => {
+  const hireEmployee = React.useCallback(async () => {
     console.debug('[employee:hire] sidebar hire requested', {
       workspaceConfigured: workspace?.configured ?? false,
       creatingEmployee,
@@ -612,9 +598,9 @@ export default function App() {
     } finally {
       setCreatingEmployee(false)
     }
-  }
+  }, [workspace?.configured, creatingEmployee, employeeDirectory.length, locale, employeeTasks.refresh, tt])
 
-  const fireEmployee = async (id: string) => {
+  const fireEmployee = React.useCallback(async (id: string) => {
     if (!workspace?.configured) return
     setDeletingEmployeeId(id)
     setEmployeeCreateError('')
@@ -642,9 +628,9 @@ export default function App() {
     } finally {
       setDeletingEmployeeId(null)
     }
-  }
+  }, [workspace?.configured, locale, employeeDirectory, tt])
 
-  const reinstateEmployee = async (id: string) => {
+  const reinstateEmployee = React.useCallback(async (id: string) => {
     if (!workspace?.configured) return
     setReinstateEmployeeId(id)
     setEmployeeCreateError('')
@@ -676,9 +662,9 @@ export default function App() {
     } finally {
       setReinstateEmployeeId(null)
     }
-  }
+  }, [workspace?.configured, locale, tt])
 
-  const handoverEmployee = async (id: string) => {
+  const handoverEmployee = React.useCallback(async (id: string) => {
     if (!workspace?.configured) return
     setHandoverEmployeeId(id)
     setEmployeeCreateError('')
@@ -704,9 +690,9 @@ export default function App() {
     } finally {
       setHandoverEmployeeId(null)
     }
-  }
+  }, [workspace?.configured, selectedEmployeeId, locale, tt])
 
-  const hardDeleteEmployee = async (id: string) => {
+  const hardDeleteEmployee = React.useCallback(async (id: string) => {
     if (!workspace?.configured) return
     setHardDeletingEmployeeId(id)
     setEmployeeCreateError('')
@@ -732,9 +718,24 @@ export default function App() {
     } finally {
       setHardDeletingEmployeeId(null)
     }
-  }
+  }, [workspace?.configured, selectedEmployeeId, locale, tt])
 
-  const handleNavMenuClick = (menu: NavMenu) => {
+  const toggleShop = React.useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/shop/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-lang': locale },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setShopOpen(data.is_open)
+      }
+    } catch {
+      // ignore network errors
+    }
+  }, [locale])
+
+  const handleNavMenuClick = React.useCallback((menu: NavMenu) => {
     setActiveNav(menu)
     setSettingsOpen(false)
     setWorkspace(null)
@@ -745,331 +746,32 @@ export default function App() {
     setSelectedEmployeeId(null)
     setMessageDraft('')
     setRefreshTick((prev) => prev + 1)
-  }
+  }, [])
 
-  const startResizePanel = (event: React.MouseEvent<HTMLDivElement>) => {
+  const startResizePanel = React.useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     resizeStartXRef.current = event.clientX
     resizeStartWidthRef.current = sidePanelWidth
     setResizingPanel(true)
-  }
+  }, [sidePanelWidth])
 
-  const renderSettingsCards = () => {
-    if (settingsSection === 'tools') {
-      return (
-        <>
-          <section className="settings-card">
-            <div className="settings-toolbar">
-              <h3 className="settings-card__title">{tt('ui.settings.tools.registration')}</h3>
-              <div className="settings-toolbar__actions">
-                <select
-                  className="settings-input"
-                  value={toolKindDraft}
-                  onChange={(event) => setToolKindDraft(event.target.value as ToolKind)}
-                >
-                  {toolCatalog.map((tool) => (
-                    <option key={tool.kind} value={tool.kind}>
-                      {tool.display_name}
-                    </option>
-                  ))}
-                </select>
-                <button className="action-btn" onClick={createTool}>{tt('ui.settings.tools.add')}</button>
-              </div>
-            </div>
-            {toolError ? <p className="workspace-setup__error">{toolError}</p> : null}
-          </section>
-          <section className="settings-card">
-            <h3 className="settings-card__title">{tt('ui.settings.tools.list')}</h3>
-            {toolInstances.length === 0 ? <p className="settings-empty">{tt('ui.settings.tools.empty')}</p> : (
-              <div className="settings-list">
-                {toolInstances.map((item) => (
-                  <div
-                    key={item.id}
-                    className={`settings-list__row ${item.id === activeToolId ? 'settings-list__row--active' : ''}`}
-                    onClick={() => {
-                      setActiveToolId(item.id)
-                      setToolNameDraft(item.name)
-                      setToolEnabledDraft(item.enabled)
-                      setToolConfigDraft(item.config ?? {})
-                    }}
-                  >
-                    <div>
-                      <div>{item.name}</div>
-                      <div className="settings-subtext">{item.kind}</div>
-                    </div>
-                    <span>{item.enabled ? tt('ui.settings.tools.on') : tt('ui.settings.tools.off')}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-          {activeCatalog && activeTool ? (
-            <section className="settings-card">
-              <h3 className="settings-card__title">{activeCatalog.schema.title}</h3>
-              <div className="settings-grid">
-                <input
-                  className="settings-input"
-                  value={toolNameDraft}
-                  placeholder={tt('ui.settings.tools.name')}
-                  onChange={(event) => setToolNameDraft(event.target.value)}
-                />
-                <label className="settings-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={toolEnabledDraft}
-                    onChange={(event) => setToolEnabledDraft(event.target.checked)}
-                  />
-                  {tt('ui.settings.tools.enabled')}
-                </label>
-                <div />
-                {activeCatalog.schema.fields.map((field) => (
-                  <React.Fragment key={field.key}>
-                    {field.field_type === 'boolean' ? (
-                      <label className="settings-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(toolConfigDraft[field.key])}
-                          onChange={(event) =>
-                            setToolConfigDraft((prev) => ({ ...prev, [field.key]: event.target.checked }))
-                          }
-                        />
-                        {field.label}
-                      </label>
-                    ) : field.field_type === 'select' ? (
-                      <select
-                        className="settings-input"
-                        value={String(toolConfigDraft[field.key] ?? '')}
-                        onChange={(event) =>
-                          setToolConfigDraft((prev) => ({ ...prev, [field.key]: event.target.value }))
-                        }
-                      >
-                        {field.options.map((opt) => (
-                          <option key={opt} value={opt}>
-                            {opt}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        className="settings-input"
-                        type={field.field_type === 'password' ? 'password' : 'text'}
-                        value={String(toolConfigDraft[field.key] ?? '')}
-                        placeholder={field.placeholder ?? field.label}
-                        onChange={(event) =>
-                          setToolConfigDraft((prev) => ({ ...prev, [field.key]: event.target.value }))
-                        }
-                      />
-                    )}
-                    <div className="settings-subtext">{field.label}</div>
-                    <div />
-                  </React.Fragment>
-                ))}
-              </div>
-              <button className="action-btn" onClick={saveActiveTool} disabled={toolSaving}>
-                {toolSaving ? tt('ui.actions.saving') : tt('ui.settings.tools.save')}
-              </button>
-            </section>
-          ) : null}
-        </>
-      )
-    }
-
-    if (settingsSection === 'departments') {
-      return (
-        <>
-          <section className="settings-card">
-            <h3 className="settings-card__title">{tt('ui.settings.departments.setup')}</h3>
-            <div className="settings-grid">
-              <input
-                className="settings-input"
-                placeholder={tt('ui.settings.departments.name')}
-                value={departmentForm.name}
-                onChange={(event) => setDepartmentForm((prev) => ({ ...prev, name: event.target.value }))}
-              />
-              <input
-                className="settings-input"
-                placeholder={tt('ui.settings.departments.lead')}
-                value={departmentForm.lead}
-                onChange={(event) => setDepartmentForm((prev) => ({ ...prev, lead: event.target.value }))}
-              />
-              <button className="action-btn" onClick={addDepartment}>{tt('ui.settings.departments.add')}</button>
-            </div>
-          </section>
-          <section className="settings-card">
-            <h3 className="settings-card__title">{tt('ui.settings.departments.list')}</h3>
-            {departments.length === 0 ? <p className="settings-empty">{tt('ui.settings.departments.empty')}</p> : (
-              <div className="settings-list">
-                {departments.map((item) => (
-                  <div key={item.id} className="settings-list__row">
-                    <div>{item.name}</div>
-                    <div className="settings-subtext">{tt('ui.settings.departments.leadPrefix')}: {item.lead}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        </>
-      )
-    }
-
-    if (settingsSection === 'roles') {
-      return (
-        <>
-          <section className="settings-card">
-            <h3 className="settings-card__title">{tt('ui.settings.roles.setup')}</h3>
-            <div className="settings-grid">
-              <input
-                className="settings-input"
-                placeholder={tt('ui.settings.roles.name')}
-                value={roleName}
-                onChange={(event) => setRoleName(event.target.value)}
-              />
-              <select
-                className="settings-input"
-                value={roleForm}
-                onChange={(event) => setRoleForm(event.target.value as RoleItem['level'])}
-              >
-                <option value="junior">{tt('ui.settings.roles.junior')}</option>
-                <option value="mid">{tt('ui.settings.roles.mid')}</option>
-                <option value="senior">{tt('ui.settings.roles.senior')}</option>
-              </select>
-              <button className="action-btn" onClick={addRole}>{tt('ui.settings.roles.add')}</button>
-            </div>
-          </section>
-          <section className="settings-card">
-            <h3 className="settings-card__title">{tt('ui.settings.roles.list')}</h3>
-            {roles.length === 0 ? <p className="settings-empty">{tt('ui.settings.roles.empty')}</p> : (
-              <div className="settings-list">
-                {roles.map((item) => (
-                  <div key={item.id} className="settings-list__row">
-                    <div>{item.name}</div>
-                    <div className="settings-subtext">{item.level}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        </>
-      )
-    }
-
-    if (settingsSection === 'work_rules') {
-      return <WorkRulesSettings apiBase={API_BASE} locale={locale} t={tt} />
-    }
-
-    if (settingsSection === 'language') {
-      return (
-        <>
-          <section className="settings-card">
-            <h3 className="settings-card__title">{tt('ui.settings.language.title')}</h3>
-            <div className="settings-grid">
-              <label className="settings-subtext">{tt('ui.language.label')}</label>
-              <select
-                className="settings-input"
-                value={locale}
-                onChange={(event) => setLocale(event.target.value as Locale)}
-              >
-                <option value="en">{tt('ui.language.en')}</option>
-                <option value="zh">{tt('ui.language.zh')}</option>
-                <option value="ja">{tt('ui.language.ja')}</option>
-              </select>
-              <div />
-            </div>
-          </section>
-          <section className="settings-card">
-            <h3 className="settings-card__title">{tt('ui.settings.chatIdentity.title')}</h3>
-            <div className="settings-grid">
-              <label className="settings-subtext" htmlFor="chat-identity-display-name">
-                {tt('ui.settings.chatIdentity.displayName')}
-              </label>
-              <input
-                id="chat-identity-display-name"
-                className="settings-input"
-                value={chatIdentityDraft.displayName}
-                onChange={(event) =>
-                  setChatIdentityDraft((prev) => ({ ...prev, displayName: event.target.value }))
-                }
-                placeholder={tt('ui.settings.chatIdentity.displayNamePlaceholder')}
-              />
-              <div />
-              <label className="settings-subtext" htmlFor="chat-identity-avatar-url">
-                {tt('ui.settings.chatIdentity.avatarUrl')}
-              </label>
-              <input
-                id="chat-identity-avatar-url"
-                className="settings-input"
-                type="url"
-                inputMode="url"
-                value={chatIdentityDraft.avatarUrl}
-                onChange={(event) =>
-                  setChatIdentityDraft((prev) => ({ ...prev, avatarUrl: event.target.value }))
-                }
-                placeholder={tt('ui.settings.chatIdentity.avatarUrlPlaceholder')}
-              />
-              <div />
-              <p className="settings-subtext settings-subtext--block">{tt('ui.settings.chatIdentity.avatarHint')}</p>
-            </div>
-          </section>
-        </>
-      )
-    }
-
-    return (
-      <>
-        <section className="settings-card">
-          <h3 className="settings-card__title">{tt('ui.settings.employees.setup')}</h3>
-          <div className="settings-grid">
-            <input
-              className="settings-input"
-              placeholder={tt('ui.settings.employees.name')}
-              value={employeeForm.name}
-              onChange={(event) => setEmployeeForm((prev) => ({ ...prev, name: event.target.value }))}
-            />
-            <select
-              className="settings-input"
-              value={employeeForm.department}
-              onChange={(event) => setEmployeeForm((prev) => ({ ...prev, department: event.target.value }))}
-            >
-              <option value="">{tt('ui.settings.employees.selectDepartment')}</option>
-              {departments.map((item) => (
-                <option key={item.id} value={item.name}>{item.name}</option>
-              ))}
-            </select>
-            <select
-              className="settings-input"
-              value={employeeForm.role}
-              onChange={(event) => setEmployeeForm((prev) => ({ ...prev, role: event.target.value }))}
-            >
-              <option value="">{tt('ui.settings.employees.selectRole')}</option>
-              {roles.map((item) => (
-                <option key={item.id} value={item.name}>{item.name}</option>
-              ))}
-            </select>
-            <button
-              className="action-btn"
-              onClick={() => void addEmployee()}
-              disabled={creatingEmployee}
-            >
-              {creatingEmployee ? tt('ui.employeeList.creating') : tt('ui.settings.employees.add')}
-            </button>
-          </div>
-        </section>
-        <section className="settings-card">
-          <h3 className="settings-card__title">{tt('ui.settings.employees.list')}</h3>
-          {employeeDirectory.length === 0 ? <p className="settings-empty">{tt('ui.settings.employees.empty')}</p> : (
-            <div className="settings-list">
-              {employeeDirectory.map((item) => (
-                <div key={item.id} className="settings-list__row">
-                  <div>{item.name}</div>
-                  <div className="settings-subtext">{item.department} / {item.role}</div>
-                </div>
-              ))}
-            </div>
-          )}
-          {employeeCreateError ? <p className="workspace-setup__error">{employeeCreateError}</p> : null}
-        </section>
-      </>
-    )
-  }
+  const toggleArchived = React.useCallback(() => setShowArchived((v) => !v), [])
+  const toggleRequirementsArchived = React.useCallback(() => requirements.setShowArchived((v: boolean) => !v), [requirements.setShowArchived])
+  const createGitRepo = React.useCallback(() => {
+    const name = newGitRepoName.trim()
+    if (!name) return
+    void git.createRepo(name).then(() => setNewGitRepoName(''))
+  }, [newGitRepoName, git.createRepo])
+  const createRequirement = React.useCallback(() => {
+    const title = newRequirementTitle.trim()
+    if (!title) return
+    void requirements.createRequirement(title).then(() => setNewRequirementTitle(''))
+  }, [newRequirementTitle, requirements.createRequirement])
+  const refreshEmployeeTasks = React.useCallback(() => {
+    setEmployeeTasksRefreshing(true)
+    void employeeTasks.refresh().finally(() => setEmployeeTasksRefreshing(false))
+  }, [employeeTasks.refresh])
+  const openSettings = React.useCallback(() => setSettingsOpen(true), [])
+  const closeSettings = React.useCallback(() => setSettingsOpen(false), [])
 
   const usesSplitWorkArea =
     activeNav === 'chat' ||
@@ -1087,20 +789,7 @@ export default function App() {
         t={tt}
         onMenuClick={handleNavMenuClick}
         onSettingsClick={() => setSettingsOpen(true)}
-        onShopToggle={async () => {
-          try {
-            const res = await fetch(`${API_BASE}/api/shop/toggle`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'x-lang': locale },
-            })
-            if (res.ok) {
-              const data = await res.json()
-              setShopOpen(data.is_open)
-            }
-          } catch {
-            // ignore network errors
-          }
-        }}
+        onShopToggle={toggleShop}
       />
       <WorkArea
         workAreaKey={`work-area-${activeNav}-${refreshTick}`}
@@ -1120,50 +809,42 @@ export default function App() {
             workspaceConfigured={Boolean(workspace?.configured)}
             status={status}
             t={tt}
-            onCreateEmployee={() => void hireEmployee()}
+            onCreateEmployee={hireEmployee}
             showArchived={showArchived}
-            onToggleArchived={() => setShowArchived((v) => !v)}
+            onToggleArchived={toggleArchived}
             archivedEmployees={archivedEmployees}
             reinstateEmployeeId={reinstateEmployeeId}
-            onReinstateEmployee={(id) => void reinstateEmployee(id)}
+            onReinstateEmployee={reinstateEmployee}
             handoverEmployeeId={handoverEmployeeId}
-            onHandoverEmployee={(id) => void handoverEmployee(id)}
+            onHandoverEmployee={handoverEmployee}
             hardDeletingEmployeeId={hardDeletingEmployeeId}
-            onHardDeleteEmployee={(id) => void hardDeleteEmployee(id)}
+            onHardDeleteEmployee={hardDeleteEmployee}
             onResizeMouseDown={startResizePanel}
             gitRepos={git.repos}
             selectedGitRepoId={git.selectedRepoId}
-            onSelectGitRepo={(id) => void git.selectRepo(id)}
+            onSelectGitRepo={git.selectRepo}
             newGitRepoName={newGitRepoName}
             onNewGitRepoNameChange={setNewGitRepoName}
-            onCreateGitRepo={() => {
-              const name = newGitRepoName.trim()
-              if (!name) return
-              void git.createRepo(name).then(() => setNewGitRepoName(''))
-            }}
+            onCreateGitRepo={createGitRepo}
             gitBusy={git.busy}
             gitError={git.error}
             gitLoading={git.loading}
             requirements={requirements.items}
             selectedRequirementId={requirements.selectedId}
-            onSelectRequirement={(id) => void requirements.selectRequirement(id)}
+            onSelectRequirement={requirements.selectRequirement}
             newRequirementTitle={newRequirementTitle}
             onNewRequirementTitleChange={setNewRequirementTitle}
-            onCreateRequirement={() => {
-              const title = newRequirementTitle.trim()
-              if (!title) return
-              void requirements.createRequirement(title).then(() => setNewRequirementTitle(''))
-            }}
+            onCreateRequirement={createRequirement}
             requirementsBusy={requirements.busy}
             requirementsError={requirements.error}
             requirementsLoading={requirements.loading}
             requirementPhaseLabel={requirementPhaseLabel}
             showRequirementsArchived={requirements.showArchived}
-            onToggleRequirementsArchived={() => requirements.setShowArchived((v: boolean) => !v)}
+            onToggleRequirementsArchived={toggleRequirementsArchived}
             archivedRequirements={requirements.archivedItems}
-            onAbandonRequirement={(id) => void requirements.abandonRequirement(id)}
-            onReinstateRequirement={(id) => void requirements.reinstateRequirement(id)}
-            onHardDeleteRequirement={(id) => void requirements.hardDeleteRequirement(id)}
+            onAbandonRequirement={requirements.abandonRequirement}
+            onReinstateRequirement={requirements.reinstateRequirement}
+            onHardDeleteRequirement={requirements.hardDeleteRequirement}
             abandoningRequirementId={requirements.abandoningId}
             reinstatingRequirementId={requirements.reinstatingId}
             hardDeletingRequirementId={requirements.hardDeletingId}
@@ -1171,16 +852,13 @@ export default function App() {
             employeeTasksLoading={employeeTasks.loading}
             employeeTasksError={employeeTasksExploreError ?? employeeTaskRerunError ?? employeeTaskStopError ?? employeeTasks.error}
             employeeTasksExploring={employeeTasksExploring}
-            onEmployeeTasksExplore={() => void runEmployeeExplore()}
+            onEmployeeTasksExplore={runEmployeeExplore}
             employeeTasksRefreshing={employeeTasksRefreshing}
-            onEmployeeTasksRefresh={() => {
-              setEmployeeTasksRefreshing(true)
-              void employeeTasks.refresh().finally(() => setEmployeeTasksRefreshing(false))
-            }}
+            onEmployeeTasksRefresh={refreshEmployeeTasks}
             rerunningTaskId={rerunningTaskId}
-            onRerunEmployeeTask={(taskId) => void rerunEmployeeTask(taskId)}
+            onRerunEmployeeTask={rerunEmployeeTask}
             stoppingTaskId={stoppingTaskId}
-            onStopEmployeeTask={(taskId) => void stopEmployeeTask(taskId)}
+            onStopEmployeeTask={stopEmployeeTask}
             onFetchEmployeeTaskDetail={fetchEmployeeTaskDetail}
             locale={locale}
           />
@@ -1201,19 +879,63 @@ export default function App() {
         git={git}
         requirements={requirements}
         requirementPhaseLabel={requirementPhaseLabel}
-        onEmployeeTasksRefresh={() => {
-          setEmployeeTasksRefreshing(true)
-          void employeeTasks.refresh().finally(() => setEmployeeTasksRefreshing(false))
-        }}
+        onEmployeeTasksRefresh={refreshEmployeeTasks}
         chatMessagesRefreshTick={chatMessagesRefreshTick}
         t={tt}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={openSettings}
         onSetWorkspaceInput={setWorkspaceInput}
-        onSaveWorkspace={() => void saveWorkspace()}
+        onSaveWorkspace={saveWorkspace}
         onMessageDraftChange={setMessageDraft}
-        onCloseSettings={() => setSettingsOpen(false)}
+        onCloseSettings={closeSettings}
         onSetSettingsSection={setSettingsSection}
-        renderSettingsCards={renderSettingsCards}
+        settingsCards={
+          <SettingsCards
+            apiBase={API_BASE}
+            locale={locale}
+            section={settingsSection}
+            tt={tt}
+            toolKindDraft={toolKindDraft}
+            toolCatalog={toolCatalog}
+            toolInstances={toolInstances}
+            activeToolId={activeToolId}
+            toolNameDraft={toolNameDraft}
+            toolEnabledDraft={toolEnabledDraft}
+            toolConfigDraft={toolConfigDraft}
+            toolError={toolError}
+            toolSaving={toolSaving}
+            onCreateTool={createTool}
+            onSaveTool={saveActiveTool}
+            onSelectToolInstance={(id, name, enabled, config) => {
+              setActiveToolId(id)
+              setToolNameDraft(name)
+              setToolEnabledDraft(enabled)
+              setToolConfigDraft(config)
+            }}
+            onToolKindDraftChange={setToolKindDraft}
+            onToolNameDraftChange={setToolNameDraft}
+            onToolEnabledDraftChange={setToolEnabledDraft}
+            onToolConfigDraftChange={setToolConfigDraft}
+            departmentForm={departmentForm}
+            departments={departments}
+            onAddDepartment={addDepartment}
+            onDepartmentFormChange={setDepartmentForm}
+            roleName={roleName}
+            roleForm={roleForm}
+            roles={roles}
+            onAddRole={addRole}
+            onRoleNameChange={setRoleName}
+            onRoleFormChange={setRoleForm}
+            employeeForm={employeeForm}
+            employeeDirectory={employeeDirectory}
+            employeeCreateError={employeeCreateError}
+            creatingEmployee={creatingEmployee}
+            onAddEmployee={addEmployee}
+            onEmployeeFormChange={setEmployeeForm}
+            chatIdentityDraft={chatIdentityDraft}
+            onLocaleChange={setLocale}
+            onChatIdentityDraftChange={setChatIdentityDraft}
+          />
+        }
       />
     </div>
   )

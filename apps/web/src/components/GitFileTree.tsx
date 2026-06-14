@@ -119,7 +119,7 @@ function GitTreeNode({
   )
 }
 
-export function GitFileTree({ listTree, onOpenFile, reloadKey, t }: GitFileTreeProps) {
+export const GitFileTree = React.memo(function GitFileTree({ listTree, onOpenFile, reloadKey, t }: GitFileTreeProps) {
   const [entries, setEntries] = React.useState<GitTreeEntry[]>([])
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -169,4 +169,4 @@ export function GitFileTree({ listTree, onOpenFile, reloadKey, t }: GitFileTreeP
       ))}
     </ul>
   )
-}
+})

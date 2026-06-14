@@ -365,7 +365,7 @@ function TaskResultPanel({ result, t }: { result: ChatResultMeta | null; t: (key
   )
 }
 
-export function EmployeeChatPanel({
+export const EmployeeChatPanel = React.memo(function EmployeeChatPanel({
   apiBase,
   locale,
   employees,
@@ -731,4 +731,4 @@ export function EmployeeChatPanel({
       )}
     </div>
   )
-}
+})
