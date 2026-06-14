@@ -186,7 +186,10 @@
         "copied": "Copied",
         "icon": "📋",
         "checkmark": "✓"
-      }
+      },
+      "processCrashed": "Process ended unexpectedly",
+      "continueExecution": "Continue Execution",
+      "continuing": "Continuing..."
     },
     "leftPanel": {
       "home": {

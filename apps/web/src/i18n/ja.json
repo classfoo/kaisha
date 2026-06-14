@@ -186,7 +186,10 @@
         "copied": "コピーしました",
         "icon": "📋",
         "checkmark": "✓"
-      }
+      },
+      "processCrashed": "プロセスが予期せず終了しました",
+      "continueExecution": "続行して実行",
+      "continuing": "続行中..."
     },
     "leftPanel": {
       "home": {

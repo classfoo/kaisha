@@ -1,6 +1,8 @@
 use crate::employee::normalize_employee_id;
-use crate::employee_chat::{conversation_path, load_conversation, StoredMessage, WireMessage};
+use crate::employee_chat::{conversation_path, load_conversation, save_conversation, StoredMessage, WireMessage};
 use crate::i18n;
+use crate::tasks::runtime::task_runtime_handle;
+use crate::tasks::TaskStore;
 use crate::AppState;
 use axum::{
     extract::{Path as AxumPath, State},
@@ -121,6 +123,8 @@ pub async fn conversation_stream_handler(
     tokio::spawn(async move {
         let mut snapshot: HashMap<String, u64> = HashMap::new();
         let mut last_sig: Option<(u64, u64)> = None;
+        let runtime = task_runtime_handle();
+        let task_store = TaskStore::new(&workspace);
         // Send an initial `ready` marker so the client knows the watch is live.
         if tx
             .send(Ok(Event::default().event("ready").data("{}")))
@@ -137,7 +141,28 @@ pub async fn conversation_stream_handler(
             let sig = file_signature(&conv_path);
             if sig != last_sig {
                 last_sig = sig;
-                if let Ok(conv) = load_conversation(&conv_path) {
+                if let Ok(mut conv) = load_conversation(&conv_path) {
+                    // Detect crashed tasks in real-time
+                    let mut conv_changed = false;
+                    for msg in conv.messages.iter_mut() {
+                        if msg.task_status.as_deref() == Some("running") {
+                            if let Some(ref task_id) = msg.task_id {
+                                if !runtime.is_tracked(task_id) {
+                                    tracing::warn!(task_id = %task_id, "stream detected crashed task");
+                                    if let Ok(mut task) = task_store.load(task_id) {
+                                        task.fail("process_crashed".to_string(), crate::tasks::now_ms());
+                                        let _ = task_store.save(&task);
+                                    }
+                                    msg.task_status = Some("failed".to_string());
+                                    conv_changed = true;
+                                }
+                            }
+                        }
+                    }
+                    if conv_changed {
+                        let _ = save_conversation(&conv_path, &conv);
+                    }
+
                     let diff = diff_conversation(&snapshot, &conv.messages);
                     snapshot = diff.snapshot;
                     if !diff.changed.is_empty() {

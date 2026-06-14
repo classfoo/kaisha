@@ -730,6 +730,7 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
         .route("/api/tasks/:id", get(tasks::get_task))
         .route("/api/tasks/:id/rerun", post(tasks::rerun_task))
         .route("/api/tasks/:id/stop", post(tasks::stop_task))
+        .route("/api/tasks/:id/alive", get(tasks::get_task_alive_status))
         .route("/api/autonomy/status", get(autonomy::api::get_autonomy_status))
         .route("/api/autonomy/tick", post(autonomy::api::run_autonomy_tick_handler))
         .route(

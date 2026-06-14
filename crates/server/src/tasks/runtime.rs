@@ -82,6 +82,14 @@ impl TaskRuntimeRegistry {
             .remove(task_id);
     }
 
+    /// Check if a task is currently being tracked by the runtime.
+    pub fn is_tracked(&self, task_id: &str) -> bool {
+        self.tasks
+            .lock()
+            .expect("task runtime lock poisoned")
+            .contains_key(task_id)
+    }
+
     pub fn run_chat_subprocess_cancellable(
         &self,
         spec: &ChatSubprocessSpec,

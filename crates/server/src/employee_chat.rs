@@ -596,13 +596,50 @@ pub async fn get_messages(
     let conv_path = conversation_path(&workspace, &employee_id);
     // If conversation fails to load, return empty messages instead of an error
     // to avoid breaking the chat UI. The user can still send new messages.
-    let conv = load_conversation(&conv_path).unwrap_or_else(|_| {
+    let mut conv = load_conversation(&conv_path).unwrap_or_else(|_| {
         tracing::warn!(path = ?conv_path, "failed to load conversation, returning empty");
         ConversationFile {
             version: 1,
             messages: vec![],
         }
     });
+
+    // Detect crashed tasks: messages with task_status="running" but task not tracked in runtime
+    let runtime = crate::tasks::runtime::task_runtime_handle();
+    let mut conv_changed = false;
+    let task_store = crate::tasks::TaskStore::new(&workspace);
+    for (i, msg) in conv.messages.iter_mut().enumerate() {
+        if msg.task_status.as_deref() == Some("running") {
+            if let Some(ref task_id) = msg.task_id {
+                // Check if task is still alive in runtime
+                if !runtime.is_tracked(task_id) {
+                    // Task has crashed - update status
+                    tracing::warn!(task_id = %task_id, msg_idx = i, "detecting crashed task in conversation");
+
+                    // Update task status in task store
+                    if let Ok(mut task) = task_store.load(task_id) {
+                        task.fail("process_crashed".to_string(), crate::tasks::now_ms());
+                        let _ = task_store.save(&task);
+                    }
+
+                    // Update message status
+                    msg.task_status = Some("failed".to_string());
+
+                    // Clear stream_events if no result was received
+                    if msg.result_meta.is_none() {
+                        // Keep stream events for "continue" functionality
+                    }
+                    conv_changed = true;
+                }
+            }
+        }
+    }
+
+    // Save conversation if any crashed tasks were detected
+    if conv_changed {
+        let _ = save_conversation(&conv_path, &conv);
+    }
+
     Ok(Json(MessagesResponse {
         messages: conv.messages.iter().map(WireMessage::from).collect(),
     }))

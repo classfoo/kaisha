@@ -1,8 +1,8 @@
 mod detail;
 mod model;
 mod runner;
-mod runtime;
-mod store;
+pub(crate) mod runtime;
+pub(crate) mod store;
 
 pub use detail::{build_task_detail, AgentTaskDetail};
 
@@ -15,15 +15,16 @@ pub use runner::{
     should_queue_rerun_instead, task_content_from_user_input, TaskRunner,
 };
 pub use runtime::TaskRuntimeRegistry;
-pub use store::{filter_tasks, TaskListFilter, TaskStore};
+pub use store::{filter_tasks, TaskListFilter, TaskStore, now_ms};
 
 use crate::{i18n, AppState};
+use crate::tasks::runtime::task_runtime_handle;
 use axum::{
     extract::{Path as AxumPath, Query, State},
     http::HeaderMap,
     Json,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 #[derive(Debug, Deserialize)]
@@ -273,6 +274,48 @@ pub async fn stop_task(
         }
     }
     Ok(Json(task))
+}
+
+#[derive(Debug, Serialize)]
+pub struct TaskAliveStatus {
+    pub alive: bool,
+}
+
+pub async fn get_task_alive_status(
+    _headers: HeaderMap,
+    State(state): State<AppState>,
+    AxumPath(task_id): AxumPath<String>,
+) -> Result<Json<TaskAliveStatus>, (axum::http::StatusCode, String)> {
+    let Some(workspace) = workspace_root(&state) else {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            i18n::msg(&_headers, "workspace_not_configured"),
+        ));
+    };
+
+    let store = TaskStore::new(&workspace);
+    let task = store.load(&task_id).map_err(|err| {
+        let key = err.to_string();
+        if key == "task_not_found" {
+            (
+                axum::http::StatusCode::NOT_FOUND,
+                i18n::msg(&_headers, "task_not_found"),
+            )
+        } else {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                key,
+            )
+        }
+    })?;
+
+    // A task is considered alive only if:
+    // 1. Status is Running AND
+    // 2. Task is tracked in the runtime registry
+    let alive = task.status == TaskStatus::Running
+        && task_runtime_handle().is_tracked(&task_id);
+
+    Ok(Json(TaskAliveStatus { alive }))
 }
 
 #[cfg(test)]

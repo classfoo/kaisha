@@ -36,6 +36,8 @@ type DisplayMessage = {
   senderAvatarUrl?: string
   streaming?: StreamingExtras
   taskResult?: ChatResultMeta
+  taskId?: string | null
+  taskStatus?: string | null
 }
 
 type EmployeeChatPanelProps = {
@@ -123,8 +125,44 @@ function MessageCopyButton({ message, t }: { message: DisplayMessage; t: (key: s
   const content = extractCopyableContent(message)
   if (!content) return null
   return (
-    <div className="chat-message__bubble-actions">
+    <div className="chat-message__bubbleActions">
       <CopyButton text={content} t={t} />
+    </div>
+  )
+}
+
+function TypingIndicator() {
+  return (
+    <div className="typing-indicator">
+      <span className="typing-dot" style={{ '--i': 0 } as React.CSSProperties}>.</span>
+      <span className="typing-dot" style={{ '--i': 1 } as React.CSSProperties}>.</span>
+      <span className="typing-dot" style={{ '--i': 2 } as React.CSSProperties}>.</span>
+    </div>
+  )
+}
+
+function TaskCrashedPanel({
+  taskId,
+  continuing,
+  onContinue,
+  t,
+}: {
+  taskId: string
+  continuing: boolean
+  onContinue: (taskId: string) => void
+  t: (key: string) => string
+}) {
+  return (
+    <div className="task-crashed-panel">
+      <div className="task-crashed-panel__message">{t('ui.chat.processCrashed')}</div>
+      <button
+        type="button"
+        className="task-crashed-panel__button"
+        onClick={() => onContinue(taskId)}
+        disabled={continuing}
+      >
+        {continuing ? t('ui.chat.continuing') : t('ui.chat.continueExecution')}
+      </button>
     </div>
   )
 }
@@ -165,6 +203,7 @@ function wireToDisplay(m: ChatWireMessage): DisplayMessage {
     at: formatMessageTimeMs(m.created_at_ms),
     senderName: m.sender_name ?? undefined,
     senderAvatarUrl: m.sender_avatar_url ?? undefined,
+    taskId: m.task_id ?? undefined,
   }
 
   // Handle task_process messages: reconstruct streaming state from saved events
@@ -183,6 +222,7 @@ function wireToDisplay(m: ChatWireMessage): DisplayMessage {
       pending: m.task_status === 'running',
       streaming: streamingState.blocks.length > 0 || streamingState.text.length > 0 ? streamingExtras : undefined,
       taskResult: m.result_meta ?? undefined,
+      taskStatus: m.task_status ?? undefined,
     }
   }
 
@@ -339,8 +379,11 @@ export function EmployeeChatPanel({
 }: EmployeeChatPanelProps) {
   const selectedEmployee = employees.find((item) => item.id === selectedEmployeeId) ?? null
   const imeEnterGuardRef = React.useRef(createImeEnterGuardState())
-  const { serverMessages, optimisticUser, streamingAssistant, loading, sending, error, lastResult, refresh, sendMessage } =
+  const { serverMessages, optimisticUser, streamingAssistant, loading, sending, error, lastResult, refresh, sendMessage, isProcessAlive } =
     useEmployeeChatMessages(apiBase, locale, selectedEmployeeId, chatSenderProfile, onEmployeeTasksRefresh)
+
+  // Track continuing execution state per task
+  const [continuingTaskIds, setContinuingTaskIds] = React.useState<Set<string>>(new Set())
 
   // Refresh messages when parent signals a task completed
   React.useEffect(() => {
@@ -422,6 +465,33 @@ export function EmployeeChatPanel({
       onMessageDraftChange(text)
     }
   }, [messageDraft, onMessageDraftChange, selectedEmployee, selectedEmployeeId, sendMessage])
+
+  const handleContinueTask = React.useCallback(async (taskId: string) => {
+    setContinuingTaskIds(prev => new Set(prev).add(taskId))
+    try {
+      const url = `${apiBase}/api/tasks/${encodeURIComponent(taskId)}/rerun`
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'x-lang': locale,
+          'Content-Type': 'application/json',
+        },
+      })
+      if (!res.ok) {
+        throw new Error(await res.text())
+      }
+      // Refresh messages to show the restarted task
+      await refresh()
+    } catch (e) {
+      console.error('Failed to continue task:', e)
+    } finally {
+      setContinuingTaskIds(prev => {
+        const next = new Set(prev)
+        next.delete(taskId)
+        return next
+      })
+    }
+  }, [apiBase, locale, refresh])
 
   const handlePromptKeyDown = React.useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -551,6 +621,22 @@ export function EmployeeChatPanel({
                   ) : null}
                   {message.taskResult ? (
                     <TaskResultPanel result={message.taskResult} t={t} />
+                  ) : null}
+                  {/* Typing indicator for running tasks that are still alive */}
+                  {message.pending && message.taskId && isProcessAlive(message.taskId) ? (
+                    <TypingIndicator />
+                  ) : null}
+                  {/* Crashed task panel for tasks that failed without result */}
+                  {message.side === 'employee' &&
+                   message.taskStatus === 'failed' &&
+                   message.taskResult === undefined &&
+                   message.taskId ? (
+                    <TaskCrashedPanel
+                      taskId={message.taskId}
+                      continuing={continuingTaskIds.has(message.taskId)}
+                      onContinue={handleContinueTask}
+                      t={t}
+                    />
                   ) : null}
                 </div>
               )
