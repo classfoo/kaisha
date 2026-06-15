@@ -82,6 +82,38 @@ export type RequirementDevelopment = {
   current_task_id?: string
 }
 
+export type AgentDispatch = {
+  employee_id: string
+  employee_name: string
+  role: string
+}
+
+export type TestTaskStatus = 'pending' | 'running' | 'completed' | 'failed'
+
+export type TestTask = {
+  id: string
+  title: string
+  assignee?: string
+  status: TestTaskStatus
+  progress: number
+  created_at_ms: number
+  updated_at_ms: number
+  biz_type: string
+  biz_id: string
+}
+
+export type RequirementTesting = {
+  requirement_id: string
+  tasks: TestTask[]
+}
+
+export type RequirementRelease = {
+  requirement_id: string
+  output?: string
+  run_log?: string
+  artifacts: string[]
+}
+
 export type WorkRoleDefinition = {
   display_name: string
   aliases: string[]
@@ -137,6 +169,15 @@ export function createRequirementsApi(apiBase: string, locale: string) {
         method: 'PUT',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+      })
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async optimize(id: string): Promise<AgentDispatch> {
+      const res = await fetch(`${apiBase}/api/requirements/${encodeURIComponent(id)}/optimize`, {
+        method: 'POST',
+        headers,
       })
       if (!res.ok) throw new Error(await readError(res))
       return res.json()
@@ -263,6 +304,65 @@ export function createRequirementsApi(apiBase: string, locale: string) {
       const res = await fetch(
         `${apiBase}/api/requirements/${encodeURIComponent(id)}/development/tasks/${encodeURIComponent(taskId)}/${encodeURIComponent(action)}`,
         { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) },
+      )
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async splitDevTasks(id: string): Promise<AgentDispatch> {
+      const res = await fetch(
+        `${apiBase}/api/requirements/${encodeURIComponent(id)}/development/split`,
+        { method: 'POST', headers },
+      )
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async getTesting(id: string): Promise<RequirementTesting | null> {
+      const res = await fetch(`${apiBase}/api/requirements/${encodeURIComponent(id)}/testing`, { headers })
+      if (res.status === 404) return null
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async splitTestTasks(id: string): Promise<AgentDispatch> {
+      const res = await fetch(
+        `${apiBase}/api/requirements/${encodeURIComponent(id)}/testing/split`,
+        { method: 'POST', headers },
+      )
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async testTaskAction(id: string, taskId: string, action: string): Promise<RequirementTesting> {
+      const res = await fetch(
+        `${apiBase}/api/requirements/${encodeURIComponent(id)}/testing/tasks/${encodeURIComponent(taskId)}/${encodeURIComponent(action)}`,
+        { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({}) },
+      )
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async getRelease(id: string): Promise<RequirementRelease | null> {
+      const res = await fetch(`${apiBase}/api/requirements/${encodeURIComponent(id)}/release`, { headers })
+      if (res.status === 404) return null
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async packageRelease(id: string): Promise<AgentDispatch> {
+      const res = await fetch(
+        `${apiBase}/api/requirements/${encodeURIComponent(id)}/release/package`,
+        { method: 'POST', headers },
+      )
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async startRelease(id: string): Promise<AgentDispatch> {
+      const res = await fetch(
+        `${apiBase}/api/requirements/${encodeURIComponent(id)}/release/start`,
+        { method: 'POST', headers },
       )
       if (!res.ok) throw new Error(await readError(res))
       return res.json()

@@ -2362,6 +2362,41 @@ select,
   margin-top: 10px;
 }
 
+.requirement-agent-notice {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #16263a;
+  border: 1px solid #2c4a6b;
+  color: #9ed0ff;
+  font-size: 13px;
+}
+
+.requirement-release__artifacts,
+.requirement-release__report {
+  margin-top: 14px;
+}
+
+.requirement-release__artifact-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: #c8d2e0;
+}
+
+.requirement-release__pre {
+  margin: 6px 0 0;
+  padding: 10px;
+  border-radius: 6px;
+  background: #11161f;
+  border: 1px solid #2a3344;
+  color: #c8d2e0;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 360px;
+  overflow: auto;
+}
+
 .requirement-review-confirm {
   padding: 12px;
   border-radius: 8px;

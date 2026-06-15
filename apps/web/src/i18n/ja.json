@@ -373,6 +373,9 @@
       "subdirsLabel": "サブディレクトリ",
       "save": "保存",
       "saving": "保存中…",
+      "optimize": "要件を最適化",
+      "optimizing": "最適化中…",
+      "agentAssigned": "{name} に割り当てました。チャットで進捗を確認してください。",
       "phases": {
         "collection": "収集",
         "development": "開発",
@@ -383,6 +386,72 @@
         "development": { "empty": "開発フェーズの内容は今後のバージョンで表示されます。" },
         "testing": { "empty": "テストフェーズの内容は今後のバージョンで表示されます。" },
         "release": { "empty": "リリースフェーズの内容は今後のバージョンで表示されます。" }
+      },
+      "development": {
+        "sectionTitle": "開発",
+        "start": "開発を開始",
+        "createTask": "タスクを作成",
+        "featureBranch": "機能ブランチ",
+        "taskTitle": "タスク名",
+        "taskAssignee": "担当者",
+        "taskBranch": "ブランチ",
+        "taskProgress": "進捗",
+        "taskStatus": {
+          "branch_created": "ブランチ作成済み",
+          "in_development": "開発中",
+          "dev_complete": "開発完了",
+          "in_review": "レビュー中",
+          "review_complete": "レビュー完了",
+          "merged": "マージ済み"
+        },
+        "actions": {
+          "startDev": "開発を開始",
+          "continueDev": "開発を継続",
+          "reviewCode": "コードレビュー",
+          "completeDev": "開発を完了",
+          "startReview": "レビューを開始",
+          "completeReview": "レビューを完了",
+          "merge": "機能ブランチへマージ"
+        },
+        "splitTasks": "タスクを分割",
+        "splitting": "分割中…",
+        "noTasks": "開発タスクはまだありません。作成して開始してください。",
+        "createTaskTitle": "開発タスクを作成",
+        "createTaskText": "新しい開発タスクを作成しますか？機能ブランチからタスクブランチを作成します。",
+        "confirm": "確定",
+        "cancel": "キャンセル",
+        "loading": "開発を読み込み中…",
+        "notStarted": "開発はまだ開始されていません。",
+        "processing": "処理中…"
+      },
+      "testing": {
+        "sectionTitle": "テスト",
+        "splitTasks": "テストタスクを分割",
+        "splitting": "分割中…",
+        "refresh": "更新",
+        "execute": "テストを実行",
+        "processing": "処理中…",
+        "loading": "テストを読み込み中…",
+        "noTasks": "テストタスクはまだありません。「テストタスクを分割」で生成してください。",
+        "taskStatus": {
+          "pending": "未実行",
+          "running": "実行中",
+          "completed": "完了",
+          "failed": "失敗"
+        }
+      },
+      "release": {
+        "sectionTitle": "リリース",
+        "package": "アプリをパッケージ",
+        "packaging": "パッケージ中…",
+        "start": "アプリを起動",
+        "starting": "起動中…",
+        "getOutput": "成果物を取得",
+        "loading": "読み込み中…",
+        "artifactsTitle": "成果物",
+        "noArtifacts": "成果物はまだありません。「アプリをパッケージ」で生成してください。",
+        "outputTitle": "パッケージレポート",
+        "runLogTitle": "実行ログ"
       },
       "review": {
         "sectionTitle": "要件レビュー",

@@ -60,7 +60,7 @@ export const RequirementDetailPanel = React.memo(function RequirementDetailPanel
   const renderPhaseToolbar = () => {
     const phase = viewPhase
 
-    // collection phase: save button
+    // collection phase: save + optimize buttons
     if (phase === 'collection') {
       return (
         <div className="requirement-phase-toolbar">
@@ -71,6 +71,16 @@ export const RequirementDetailPanel = React.memo(function RequirementDetailPanel
             disabled={busy || !dirty}
           >
             {busy ? t('ui.requirements.saving') : t('ui.requirements.save')}
+          </button>
+          <button
+            type="button"
+            className="action-btn"
+            onClick={() => void requirements.optimizeAction(detail!.id)}
+            disabled={requirements.agentActionKey === 'optimize'}
+          >
+            {requirements.agentActionKey === 'optimize'
+              ? t('ui.requirements.optimizing')
+              : t('ui.requirements.optimize')}
           </button>
         </div>
       )
@@ -219,6 +229,11 @@ export const RequirementDetailPanel = React.memo(function RequirementDetailPanel
           </div>
         ) : null}
         {renderPhaseToolbar()}
+        {requirements.agentNotice ? (
+          <p className="requirement-agent-notice">
+            {t('ui.requirements.agentAssigned').replace('{name}', requirements.agentNotice.employee_name)}
+          </p>
+        ) : null}
         {error || saveError ? (
           <p className="workspace-setup__error">{saveError || error}</p>
         ) : null}

@@ -373,6 +373,9 @@
       "subdirsLabel": "子目录",
       "save": "保存",
       "saving": "保存中…",
+      "optimize": "优化需求",
+      "optimizing": "优化中…",
+      "agentAssigned": "已指派 {name} 处理该任务，请在其聊天中查看进度。",
       "phases": {
         "collection": "收集",
         "development": "开发",
@@ -403,11 +406,15 @@
         },
         "actions": {
           "startDev": "开始开发",
+          "continueDev": "继续开发",
+          "reviewCode": "Review代码",
           "completeDev": "完成开发",
           "startReview": "开始Review",
           "completeReview": "完成Review",
           "merge": "合并到特性分支"
         },
+        "splitTasks": "拆分任务",
+        "splitting": "拆分中…",
         "noTasks": "暂无开发任务，创建一个开始开发",
         "createTaskTitle": "创建开发任务",
         "createTaskText": "创建新的开发任务？这将基于特性分支创建任务分支。",
@@ -416,6 +423,35 @@
         "loading": "加载开发阶段中…",
         "notStarted": "开发尚未开始",
         "processing": "处理中…"
+      },
+      "testing": {
+        "sectionTitle": "测试阶段",
+        "splitTasks": "拆分测试任务",
+        "splitting": "拆分中…",
+        "refresh": "刷新",
+        "execute": "执行测试",
+        "processing": "处理中…",
+        "loading": "加载测试阶段中…",
+        "noTasks": "暂无测试任务，点击「拆分测试任务」生成",
+        "taskStatus": {
+          "pending": "待执行",
+          "running": "执行中",
+          "completed": "已完成",
+          "failed": "失败"
+        }
+      },
+      "release": {
+        "sectionTitle": "发布阶段",
+        "package": "打包应用",
+        "packaging": "打包中…",
+        "start": "启动应用",
+        "starting": "启动中…",
+        "getOutput": "获取产出",
+        "loading": "加载中…",
+        "artifactsTitle": "产出物",
+        "noArtifacts": "暂无产出物，点击「打包应用」生成",
+        "outputTitle": "打包说明",
+        "runLogTitle": "运行日志"
       },
       "review": {
         "sectionTitle": "需求评审",

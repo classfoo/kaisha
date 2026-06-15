@@ -3,6 +3,8 @@ import type { useRequirementsWorkspace } from '../features/requirements/useRequi
 import type { RequirementPhase } from '../features/requirements/requirementsApi'
 import { phaseViewKind } from '../features/requirements/requirementPhaseView'
 import { RequirementDevelopmentSection } from './RequirementDevelopmentSection'
+import { RequirementTestingSection } from './RequirementTestingSection'
+import { RequirementReleaseSection } from './RequirementReleaseSection'
 
 type RequirementPhaseContentProps = {
   viewPhase: RequirementPhase
@@ -45,6 +47,24 @@ export function RequirementPhaseContent({
       <section className="requirement-detail__stage requirement-detail__stage--development">
         <h3 className="requirement-detail__label">{t('ui.requirements.development.sectionTitle')}</h3>
         <RequirementDevelopmentSection requirements={requirements} t={t} />
+      </section>
+    )
+  }
+
+  if (kind === 'testing') {
+    return (
+      <section className="requirement-detail__stage requirement-detail__stage--testing">
+        <h3 className="requirement-detail__label">{t('ui.requirements.testing.sectionTitle')}</h3>
+        <RequirementTestingSection requirements={requirements} t={t} />
+      </section>
+    )
+  }
+
+  if (kind === 'release') {
+    return (
+      <section className="requirement-detail__stage requirement-detail__stage--release">
+        <h3 className="requirement-detail__label">{t('ui.requirements.release.sectionTitle')}</h3>
+        <RequirementReleaseSection requirements={requirements} t={t} />
       </section>
     )
   }

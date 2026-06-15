@@ -1,13 +1,16 @@
 import * as React from 'react'
 import {
   createRequirementsApi,
+  type AgentDispatch,
   type DevTaskStatus,
   type OpinionUserAction,
   type RequirementDetail,
   type RequirementDevelopment,
   type RequirementPhase,
+  type RequirementRelease,
   type RequirementReview,
   type RequirementSummary,
+  type RequirementTesting,
 } from './requirementsApi'
 
 export function useRequirementsWorkspace(
@@ -37,6 +40,12 @@ export function useRequirementsWorkspace(
   const [devLoading, setDevLoading] = React.useState(false)
   const [devActionKey, setDevActionKey] = React.useState<string | null>(null)
   const [devStarting, setDevStarting] = React.useState(false)
+  const [testing, setTesting] = React.useState<RequirementTesting | null>(null)
+  const [testingLoading, setTestingLoading] = React.useState(false)
+  const [release, setRelease] = React.useState<RequirementRelease | null>(null)
+  const [releaseLoading, setReleaseLoading] = React.useState(false)
+  const [agentActionKey, setAgentActionKey] = React.useState<string | null>(null)
+  const [agentNotice, setAgentNotice] = React.useState<AgentDispatch | null>(null)
 
   const selectedIdRef = React.useRef(selectedId)
   selectedIdRef.current = selectedId
@@ -80,15 +89,62 @@ export function useRequirementsWorkspace(
     [api],
   )
 
+  const loadTesting = React.useCallback(
+    async (id: string, phase: RequirementPhase) => {
+      if (phase !== 'testing') {
+        setTesting(null)
+        setTestingLoading(false)
+        return null
+      }
+      setTestingLoading(true)
+      try {
+        const data = await api.getTesting(id)
+        setTesting(data)
+        return data
+      } catch (e) {
+        setTesting(null)
+        throw e
+      } finally {
+        setTestingLoading(false)
+      }
+    },
+    [api],
+  )
+
+  const loadRelease = React.useCallback(
+    async (id: string, phase: RequirementPhase) => {
+      if (phase !== 'release') {
+        setRelease(null)
+        setReleaseLoading(false)
+        return null
+      }
+      setReleaseLoading(true)
+      try {
+        const data = await api.getRelease(id)
+        setRelease(data)
+        return data
+      } catch (e) {
+        setRelease(null)
+        throw e
+      } finally {
+        setReleaseLoading(false)
+      }
+    },
+    [api],
+  )
+
   const loadDetail = React.useCallback(
     async (id: string) => {
       const data = await api.get(id)
       setDetail(data)
+      setAgentNotice(null)
       void loadReview(id).catch(() => setReview(null))
       void loadDevelopment(id, data.phase).catch(() => setDevelopment(null))
+      void loadTesting(id, data.phase).catch(() => setTesting(null))
+      void loadRelease(id, data.phase).catch(() => setRelease(null))
       return data
     },
-    [api, loadReview, loadDevelopment],
+    [api, loadReview, loadDevelopment, loadTesting, loadRelease],
   )
 
   const refresh = React.useCallback(async () => {
@@ -423,6 +479,149 @@ export function useRequirementsWorkspace(
     [api, loadDetail],
   )
 
+  const optimizeAction = React.useCallback(
+    async (id: string) => {
+      setAgentActionKey('optimize')
+      setError(null)
+      try {
+        const dispatch = await api.optimize(id)
+        setAgentNotice(dispatch)
+        return dispatch
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        throw e
+      } finally {
+        setAgentActionKey(null)
+      }
+    },
+    [api],
+  )
+
+  const splitDevTasksAction = React.useCallback(
+    async (id: string) => {
+      setAgentActionKey('splitDev')
+      setError(null)
+      try {
+        const dispatch = await api.splitDevTasks(id)
+        setAgentNotice(dispatch)
+        return dispatch
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        throw e
+      } finally {
+        setAgentActionKey(null)
+      }
+    },
+    [api],
+  )
+
+  const splitTestTasksAction = React.useCallback(
+    async (id: string) => {
+      setAgentActionKey('splitTest')
+      setError(null)
+      try {
+        const dispatch = await api.splitTestTasks(id)
+        setAgentNotice(dispatch)
+        return dispatch
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        throw e
+      } finally {
+        setAgentActionKey(null)
+      }
+    },
+    [api],
+  )
+
+  const testTaskActionFn = React.useCallback(
+    async (id: string, taskId: string, action: string) => {
+      setAgentActionKey(`${taskId}:${action}`)
+      setError(null)
+      try {
+        const updated = await api.testTaskAction(id, taskId, action)
+        setTesting(updated)
+        return updated
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        throw e
+      } finally {
+        setAgentActionKey(null)
+      }
+    },
+    [api],
+  )
+
+  const reloadTesting = React.useCallback(
+    async (id: string) => {
+      try {
+        const data = await api.getTesting(id)
+        setTesting(data)
+        return data
+      } catch {
+        return null
+      }
+    },
+    [api],
+  )
+
+  const packageReleaseAction = React.useCallback(
+    async (id: string) => {
+      setAgentActionKey('package')
+      setError(null)
+      try {
+        const dispatch = await api.packageRelease(id)
+        setAgentNotice(dispatch)
+        return dispatch
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        throw e
+      } finally {
+        setAgentActionKey(null)
+      }
+    },
+    [api],
+  )
+
+  const startReleaseAction = React.useCallback(
+    async (id: string) => {
+      setAgentActionKey('start')
+      setError(null)
+      try {
+        const dispatch = await api.startRelease(id)
+        setAgentNotice(dispatch)
+        return dispatch
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        throw e
+      } finally {
+        setAgentActionKey(null)
+      }
+    },
+    [api],
+  )
+
+  const reloadRelease = React.useCallback(
+    async (id: string) => {
+      setReleaseLoading(true)
+      try {
+        const data = await api.getRelease(id)
+        setRelease(data)
+        return data
+      } catch {
+        return null
+      } finally {
+        setReleaseLoading(false)
+      }
+    },
+    [api],
+  )
+
   // Load archived requirements
   React.useEffect(() => {
     if (!workspaceConfigured) {
@@ -516,6 +715,12 @@ export function useRequirementsWorkspace(
     devLoading,
     devActionKey,
     devStarting,
+    testing,
+    testingLoading,
+    release,
+    releaseLoading,
+    agentActionKey,
+    agentNotice,
     error,
     refresh,
     selectRequirement,
@@ -534,5 +739,15 @@ export function useRequirementsWorkspace(
     updateDevTaskAction,
     deleteDevTaskAction,
     devTaskAction,
+    optimizeAction,
+    splitDevTasksAction,
+    loadTesting,
+    reloadTesting,
+    splitTestTasksAction,
+    testTaskAction: testTaskActionFn,
+    loadRelease,
+    reloadRelease,
+    packageReleaseAction,
+    startReleaseAction,
   }
 }
