@@ -14,8 +14,11 @@ mod git;
 mod i18n;
 mod intent;
 mod requirement;
+mod requirement_agents;
 mod requirement_development;
+mod requirement_release;
 mod requirement_review;
+mod requirement_testing;
 mod shop_status;
 mod tasks;
 mod tools;
@@ -666,6 +669,10 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
             get(requirement::get_requirement).put(requirement::update_requirement),
         )
         .route(
+            "/api/requirements/:id/optimize",
+            post(requirement::optimize_requirement),
+        )
+        .route(
             "/api/requirements/:id/review",
             get(requirement_review::get_requirement_review)
                 .post(requirement_review::start_requirement_review),
@@ -704,6 +711,10 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
                 .post(requirement_development::start_development),
         )
         .route(
+            "/api/requirements/:id/development/split",
+            axum::routing::post(requirement_development::split_development_tasks),
+        )
+        .route(
             "/api/requirements/:id/development/tasks",
             axum::routing::post(requirement_development::create_task),
         )
@@ -715,6 +726,30 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
         .route(
             "/api/requirements/:id/development/tasks/:task_id/:action",
             axum::routing::post(requirement_development::task_action),
+        )
+        .route(
+            "/api/requirements/:id/testing",
+            axum::routing::get(requirement_testing::get_testing),
+        )
+        .route(
+            "/api/requirements/:id/testing/split",
+            axum::routing::post(requirement_testing::split_test_tasks),
+        )
+        .route(
+            "/api/requirements/:id/testing/tasks/:task_id/:action",
+            axum::routing::post(requirement_testing::test_task_action),
+        )
+        .route(
+            "/api/requirements/:id/release",
+            axum::routing::get(requirement_release::get_release),
+        )
+        .route(
+            "/api/requirements/:id/release/package",
+            axum::routing::post(requirement_release::package_release),
+        )
+        .route(
+            "/api/requirements/:id/release/start",
+            axum::routing::post(requirement_release::start_release),
         )
         .route(
             "/api/work-rules",

@@ -103,5 +103,7 @@
   "work_task_execute_user_prompt": "请立即执行此工作任务：{title}",
   "work_task_execute_context_header": "员工：{name}（{role}）\n任务：{title}\n描述：{description}\n业务类型：{biz_type}\n业务 ID：{biz_id}\n",
   "work_task_execute_branch": "开发分支：{branch}\n",
-  "review_work_task_title": "评审 {requirement_title}（{employee_name}）"
+  "review_work_task_title": "评审 {requirement_title}（{employee_name}）",
+  "requirement_no_employees": "没有可承接该任务的员工，请先雇佣员工。",
+  "optimize_work_task_title": "优化需求 {requirement_title}"
 }

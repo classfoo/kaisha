@@ -1,4 +1,16 @@
-use crate::{i18n, AppState};
+use crate::{
+    i18n,
+    requirement_agents::{
+        pick_employee_for_role, spawn_requirement_agent_task, AgentDispatchWire, AgentTaskSpec,
+    },
+    tasks::TaskKind,
+    tools::driver::ToolChatMessage,
+    work_task::{
+        create_work_task, update_work_task, CreateWorkTaskParams, WorkTaskStatus,
+        BIZ_TYPE_REQUIREMENT, TASK_KIND_OPTIMIZATION,
+    },
+    AppState,
+};
 use axum::{
     extract::{Path as AxumPath, State},
     http::HeaderMap,
@@ -593,6 +605,124 @@ pub async fn hard_delete_requirement(
 
 
 
+
+fn build_optimize_messages(
+    requirement_id: &str,
+    title: &str,
+    content: &str,
+) -> Vec<ToolChatMessage> {
+    let system = format!(
+        r#"You are a product specialist optimizing a requirement during the collection phase.
+
+## Working directory
+This directory is the requirement `{requirement_id}` package. The requirement body is in `{REQUIREMENT_FILE}` (YAML frontmatter followed by a Markdown body).
+
+## Task
+1. Read `{REQUIREMENT_FILE}`.
+2. Rewrite the Markdown body to be clearer, more complete and well structured. Improve: background/goals, scope, user stories, acceptance criteria, edge cases, non-functional requirements and open questions. Keep the author's intent; do not invent unrelated features.
+3. Preserve the YAML frontmatter keys `id`, `phase`, `created_at_ms`. Refresh `updated_at_ms` to the current epoch milliseconds. Keep `id` equal to the directory name and keep `phase` as `collection`.
+4. Write the improved requirement back to `{REQUIREMENT_FILE}`.
+5. Reply briefly summarizing the improvements you made.
+
+Do not only describe intent — perform the file edits."#,
+        requirement_id = requirement_id,
+        REQUIREMENT_FILE = REQUIREMENT_FILE,
+    );
+    vec![
+        ToolChatMessage {
+            role: "system".to_string(),
+            content: system,
+        },
+        ToolChatMessage {
+            role: "user".to_string(),
+            content: format!(
+                "Optimize requirement **{title}** (`{requirement_id}`) now.\n\n---\n\n{content}"
+            ),
+        },
+    ]
+}
+
+/// Dispatches a code-agent task that optimizes the requirement body. A suitable
+/// product employee is assigned and the run streams into their conversation.
+pub async fn optimize_requirement(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<Json<AgentDispatchWire>, (axum::http::StatusCode, String)> {
+    let Some(workspace) = workspace_root(&state) else {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            i18n::msg(&headers, "workspace_not_configured"),
+        ));
+    };
+    let id = normalize_requirement_id(&id).map_err(map_requirement_err(&headers))?;
+    let file_path = requirement_file_path(&workspace, &id);
+    if !file_path.exists() {
+        return Err((
+            axum::http::StatusCode::NOT_FOUND,
+            i18n::msg(&headers, "requirement_not_found"),
+        ));
+    }
+    let detail = load_requirement_detail(&workspace, &id)
+        .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+
+    let Some(employee) = pick_employee_for_role(&workspace, "product") else {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            i18n::msg(&headers, "requirement_no_employees"),
+        ));
+    };
+
+    let task_id = format!("optimize-{id}");
+    let _ = create_work_task(
+        &workspace,
+        CreateWorkTaskParams {
+            id: Some(&task_id),
+            biz_type: BIZ_TYPE_REQUIREMENT,
+            biz_id: &id,
+            title: i18n::format_msg(
+                crate::agent_locale::resolve_lang_for_workspace(&workspace),
+                "optimize_work_task_title",
+                &[("requirement_title", detail.title.as_str())],
+            )
+            .as_str(),
+            description: "",
+            assignee: Some(&employee.id),
+            auto_executable: false,
+            metadata: serde_json::json!({ "task_kind": TASK_KIND_OPTIMIZATION }),
+        },
+    );
+    let _ = update_work_task(&workspace, &task_id, |task| {
+        task.status = WorkTaskStatus::InProgress;
+        Ok(())
+    });
+
+    let messages = build_optimize_messages(&id, &detail.title, &detail.content);
+    let tools = state.tools.read().expect("tools lock poisoned").clone();
+    let workdir = requirement_dir(&workspace, &id);
+    let complete_task_id = task_id.clone();
+    spawn_requirement_agent_task(
+        &workspace,
+        &tools,
+        &employee.id,
+        AgentTaskSpec {
+            kind: TaskKind::RequirementAgent,
+            content: format!("Optimize requirement `{id}`"),
+            workdir,
+            messages,
+            context: serde_json::json!({ "requirement_id": id }),
+        },
+        move |ws| {
+            let _ = update_work_task(ws, &complete_task_id, |task| {
+                task.status = WorkTaskStatus::Completed;
+                task.progress = 100;
+                Ok(())
+            });
+        },
+    );
+
+    Ok(Json(AgentDispatchWire::from_employee(&employee)))
+}
 
 fn map_requirement_err(
     headers: &HeaderMap,

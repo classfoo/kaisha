@@ -103,5 +103,7 @@
   "work_task_execute_user_prompt": "Execute this work task now: {title}",
   "work_task_execute_context_header": "Employee: {name} ({role})\nTask: {title}\nDescription: {description}\nBiz type: {biz_type}\nBiz id: {biz_id}\n",
   "work_task_execute_branch": "Development branch: {branch}\n",
-  "review_work_task_title": "Review {requirement_title} as {employee_name}"
+  "review_work_task_title": "Review {requirement_title} as {employee_name}",
+  "requirement_no_employees": "No employees available to take on this task. Hire an employee first.",
+  "optimize_work_task_title": "Optimize requirement {requirement_title}"
 }
