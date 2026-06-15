@@ -84,7 +84,7 @@ function ChatMessageAvatar(props: {
   )
 }
 
-function CopyButton({ text, t }: { text: string; t: (key: string) => string }) {
+export const CopyButton = React.memo(function CopyButton({ text, t }: { text: string; t: (key: string) => string }) {
   const [copied, setCopied] = React.useState(false)
   const handleCopy = React.useCallback(() => {
     navigator.clipboard.writeText(text).then(() => {
@@ -103,7 +103,7 @@ function CopyButton({ text, t }: { text: string; t: (key: string) => string }) {
       {copied ? t('ui.chat.copy.checkmark') : t('ui.chat.copy.icon')}
     </button>
   )
-}
+})
 
 function extractCopyableContent(message: DisplayMessage): string {
   const parts: string[] = []
@@ -141,7 +141,7 @@ function TypingIndicator() {
   )
 }
 
-function TaskCrashedPanel({
+export const TaskCrashedPanel = React.memo(function TaskCrashedPanel({
   taskId,
   continuing,
   onContinue,
@@ -165,7 +165,7 @@ function TaskCrashedPanel({
       </button>
     </div>
   )
-}
+})
 
 function buildSeedMessages(
   employee: EmployeeDirectoryRecord,
@@ -195,6 +195,30 @@ function formatMessageTimeMs(ms: number): string {
 }
 
 function wireToDisplay(m: ChatWireMessage): DisplayMessage {
+  return _wireToDisplayImpl(m)
+}
+
+// Module-level cache: avoids recomputing reconstructStreamingState for unchanged messages.
+// Keyed by message id; invalidated by version bump when messages are replaced.
+const _wireCache = new Map<string, { version: number; result: DisplayMessage }>()
+let _wireCacheVersion = 0
+
+/** Bump the cache version to invalidate all cached entries. Call when messages are replaced. */
+export function invalidateWireCache(): void {
+  _wireCacheVersion++
+}
+
+function _wireToDisplayImpl(m: ChatWireMessage): DisplayMessage {
+  const cached = _wireCache.get(m.id)
+  if (cached && cached.version === _wireCacheVersion) {
+    return cached.result
+  }
+  const result = _computeWireToDisplay(m)
+  _wireCache.set(m.id, { version: _wireCacheVersion, result })
+  return result
+}
+
+function _computeWireToDisplay(m: ChatWireMessage): DisplayMessage {
   const side = m.role === 'user' ? 'me' : m.role === 'system' ? 'system' : 'employee'
   const base: DisplayMessage = {
     id: m.id,
@@ -229,7 +253,7 @@ function wireToDisplay(m: ChatWireMessage): DisplayMessage {
   return base
 }
 
-function StreamingToolCallCard({
+export const StreamingToolCallCard = React.memo(function StreamingToolCallCard({
   call,
   t,
 }: {
@@ -298,7 +322,7 @@ function StreamingToolCallCard({
       ) : null}
     </div>
   )
-}
+})
 
 type TodoItem = { text: string; done: boolean }
 
@@ -338,7 +362,7 @@ function parseTodoItems(raw: string): TodoItem[] {
   return items
 }
 
-function TaskResultPanel({ result, t }: { result: ChatResultMeta | null; t: (key: string) => string }) {
+export const TaskResultPanel = React.memo(function TaskResultPanel({ result, t }: { result: ChatResultMeta | null; t: (key: string) => string }) {
   if (!result) return null
   const isSuccess = result.exit_code === 0
   return (
@@ -363,7 +387,7 @@ function TaskResultPanel({ result, t }: { result: ChatResultMeta | null; t: (key
       )}
     </div>
   )
-}
+})
 
 export const EmployeeChatPanel = React.memo(function EmployeeChatPanel({
   apiBase,
@@ -448,10 +472,42 @@ export const EmployeeChatPanel = React.memo(function EmployeeChatPanel({
     return base
   }, [chatSenderProfile, optimisticUser, selectedEmployee, sending, serverMessages, streamingAssistant, t])
 
+  // --- Virtualization state ---
+  const [scrollTop, setScrollTop] = React.useState(0)
+  const [containerHeight, setContainerHeight] = React.useState(0)
+  const VIRTUAL_MSG_HEIGHT = 120
+  const VIRTUAL_BUFFER = 5
+
+  const totalMessages = displayMessages.length
+  const totalContentHeight = totalMessages * VIRTUAL_MSG_HEIGHT
+  const startIndex = Math.max(0, Math.floor(scrollTop / VIRTUAL_MSG_HEIGHT) - VIRTUAL_BUFFER)
+  const visibleCount = containerHeight > 0 ? Math.ceil(containerHeight / VIRTUAL_MSG_HEIGHT) : 10
+  const endIndex = Math.min(totalMessages, startIndex + visibleCount + VIRTUAL_BUFFER * 2)
+
+  const handleScroll = React.useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    setScrollTop(e.currentTarget.scrollTop)
+    if (containerHeight === 0) {
+      setContainerHeight(e.currentTarget.clientHeight)
+    }
+  }, [containerHeight])
+
+  // Auto-scroll to bottom when new messages arrive (only when near bottom)
+  const wasNearBottom = React.useRef(false)
   React.useEffect(() => {
     const el = historyRef.current
     if (!el) return
-    el.scrollTop = el.scrollHeight
+    const threshold = 200
+    const currentBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    wasNearBottom.current = currentBottom < threshold
+  }, [displayMessages, sending, streamingAssistant])
+
+  React.useEffect(() => {
+    if (!wasNearBottom.current) return
+    const el = historyRef.current
+    if (!el) return
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight
+    })
   }, [displayMessages, sending, streamingAssistant])
 
   const sendFromDraft = React.useCallback(async () => {
@@ -529,12 +585,16 @@ export const EmployeeChatPanel = React.memo(function EmployeeChatPanel({
     <div className="chat-layout">
       {selectedEmployee ? (
         <>
-          <div className="chat-history" ref={historyRef}>
+          <div className="chat-history" ref={historyRef} onScroll={handleScroll}>
             {loading ? <div className="chat-history__status">{t('ui.chat.loadingHistory')}</div> : null}
             {!loading && lastResult ? (
               <TaskResultPanel result={lastResult} t={t} />
             ) : null}
-            {displayMessages.map((message) => {
+            {/* Virtualization spacer for messages above the visible range */}
+            {startIndex > 0 ? (
+              <div style={{ height: startIndex * VIRTUAL_MSG_HEIGHT }} />
+            ) : null}
+            {displayMessages.slice(startIndex, endIndex).map((message, virtIdx) => {
               const isMe = message.side === 'me'
               const isSystem = message.side === 'system'
               const userLabel = message.senderName?.trim() || defaultSenderName
@@ -689,6 +749,10 @@ export const EmployeeChatPanel = React.memo(function EmployeeChatPanel({
                 </div>
               )
             })}
+            {/* Virtualization spacer for messages below the visible range */}
+            {endIndex < totalMessages ? (
+              <div style={{ height: (totalMessages - endIndex) * VIRTUAL_MSG_HEIGHT }} />
+            ) : null}
           </div>
           {!loading && error ? (
             <div className="chat-inline-status chat-inline-status--error">

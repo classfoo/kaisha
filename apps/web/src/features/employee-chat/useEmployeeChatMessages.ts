@@ -534,9 +534,12 @@ export function useEmployeeChatMessages(
     return () => clearInterval(timer)
   }, [apiBase, headers])
 
+  const processAliveStatusRef = React.useRef(processAliveStatus)
+  processAliveStatusRef.current = processAliveStatus
+
   const isProcessAlive = React.useCallback((taskId: string): boolean => {
-    return processAliveStatus.get(taskId) ?? false
-  }, [processAliveStatus])
+    return processAliveStatusRef.current.get(taskId) ?? false
+  }, [])
 
   const sendMessage = React.useCallback(
     async (body: string) => {
