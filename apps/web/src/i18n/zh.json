@@ -145,6 +145,7 @@
       "placeholder": "给 {name} 发送消息...",
       "loadingHistory": "正在加载对话…",
       "awaitingReply": "等待回复中…",
+      "scrollToLatest": "回到最新消息",
       "toolExitWarning": "工具退出码为 {code}",
       "toolbar": {
         "attach": "附件",
