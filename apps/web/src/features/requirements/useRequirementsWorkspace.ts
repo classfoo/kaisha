@@ -18,6 +18,7 @@ export function useRequirementsWorkspace(
   locale: string,
   workspaceConfigured: boolean,
   refreshTick: number,
+  onAgentDispatch?: (dispatch: AgentDispatch) => void,
 ) {
   const api = React.useMemo(() => createRequirementsApi(apiBase, locale), [apiBase, locale])
   const [items, setItems] = React.useState<RequirementSummary[]>([])
@@ -137,7 +138,7 @@ export function useRequirementsWorkspace(
     async (id: string) => {
       const data = await api.get(id)
       setDetail(data)
-      setAgentNotice(null)
+      // Note: agentNotice is no longer cleared here to allow persistent feedback
       void loadReview(id).catch(() => setReview(null))
       void loadDevelopment(id, data.phase).catch(() => setDevelopment(null))
       void loadTesting(id, data.phase).catch(() => setTesting(null))
@@ -486,6 +487,7 @@ export function useRequirementsWorkspace(
       try {
         const dispatch = await api.optimize(id)
         setAgentNotice(dispatch)
+        onAgentDispatch?.(dispatch)
         return dispatch
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
@@ -495,7 +497,7 @@ export function useRequirementsWorkspace(
         setAgentActionKey(null)
       }
     },
-    [api],
+    [api, onAgentDispatch],
   )
 
   const splitDevTasksAction = React.useCallback(
@@ -505,6 +507,7 @@ export function useRequirementsWorkspace(
       try {
         const dispatch = await api.splitDevTasks(id)
         setAgentNotice(dispatch)
+        onAgentDispatch?.(dispatch)
         return dispatch
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
@@ -514,7 +517,7 @@ export function useRequirementsWorkspace(
         setAgentActionKey(null)
       }
     },
-    [api],
+    [api, onAgentDispatch],
   )
 
   const splitTestTasksAction = React.useCallback(
@@ -524,6 +527,7 @@ export function useRequirementsWorkspace(
       try {
         const dispatch = await api.splitTestTasks(id)
         setAgentNotice(dispatch)
+        onAgentDispatch?.(dispatch)
         return dispatch
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
@@ -533,7 +537,7 @@ export function useRequirementsWorkspace(
         setAgentActionKey(null)
       }
     },
-    [api],
+    [api, onAgentDispatch],
   )
 
   const testTaskActionFn = React.useCallback(
@@ -575,6 +579,7 @@ export function useRequirementsWorkspace(
       try {
         const dispatch = await api.packageRelease(id)
         setAgentNotice(dispatch)
+        onAgentDispatch?.(dispatch)
         return dispatch
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
@@ -584,7 +589,7 @@ export function useRequirementsWorkspace(
         setAgentActionKey(null)
       }
     },
-    [api],
+    [api, onAgentDispatch],
   )
 
   const startReleaseAction = React.useCallback(
@@ -594,6 +599,7 @@ export function useRequirementsWorkspace(
       try {
         const dispatch = await api.startRelease(id)
         setAgentNotice(dispatch)
+        onAgentDispatch?.(dispatch)
         return dispatch
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
@@ -603,7 +609,7 @@ export function useRequirementsWorkspace(
         setAgentActionKey(null)
       }
     },
-    [api],
+    [api, onAgentDispatch],
   )
 
   const reloadRelease = React.useCallback(
@@ -621,6 +627,10 @@ export function useRequirementsWorkspace(
     },
     [api],
   )
+
+  const clearAgentNotice = React.useCallback(() => {
+    setAgentNotice(null)
+  }, [])
 
   // Load archived requirements
   React.useEffect(() => {
@@ -721,6 +731,7 @@ export function useRequirementsWorkspace(
     releaseLoading,
     agentActionKey,
     agentNotice,
+    clearAgentNotice,
     error,
     refresh,
     selectRequirement,

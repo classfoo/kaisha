@@ -4,7 +4,7 @@ import { EmployeeDirectoryRecord } from './components/EmployeeList'
 import { LeftSidebar, NavMenu } from './components/LeftSidebar'
 import { useGitWorkspace } from './features/git/useGitWorkspace'
 import { useRequirementsWorkspace } from './features/requirements/useRequirementsWorkspace'
-import type { RequirementPhase } from './features/requirements/requirementsApi'
+import type { AgentDispatch, RequirementPhase } from './features/requirements/requirementsApi'
 import { LeftPanel } from './components/LeftPanel'
 import { useEmployeeTasks } from './features/employee-tasks/useEmployeeTasks'
 import { createEmployeeTasksApi } from './features/employee-tasks/employeeTasksApi'
@@ -129,7 +129,16 @@ export default function App() {
     { id: 'settings', labelKey: 'ui.actions.settings' },
   ]
   const git = useGitWorkspace(API_BASE, locale, Boolean(workspace?.configured), refreshTick)
-  const requirements = useRequirementsWorkspace(API_BASE, locale, Boolean(workspace?.configured), refreshTick)
+  const handleAgentDispatch = React.useCallback((dispatch: AgentDispatch) => {
+    // Switch to the assigned employee
+    setSelectedEmployeeId(dispatch.employee_id)
+    // Switch to chat view so user sees the task progress
+    setActiveNav('chat')
+    // Refresh chat messages to show the new task_process message
+    setChatMessagesRefreshTick((t) => t + 1)
+  }, [])
+
+  const requirements = useRequirementsWorkspace(API_BASE, locale, Boolean(workspace?.configured), refreshTick, handleAgentDispatch)
   const [employeeTasksExploring, setEmployeeTasksExploring] = React.useState(false)
   const [chatMessagesRefreshTick, setChatMessagesRefreshTick] = React.useState(0)
   const [employeeTasksExploreError, setEmployeeTasksExploreError] = React.useState<string | null>(null)

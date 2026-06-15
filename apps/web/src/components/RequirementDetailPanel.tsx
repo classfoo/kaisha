@@ -103,9 +103,19 @@ export const RequirementDetailPanel = React.memo(function RequirementDetailPanel
         </section>
         {renderPhaseToolbar()}
         {requirements.agentNotice ? (
-          <p className="requirement-agent-notice">
-            {t('ui.requirements.agentAssigned').replace('{name}', requirements.agentNotice.employee_name)}
-          </p>
+          <div className="requirement-agent-notice">
+            <span className="requirement-agent-notice__text">
+              {t('ui.requirements.agentAssigned').replace('{name}', requirements.agentNotice.employee_name)}
+            </span>
+            <button
+              className="requirement-agent-notice__close"
+              onClick={() => requirements.clearAgentNotice?.()}
+              aria-label={t('ui.requirements.dismissNotice') || 'Dismiss'}
+              title={t('ui.requirements.dismissNotice') || 'Dismiss'}
+            >
+              ×
+            </button>
+          </div>
         ) : null}
         {error || saveError ? (
           <p className="workspace-setup__error">{saveError || error}</p>
