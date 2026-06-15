@@ -138,7 +138,7 @@ function DevTaskRow({
 }
 
 export function RequirementDevelopmentSection({ requirements, t }: RequirementDevelopmentSectionProps) {
-  const { detail, development, devLoading, startDevelopmentAction, createDevTaskAction, devStarting, splitDevTasksAction, agentActionKey } = requirements
+  const { detail, development, devLoading, createDevTaskAction, startDevelopmentAction } = requirements
   const [createTaskOpen, setCreateTaskOpen] = React.useState(false)
   const [taskTitle, setTaskTitle] = React.useState('')
   const [taskAssignee, setTaskAssignee] = React.useState('')
@@ -170,45 +170,6 @@ export function RequirementDevelopmentSection({ requirements, t }: RequirementDe
       <div className="requirement-development__feature-branch">
         <span className="settings-subtext">{t('ui.requirements.development.featureBranch')}:</span>
         <code className="requirement-development__branch-name">{development.feature_branch}</code>
-      </div>
-
-      <div className="requirement-development__toolbar">
-        {!development.feature_branch_created && detail && (
-          <button
-            type="button"
-            className="action-btn"
-            onClick={() => void startDevelopmentAction(detail.id)}
-            disabled={devStarting}
-          >
-            {devStarting ? t('ui.requirements.development.processing') : t('ui.requirements.development.start')}
-          </button>
-        )}
-        {development.feature_branch_created && (
-          <button
-            type="button"
-            className="action-btn"
-            onClick={() => {
-              setCreateTaskOpen(true)
-              setCreateError('')
-              setTaskTitle('')
-              setTaskAssignee('')
-            }}
-          >
-            {t('ui.requirements.development.createTask')}
-          </button>
-        )}
-        {detail && (
-          <button
-            type="button"
-            className="action-btn"
-            onClick={() => void splitDevTasksAction(detail.id)}
-            disabled={agentActionKey === 'splitDev'}
-          >
-            {agentActionKey === 'splitDev'
-              ? t('ui.requirements.development.splitting')
-              : t('ui.requirements.development.splitTasks')}
-          </button>
-        )}
       </div>
 
       {createTaskOpen && (

@@ -87,7 +87,7 @@ const EMPTY_STREAM: StreamingAssistantState = {
   startedAtMs: null,
 }
 
-type MessagesResponse = { messages: ChatWireMessage[] }
+type MessagesResponse = { messages: ChatWireMessage[]; has_more: boolean; total_count: number }
 type PostMessageResponse = { messages: ChatWireMessage[]; last_result: ChatResultMeta }
 
 export type StreamEventPayload =
@@ -421,6 +421,10 @@ export function useEmployeeChatMessages(
   const [error, setError] = React.useState<string | null>(null)
   const [lastResult, setLastResult] = React.useState<ChatResultMeta | null>(null)
 
+  // Pagination state
+  const [hasMoreMessages, setHasMoreMessages] = React.useState(false)
+  const [loadingMore, setLoadingMore] = React.useState(false)
+
   // Mirror `sending` into a ref so the conversation-watch subscription can avoid
   // fighting the active POST stream (which renders its own live overlay).
   const sendingRef = React.useRef(false)
@@ -435,6 +439,8 @@ export function useEmployeeChatMessages(
     [locale],
   )
 
+  const MESSAGE_PAGE_SIZE = 25
+
   const refresh = React.useCallback(async () => {
     if (!employeeId) {
       setServerMessages([])
@@ -442,6 +448,7 @@ export function useEmployeeChatMessages(
       setError(null)
       setOptimisticUser(null)
       setStreamingAssistant(EMPTY_STREAM)
+      setHasMoreMessages(false)
       return
     }
     setOptimisticUser(null)
@@ -450,19 +457,44 @@ export function useEmployeeChatMessages(
     setLoading(true)
     setError(null)
     try {
-      const url = `${apiBase}/api/employees/${encodeURIComponent(employeeId)}/messages`
+      const url = `${apiBase}/api/employees/${encodeURIComponent(employeeId)}/messages?limit=${MESSAGE_PAGE_SIZE}`
       const res = await fetch(url, { headers })
       const text = await res.text()
       if (!res.ok) throw new Error(text || `HTTP ${res.status}`)
       const data = JSON.parse(text) as MessagesResponse
       setServerMessages(data.messages ?? [])
+      setHasMoreMessages(data.has_more ?? false)
     } catch (e) {
       setServerMessages([])
+      setHasMoreMessages(false)
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
   }, [apiBase, employeeId, headers])
+
+  const loadMoreMessages = React.useCallback(async () => {
+    if (!employeeId || loadingMore || !hasMoreMessages) return
+    const oldestId = serverMessagesRef.current.length > 0 ? serverMessagesRef.current[0].id : null
+    if (!oldestId) return
+
+    setLoadingMore(true)
+    setError(null)
+    try {
+      const url = `${apiBase}/api/employees/${encodeURIComponent(employeeId)}/messages?limit=${MESSAGE_PAGE_SIZE}&before_id=${encodeURIComponent(oldestId)}`
+      const res = await fetch(url, { headers })
+      const text = await res.text()
+      if (!res.ok) throw new Error(text || `HTTP ${res.status}`)
+      const data = JSON.parse(text) as MessagesResponse
+      // Prepend older messages to the existing list
+      setServerMessages((prev) => [...(data.messages ?? []), ...prev])
+      setHasMoreMessages(data.has_more ?? false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [apiBase, employeeId, headers, loadingMore, hasMoreMessages])
 
   React.useEffect(() => {
     void refresh()
@@ -588,6 +620,7 @@ export function useEmployeeChatMessages(
               setLastResult(data.last_result ?? null)
               setStreamingAssistant(EMPTY_STREAM)
               setOptimisticUser(null)
+              setHasMoreMessages(false)
               onStreamDone?.()
             } else if (ev.event === 'error') {
               let msg = ev.data
@@ -639,5 +672,8 @@ export function useEmployeeChatMessages(
     refresh,
     sendMessage,
     isProcessAlive,
+    hasMoreMessages,
+    loadingMore,
+    loadMoreMessages,
   }
 }

@@ -82,7 +82,7 @@ function TestTaskRow({
 }
 
 export function RequirementTestingSection({ requirements, t }: RequirementTestingSectionProps) {
-  const { detail, testing, testingLoading, reloadTesting, splitTestTasksAction, agentActionKey } = requirements
+  const { detail, testing, testingLoading, reloadTesting } = requirements
 
   React.useEffect(() => {
     if (detail) void reloadTesting(detail.id)
@@ -95,30 +95,6 @@ export function RequirementTestingSection({ requirements, t }: RequirementTestin
 
   return (
     <div className="requirement-development">
-      <div className="requirement-development__toolbar">
-        {detail && (
-          <button
-            type="button"
-            className="action-btn"
-            onClick={() => void splitTestTasksAction(detail.id)}
-            disabled={agentActionKey === 'splitTest'}
-          >
-            {agentActionKey === 'splitTest'
-              ? t('ui.requirements.testing.splitting')
-              : t('ui.requirements.testing.splitTasks')}
-          </button>
-        )}
-        {detail && (
-          <button
-            type="button"
-            className="action-btn"
-            onClick={() => void reloadTesting(detail.id)}
-          >
-            {t('ui.requirements.testing.refresh')}
-          </button>
-        )}
-      </div>
-
       <div className="requirement-development__task-list">
         {testing && testing.tasks.length > 0 ? (
           testing.tasks.map((task) => (

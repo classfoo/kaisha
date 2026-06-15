@@ -99,6 +99,12 @@ impl From<&StoredMessage> for WireMessage {
 #[derive(Serialize)]
 pub struct MessagesResponse {
     pub messages: Vec<WireMessage>,
+    /// Whether there are more messages available (for pagination).
+    #[serde(default)]
+    pub has_more: bool,
+    /// Total number of messages in the conversation.
+    #[serde(default)]
+    pub total_count: i64,
 }
 
 #[derive(Deserialize)]
@@ -572,6 +578,8 @@ pub async fn get_messages(
     headers: HeaderMap,
     State(state): State<AppState>,
     AxumPath(employee_id): AxumPath<String>,
+    // Pagination query parameters
+    axum::extract::Query(pagination_params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Result<Json<MessagesResponse>, (axum::http::StatusCode, String)> {
     let Some(workspace) = workspace_dir(&state) else {
         return Err((
@@ -640,8 +648,50 @@ pub async fn get_messages(
         let _ = save_conversation(&conv_path, &conv);
     }
 
+    // Parse pagination parameters
+    let default_limit = 25;
+    let max_limit = 100;
+    let limit: usize = pagination_params
+        .get("limit")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default_limit)
+        .min(max_limit);
+
+    let before_id = pagination_params.get("before_id").cloned();
+
+    let total_count = conv.messages.len() as i64;
+
+    // Determine which messages to return
+    let messages_slice = if let Some(ref before_msg_id) = before_id {
+        // Find the index of the message with before_id
+        let before_index = conv.messages.iter().position(|m| m.id == *before_msg_id);
+        match before_index {
+            Some(idx) => {
+                // Return messages before this index
+                let start = idx.saturating_sub(limit);
+                (start..idx, start > 0)
+            }
+            None => {
+                // Message not found, return all messages
+                (0..conv.messages.len(), false)
+            }
+        }
+    } else {
+        // No before_id, return last N messages
+        let total = conv.messages.len();
+        if total <= limit {
+            (0..total, false)
+        } else {
+            (total - limit..total, true)
+        }
+    };
+
+    let (range, has_more_before) = messages_slice;
+
     Ok(Json(MessagesResponse {
-        messages: conv.messages.iter().map(WireMessage::from).collect(),
+        messages: conv.messages.iter().take(range.end).skip(range.start).map(WireMessage::from).collect(),
+        has_more: has_more_before,
+        total_count,
     }))
 }
 

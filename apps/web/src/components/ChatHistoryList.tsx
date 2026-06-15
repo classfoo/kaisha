@@ -16,6 +16,14 @@ type ChatHistoryListProps<T> = {
   scrollDownLabel: string
   estimateHeight?: number
   className?: string
+  /** Whether there are more messages available to load above. */
+  hasMoreAbove?: boolean
+  /** Whether older messages are currently being loaded. */
+  loadingMore?: boolean
+  /** Callback to load more messages. */
+  onLoadMore?: () => void
+  /** Label for the load more button. */
+  loadMoreLabel?: string
 }
 
 /**
@@ -27,7 +35,7 @@ type ChatHistoryListProps<T> = {
  * height while only a small window of rows is mounted at any time.
  */
 function ChatHistoryListInner<T>(
-  { items, getKey, renderItem, header, scrollDownLabel, estimateHeight, className }: ChatHistoryListProps<T>,
+  { items, getKey, renderItem, header, scrollDownLabel, estimateHeight, className, hasMoreAbove, loadingMore, onLoadMore, loadMoreLabel }: ChatHistoryListProps<T>,
   ref: React.Ref<ChatHistoryListHandle>,
 ) {
   const {
@@ -51,6 +59,19 @@ function ChatHistoryListInner<T>(
     <div className="chat-history-wrap">
       <div className={className ?? 'chat-history'} ref={scrollRef} onScroll={onScroll}>
         {header}
+        {hasMoreAbove && onLoadMore ? (
+          <div className="chat-history__load-more">
+            <button
+              type="button"
+              className="chat-history__load-more-btn"
+              onClick={onLoadMore}
+              disabled={loadingMore}
+              aria-label={loadMoreLabel}
+            >
+              {loadingMore ? '...' : (loadMoreLabel || 'Load more')}
+            </button>
+          </div>
+        ) : null}
         <div className="chat-history__viewport" ref={viewportRef} style={{ height: totalSize, position: 'relative' }}>
           {virtualItems.map((vi) => (
             <div

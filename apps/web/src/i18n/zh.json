@@ -146,6 +146,8 @@
       "loadingHistory": "正在加载对话…",
       "awaitingReply": "等待回复中…",
       "scrollToLatest": "回到最新消息",
+      "loadMore": "加载更多消息",
+      "loadingMore": "加载中...",
       "toolExitWarning": "工具退出码为 {code}",
       "toolbar": {
         "attach": "附件",

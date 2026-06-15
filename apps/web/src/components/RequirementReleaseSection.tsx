@@ -12,9 +12,6 @@ export function RequirementReleaseSection({ requirements, t }: RequirementReleas
     release,
     releaseLoading,
     reloadRelease,
-    packageReleaseAction,
-    startReleaseAction,
-    agentActionKey,
   } = requirements
 
   React.useEffect(() => {
@@ -24,43 +21,6 @@ export function RequirementReleaseSection({ requirements, t }: RequirementReleas
 
   return (
     <div className="requirement-development">
-      <div className="requirement-development__toolbar">
-        {detail && (
-          <button
-            type="button"
-            className="action-btn"
-            onClick={() => void packageReleaseAction(detail.id)}
-            disabled={agentActionKey === 'package'}
-          >
-            {agentActionKey === 'package'
-              ? t('ui.requirements.release.packaging')
-              : t('ui.requirements.release.package')}
-          </button>
-        )}
-        {detail && (
-          <button
-            type="button"
-            className="action-btn"
-            onClick={() => void startReleaseAction(detail.id)}
-            disabled={agentActionKey === 'start'}
-          >
-            {agentActionKey === 'start'
-              ? t('ui.requirements.release.starting')
-              : t('ui.requirements.release.start')}
-          </button>
-        )}
-        {detail && (
-          <button
-            type="button"
-            className="action-btn"
-            onClick={() => void reloadRelease(detail.id)}
-            disabled={releaseLoading}
-          >
-            {releaseLoading ? t('ui.requirements.release.loading') : t('ui.requirements.release.getOutput')}
-          </button>
-        )}
-      </div>
-
       <div className="requirement-release__artifacts">
         <h4 className="requirement-detail__label">{t('ui.requirements.release.artifactsTitle')}</h4>
         {release && release.artifacts.length > 0 ? (

@@ -3,6 +3,7 @@ import type { useRequirementsWorkspace } from '../features/requirements/useRequi
 import type { RequirementPhase } from '../features/requirements/requirementsApi'
 import { RequirementPhaseTimeline } from './RequirementPhaseTimeline'
 import { RequirementPhaseContent } from './RequirementPhaseContent'
+import { RequirementActionBar } from './RequirementActionBar'
 
 type RequirementDetailPanelProps = {
   requirements: ReturnType<typeof useRequirementsWorkspace>
@@ -18,10 +19,6 @@ export const RequirementDetailPanel = React.memo(function RequirementDetailPanel
   const [contentDraft, setContentDraft] = React.useState('')
   const [dirty, setDirty] = React.useState(false)
   const [saveError, setSaveError] = React.useState('')
-  const [createTaskOpen, setCreateTaskOpen] = React.useState(false)
-  const [createTaskTitle, setCreateTaskTitle] = React.useState('')
-  const [createTaskAssignee, setCreateTaskAssignee] = React.useState('')
-  const [createError, setCreateError] = React.useState('')
 
   React.useEffect(() => {
     if (!detail) {
@@ -42,145 +39,33 @@ export const RequirementDetailPanel = React.memo(function RequirementDetailPanel
 
   const markDirty = () => setDirty(true)
 
-  const onSave = async () => {
-    if (!detail) return
-    setSaveError('')
-    try {
-      await saveRequirement({
-        title: titleDraft.trim(),
-        phase: phaseDraft,
-        content: contentDraft,
-      })
-      setDirty(false)
-    } catch (e) {
-      setSaveError(e instanceof Error ? e.message : String(e))
-    }
-  }
+  // Auto-save: debounce saves after user stops editing for 500ms
+  const savingRef = React.useRef(false)
+  React.useEffect(() => {
+    if (!dirty || !detail) return
+    const timer = setTimeout(async () => {
+      if (savingRef.current) return
+      savingRef.current = true
+      setSaveError('')
+      try {
+        await saveRequirement({
+          title: titleDraft.trim(),
+          phase: phaseDraft,
+          content: contentDraft,
+        })
+        setDirty(false)
+      } catch (e) {
+        setSaveError(e instanceof Error ? e.message : String(e))
+      } finally {
+        savingRef.current = false
+      }
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [dirty, detail?.id, titleDraft, phaseDraft, contentDraft, saveRequirement])
 
   const renderPhaseToolbar = () => {
-    const phase = viewPhase
-
-    // collection phase: save + optimize buttons
-    if (phase === 'collection') {
-      return (
-        <div className="requirement-phase-toolbar">
-          <button
-            type="button"
-            className="action-btn"
-            onClick={() => void onSave()}
-            disabled={busy || !dirty}
-          >
-            {busy ? t('ui.requirements.saving') : t('ui.requirements.save')}
-          </button>
-          <button
-            type="button"
-            className="action-btn"
-            onClick={() => void requirements.optimizeAction(detail!.id)}
-            disabled={requirements.agentActionKey === 'optimize'}
-          >
-            {requirements.agentActionKey === 'optimize'
-              ? t('ui.requirements.optimizing')
-              : t('ui.requirements.optimize')}
-          </button>
-        </div>
-      )
-    }
-
-    // development phase: start development, create task
-    if (phase === 'development') {
-      const dev = requirements.development
-      const featureBranchCreated = dev?.feature_branch_created
-
-      return (
-        <div className="requirement-phase-toolbar">
-          {!featureBranchCreated && (
-            <button
-              type="button"
-              className="action-btn"
-              onClick={() => void requirements.startDevelopmentAction(detail!.id)}
-              disabled={busy || requirements.devStarting}
-            >
-              {requirements.devStarting ? t('ui.requirements.development.processing') : t('ui.requirements.development.start')}
-            </button>
-          )}
-          {featureBranchCreated && (
-            <button
-              type="button"
-              className="action-btn"
-              onClick={() => {
-                setCreateTaskOpen(true)
-                setCreateError('')
-              }}
-            >
-              {t('ui.requirements.development.createTask')}
-            </button>
-          )}
-          {createTaskOpen ? (
-            <div className="requirement-review-confirm" role="dialog" aria-modal="true">
-              <p className="requirement-review-confirm__text">{t('ui.requirements.development.createTaskText')}</p>
-              <input
-                type="text"
-                className="workspace-setup__input"
-                placeholder={t('ui.requirements.development.taskTitle')}
-                value={createTaskTitle}
-                onChange={(e) => setCreateTaskTitle(e.target.value)}
-                autoFocus
-              />
-              <input
-                type="text"
-                className="workspace-setup__input"
-                placeholder={t('ui.requirements.development.taskAssignee')}
-                value={createTaskAssignee}
-                onChange={(e) => setCreateTaskAssignee(e.target.value)}
-              />
-              <div className="requirement-review-confirm__actions">
-                <button
-                  type="button"
-                  className="action-btn"
-                  onClick={() => {
-                    setCreateTaskOpen(false)
-                    setCreateError('')
-                  }}
-                >
-                  {t('ui.requirements.development.cancel')}
-                </button>
-                <button
-                  type="button"
-                  className="action-btn"
-                  onClick={() => {
-                    if (!createTaskTitle.trim()) return
-                    setCreateError('')
-                    void requirements.createDevTaskAction(detail!.id, {
-                      title: createTaskTitle.trim(),
-                      assignee: createTaskAssignee.trim() || undefined,
-                    })
-                      .then(() => setCreateTaskOpen(false))
-                      .catch((e) => setCreateError(e instanceof Error ? e.message : String(e)))
-                  }}
-                >
-                  {t('ui.requirements.development.confirm')}
-                </button>
-              </div>
-              {createError ? <p className="workspace-setup__error">{createError}</p> : null}
-            </div>
-          ) : null}
-        </div>
-      )
-    }
-
-    // testing, release: placeholder toolbar (save button)
-    return (
-      <div className="requirement-phase-toolbar">
-        <button
-          type="button"
-          className="action-btn"
-          onClick={() => void onSave()}
-          disabled={busy || !dirty}
-        >
-          {busy ? t('ui.requirements.saving') : t('ui.requirements.save')}
-        </button>
-      </div>
-    )
+    // Unified action bar for phase-specific actions (rendered below the timeline)
+    return <RequirementActionBar requirements={requirements} viewPhase={viewPhase} t={t} />
   }
 
   if (loading && !detail) {
@@ -216,18 +101,6 @@ export const RequirementDetailPanel = React.memo(function RequirementDetailPanel
             }}
           />
         </section>
-        {dirty ? (
-          <div className="requirement-phase-toolbar requirement-phase-toolbar--save">
-            <button
-              type="button"
-              className="action-btn"
-              onClick={() => void onSave()}
-              disabled={busy}
-            >
-              {busy ? t('ui.requirements.saving') : t('ui.requirements.save')}
-            </button>
-          </div>
-        ) : null}
         {renderPhaseToolbar()}
         {requirements.agentNotice ? (
           <p className="requirement-agent-notice">

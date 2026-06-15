@@ -146,6 +146,8 @@
       "loadingHistory": "会話履歴を読み込み中…",
       "awaitingReply": "返信を待っています…",
       "scrollToLatest": "最新へ移動",
+      "loadMore": "さらに読み込む",
+      "loadingMore": "読み込み中...",
       "toolExitWarning": "ツールが終了コード {code} で終了しました",
       "toolbar": {
         "attach": "添付",

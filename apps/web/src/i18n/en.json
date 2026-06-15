@@ -146,6 +146,8 @@
       "loadingHistory": "Loading conversation…",
       "awaitingReply": "Waiting for a reply…",
       "scrollToLatest": "Jump to latest",
+      "loadMore": "Load more messages",
+      "loadingMore": "Loading...",
       "toolExitWarning": "Tool exited with code {code}",
       "toolbar": {
         "attach": "Attach",

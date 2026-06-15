@@ -585,7 +585,7 @@ export const EmployeeChatPanel = React.memo(function EmployeeChatPanel({
 }: EmployeeChatPanelProps) {
   const selectedEmployee = employees.find((item) => item.id === selectedEmployeeId) ?? null
   const imeEnterGuardRef = React.useRef(createImeEnterGuardState())
-  const { serverMessages, optimisticUser, streamingAssistant, loading, sending, error, lastResult, refresh, sendMessage, isProcessAlive } =
+  const { serverMessages, optimisticUser, streamingAssistant, loading, sending, error, lastResult, refresh, sendMessage, isProcessAlive, hasMoreMessages, loadingMore, loadMoreMessages } =
     useEmployeeChatMessages(apiBase, locale, selectedEmployeeId, chatSenderProfile, onEmployeeTasksRefresh)
 
   // Track continuing execution state per task
@@ -759,6 +759,10 @@ export const EmployeeChatPanel = React.memo(function EmployeeChatPanel({
             renderItem={renderMessage}
             header={historyHeader}
             scrollDownLabel={t('ui.chat.scrollToLatest')}
+            hasMoreAbove={hasMoreMessages}
+            loadingMore={loadingMore}
+            onLoadMore={loadMoreMessages}
+            loadMoreLabel={t('ui.chat.loadMore')}
           />
           {!loading && error ? (
             <div className="chat-inline-status chat-inline-status--error">
