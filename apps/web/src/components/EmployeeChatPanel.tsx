@@ -195,27 +195,39 @@ function formatMessageTimeMs(ms: number): string {
   return new Date(ms).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
 }
 
-function wireToDisplay(m: ChatWireMessage): DisplayMessage {
+export function wireToDisplay(m: ChatWireMessage): DisplayMessage {
   return _wireToDisplayImpl(m)
 }
 
-// Module-level cache: avoids recomputing reconstructStreamingState for unchanged messages.
-// Keyed by message id; invalidated by version bump when messages are replaced.
-const _wireCache = new Map<string, { version: number; result: DisplayMessage }>()
-let _wireCacheVersion = 0
+// Module-level cache: avoids recomputing the (potentially O(n)) streaming-state
+// reconstruction for messages whose rendered content has not changed.
+//
+// IMPORTANT: a `task_process` message keeps the same `id` while its
+// `stream_events` grow during a live code-agent run (the conversation watch SSE
+// relays incremental updates for that same message). The cache key therefore
+// MUST incorporate a content signature, not just the id — otherwise the first
+// streamed chunk is cached forever and the real-time process never updates.
+const _wireCache = new Map<string, { signature: string; result: DisplayMessage }>()
 
-/** Bump the cache version to invalidate all cached entries. Call when messages are replaced. */
-export function invalidateWireCache(): void {
-  _wireCacheVersion++
+/**
+ * Cheap signature capturing every field `_computeWireToDisplay` depends on that
+ * can change for a given message id across SSE updates. `stream_events` are
+ * append-only on the backend, so their length tracks incremental growth;
+ * `task_status`/`content`/`result_meta` change when a run finalizes.
+ */
+function _wireSignature(m: ChatWireMessage): string {
+  const events = m.stream_events?.length ?? 0
+  return `${events}|${m.task_status ?? ''}|${m.content?.length ?? 0}|${m.result_meta ? 1 : 0}`
 }
 
 function _wireToDisplayImpl(m: ChatWireMessage): DisplayMessage {
+  const signature = _wireSignature(m)
   const cached = _wireCache.get(m.id)
-  if (cached && cached.version === _wireCacheVersion) {
+  if (cached && cached.signature === signature) {
     return cached.result
   }
   const result = _computeWireToDisplay(m)
-  _wireCache.set(m.id, { version: _wireCacheVersion, result })
+  _wireCache.set(m.id, { signature, result })
   return result
 }
 
