@@ -9,6 +9,29 @@ use std::{
 pub const BIZ_TYPE_REQUIREMENT: &str = "requirement";
 pub const TASK_KIND_DEVELOPMENT: &str = "development";
 pub const TASK_KIND_REVIEW: &str = "review";
+pub const TASK_KIND_OPTIMIZATION: &str = "optimization";
+pub const TASK_KIND_TEST: &str = "test";
+
+pub fn is_test_task(task: &WorkTask) -> bool {
+    task.metadata
+        .get("task_kind")
+        .and_then(|v| v.as_str())
+        == Some(TASK_KIND_TEST)
+}
+
+pub fn test_status(task: &WorkTask) -> Option<&str> {
+    task.metadata
+        .get("test_status")
+        .and_then(|v| v.as_str())
+}
+
+pub fn set_test_status(task: &mut WorkTask, status: &str) {
+    if let Value::Object(map) = &mut task.metadata {
+        map.insert("test_status".into(), Value::String(status.into()));
+    } else {
+        task.metadata = serde_json::json!({ "test_status": status });
+    }
+}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

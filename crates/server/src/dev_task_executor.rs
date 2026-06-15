@@ -148,6 +148,95 @@ pub async fn run_dev_task_agent_streaming(
     Ok(task)
 }
 
+/// Builds the prompt content for reviewing the code produced for a development task.
+pub fn build_dev_task_review_prompt(
+    workspace: &Path,
+    task_id: &str,
+    requirement_id: &str,
+) -> Result<String, String> {
+    let task = load_work_task(workspace, task_id)?;
+    let title = &task.title;
+    let description = &task.description;
+    let branch = task_branch(&task).unwrap_or("unknown");
+
+    let prompt = format!(
+        r#"You are reviewing the code produced for a development task.
+
+## Task Information
+
+**Task ID:** {task_id}
+**Task Title:** {title}
+**Requirement ID:** {requirement_id}
+**Feature Branch:** {branch}
+
+## Task Description
+
+{description}
+
+## Instructions
+
+1. Check out the feature branch `{branch}` if not already on it.
+2. Inspect the changes on this branch (for example `git log` and `git diff` against the base branch).
+3. Review the code for correctness, completeness against the task description, code quality, tests and potential regressions.
+4. If you find small, safe issues you may fix them directly and commit. For larger concerns, clearly list them.
+5. Reply with a concise review: what looks good, what needs change, and an overall verdict (approve / needs change).
+
+**Important:** All file operations must be performed relative to this repository root."#
+    );
+
+    Ok(prompt)
+}
+
+/// Executes a code review for a development task using the code agent, streaming
+/// progress into the assignee's conversation.
+pub async fn execute_dev_task_review_streaming(
+    workspace: &Path,
+    tools: &ToolManager,
+    task_id: &str,
+    requirement_id: &str,
+    employee_id: &str,
+) -> anyhow::Result<AgentTaskRecord> {
+    let ws_for_runner = workspace.to_path_buf();
+    let tools = tools.clone();
+    let task_id = task_id.to_string();
+    let requirement_id = requirement_id.to_string();
+    let employee_id_owned = employee_id.to_string();
+    crate::conversation_task::run_with_conversation(
+        workspace,
+        employee_id,
+        move |tx| async move {
+            let workdir = dev_task_workdir(&ws_for_runner);
+            let prompt = build_dev_task_review_prompt(&ws_for_runner, &task_id, &requirement_id)
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+            let messages = vec![ToolChatMessage {
+                role: "user".into(),
+                content: prompt.clone(),
+            }];
+            let params = CodeAgentTaskParams {
+                kind: TaskKind::WorkTaskExecute,
+                content: prompt,
+                workdir,
+                messages,
+                executor_id: Some(employee_id_owned.clone()),
+                parent_task_id: None,
+                context: serde_json::json!({
+                    "employee_id": employee_id_owned,
+                    "task_id": task_id,
+                    "requirement_id": requirement_id,
+                    "review": true,
+                }),
+            };
+            let runner = TaskRunner::new(&ws_for_runner);
+            let (task, _instance, _result, _events) = runner
+                .run_code_chat_streaming_events(&tools, params, tx)
+                .await?;
+            let _ = link_agent_task_to_work_task(&ws_for_runner, &task_id, &task.id);
+            Ok(task)
+        },
+    )
+    .await
+}
+
 /// Links an agent task to a work task for tracking purposes.
 fn link_agent_task_to_work_task(
     workspace: &Path,

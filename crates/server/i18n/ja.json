@@ -103,5 +103,7 @@
   "work_task_execute_user_prompt": "このワークタスクを今すぐ実行してください：{title}",
   "work_task_execute_context_header": "従業員：{name}（{role}）\nタスク：{title}\n説明：{description}\n業務タイプ：{biz_type}\n業務 ID：{biz_id}\n",
   "work_task_execute_branch": "開発ブランチ：{branch}\n",
-  "review_work_task_title": "要件 {requirement_title} を {employee_name} がレビュー"
+  "review_work_task_title": "要件 {requirement_title} を {employee_name} がレビュー",
+  "requirement_no_employees": "このタスクを担当できる従業員がいません。先に従業員を採用してください。",
+  "optimize_work_task_title": "要件 {requirement_title} を最適化"
 }

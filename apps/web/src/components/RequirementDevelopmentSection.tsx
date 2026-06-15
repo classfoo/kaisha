@@ -46,11 +46,20 @@ function taskStatusBg(status: DevTaskStatus): string {
 }
 
 const TASK_ACTIONS: Record<DevTaskStatus, { label: (key: string) => string; action: string }[]> = {
-  branch_created: [{ label: (k) => `ui.requirements.development.actions.startDev`, action: 'start_development' }],
-  in_development: [{ label: (k) => `ui.requirements.development.actions.completeDev`, action: 'complete_development' }],
-  dev_complete: [{ label: (k) => `ui.requirements.development.actions.startReview`, action: 'start_review' }],
-  in_review: [{ label: (k) => `ui.requirements.development.actions.completeReview`, action: 'complete_review' }],
-  review_complete: [{ label: (k) => `ui.requirements.development.actions.merge`, action: 'merge' }],
+  branch_created: [{ label: () => `ui.requirements.development.actions.startDev`, action: 'start_development' }],
+  in_development: [
+    { label: () => `ui.requirements.development.actions.continueDev`, action: 'continue_development' },
+    { label: () => `ui.requirements.development.actions.completeDev`, action: 'complete_development' },
+  ],
+  dev_complete: [
+    { label: () => `ui.requirements.development.actions.reviewCode`, action: 'review_code' },
+    { label: () => `ui.requirements.development.actions.startReview`, action: 'start_review' },
+  ],
+  in_review: [
+    { label: () => `ui.requirements.development.actions.reviewCode`, action: 'review_code' },
+    { label: () => `ui.requirements.development.actions.completeReview`, action: 'complete_review' },
+  ],
+  review_complete: [{ label: () => `ui.requirements.development.actions.merge`, action: 'merge' }],
   merged: [],
 }
 
@@ -129,7 +138,7 @@ function DevTaskRow({
 }
 
 export function RequirementDevelopmentSection({ requirements, t }: RequirementDevelopmentSectionProps) {
-  const { detail, development, devLoading, startDevelopmentAction, createDevTaskAction, devStarting } = requirements
+  const { detail, development, devLoading, startDevelopmentAction, createDevTaskAction, devStarting, splitDevTasksAction, agentActionKey } = requirements
   const [createTaskOpen, setCreateTaskOpen] = React.useState(false)
   const [taskTitle, setTaskTitle] = React.useState('')
   const [taskAssignee, setTaskAssignee] = React.useState('')
@@ -186,6 +195,18 @@ export function RequirementDevelopmentSection({ requirements, t }: RequirementDe
             }}
           >
             {t('ui.requirements.development.createTask')}
+          </button>
+        )}
+        {detail && (
+          <button
+            type="button"
+            className="action-btn"
+            onClick={() => void splitDevTasksAction(detail.id)}
+            disabled={agentActionKey === 'splitDev'}
+          >
+            {agentActionKey === 'splitDev'
+              ? t('ui.requirements.development.splitting')
+              : t('ui.requirements.development.splitTasks')}
           </button>
         )}
       </div>

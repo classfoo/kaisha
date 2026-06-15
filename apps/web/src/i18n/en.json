@@ -373,6 +373,9 @@
       "subdirsLabel": "Subdirectories",
       "save": "Save",
       "saving": "Saving…",
+      "optimize": "Optimize Requirement",
+      "optimizing": "Optimizing…",
+      "agentAssigned": "Assigned to {name}. Track progress in their chat.",
       "phases": {
         "collection": "Collection",
         "development": "Development",
@@ -403,11 +406,15 @@
         },
         "actions": {
           "startDev": "Start Development",
+          "continueDev": "Continue Development",
+          "reviewCode": "Review Code",
           "completeDev": "Complete Development",
           "startReview": "Start Review",
           "completeReview": "Complete Review",
           "merge": "Merge to Feature"
         },
+        "splitTasks": "Split Tasks",
+        "splitting": "Splitting…",
         "noTasks": "No development tasks yet. Create one to start.",
         "createTaskTitle": "Create Development Task",
         "createTaskText": "Create a new development task? This will create a branch from the feature branch.",
@@ -416,6 +423,35 @@
         "loading": "Loading development...",
         "notStarted": "Development not started yet.",
         "processing": "Processing\u2026"
+      },
+      "testing": {
+        "sectionTitle": "Testing",
+        "splitTasks": "Split Test Tasks",
+        "splitting": "Splitting…",
+        "refresh": "Refresh",
+        "execute": "Run Test",
+        "processing": "Processing…",
+        "loading": "Loading testing...",
+        "noTasks": "No test tasks yet. Click \"Split Test Tasks\" to generate.",
+        "taskStatus": {
+          "pending": "Pending",
+          "running": "Running",
+          "completed": "Completed",
+          "failed": "Failed"
+        }
+      },
+      "release": {
+        "sectionTitle": "Release",
+        "package": "Package App",
+        "packaging": "Packaging…",
+        "start": "Start App",
+        "starting": "Starting…",
+        "getOutput": "Get Output",
+        "loading": "Loading…",
+        "artifactsTitle": "Artifacts",
+        "noArtifacts": "No artifacts yet. Click \"Package App\" to build.",
+        "outputTitle": "Packaging Report",
+        "runLogTitle": "Run Log"
       },
       "review": {
         "sectionTitle": "Requirement review",

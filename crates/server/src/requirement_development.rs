@@ -7,6 +7,11 @@ use crate::{
         load_requirement_detail, normalize_requirement_id,
         requirement_dir,
     },
+    requirement_agents::{
+        pick_employee_for_role, spawn_requirement_agent_task, AgentDispatchWire, AgentTaskSpec,
+    },
+    tasks::TaskKind,
+    tools::driver::ToolChatMessage,
     work_task::{
         create_work_task, delete_work_task, dev_status, filter_work_tasks,
         is_development_task, list_work_tasks, load_work_task, save_work_task,
@@ -876,6 +881,122 @@ pub async fn create_task(
     })
 }
 
+fn build_split_messages(
+    requirement_id: &str,
+    title: &str,
+    content: &str,
+    existing_tasks: &[WorkTask],
+    next_index: usize,
+) -> Vec<ToolChatMessage> {
+    let mut existing = String::new();
+    if existing_tasks.is_empty() {
+        existing.push_str("(none yet)\n");
+    } else {
+        for task in existing_tasks {
+            existing.push_str(&format!(
+                "- {} — {} [{}]\n",
+                task.id,
+                task.title,
+                dev_status_of(task).as_str()
+            ));
+        }
+    }
+    let system = format!(
+        r#"You are a senior engineer breaking a requirement into concrete development tasks.
+
+## Working directory
+This directory is the requirement `{requirement_id}` package. The requirement body is in `requirement.md`. Development tasks live as Markdown files under `development/tasks/`.
+
+## Existing development tasks
+{existing}
+
+## Task
+1. Read `requirement.md` and the existing development tasks above.
+2. Decide which additional implementation tasks are still needed (do NOT duplicate existing tasks). Prefer 2-6 focused tasks that can each be implemented in a separate session.
+3. For each new task, create a Markdown file `development/tasks/task-NNN.md` where NNN is a zero-padded 3-digit number. Start numbering at {next_index:03} and increment. Do not overwrite existing files.
+4. Each task file MUST start with a level-1 heading containing the task title, for example `# Implement login API`, followed by a short description of the work and acceptance criteria.
+5. Reply briefly listing the task files you created and their titles.
+
+Do not only describe intent — create the files."#,
+        requirement_id = requirement_id,
+        existing = existing,
+        next_index = next_index,
+    );
+    vec![
+        ToolChatMessage {
+            role: "system".to_string(),
+            content: system,
+        },
+        ToolChatMessage {
+            role: "user".to_string(),
+            content: format!(
+                "Split requirement **{title}** (`{requirement_id}`) into development tasks now.\n\n---\n\n{content}"
+            ),
+        },
+    ]
+}
+
+/// Dispatches a code-agent task that splits the requirement into development
+/// tasks. A suitable engineering employee is assigned; new task files written by
+/// the agent are reconciled into work tasks once the run completes.
+pub async fn split_development_tasks(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<Json<AgentDispatchWire>, (axum::http::StatusCode, String)> {
+    let Some(workspace) = workspace_root(&state) else {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            i18n::msg(&headers, "workspace_not_configured"),
+        ));
+    };
+    let id = normalize_requirement_id(&id).map_err(map_dev_err(&headers))?;
+    let file_path = crate::requirement::requirement_file_path(&workspace, &id);
+    if !file_path.exists() {
+        return Err((
+            axum::http::StatusCode::NOT_FOUND,
+            i18n::msg(&headers, "requirement_not_found"),
+        ));
+    }
+    let detail = load_requirement_detail(&workspace, &id)
+        .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    // Ensure the feature branch + development state exist before planning tasks.
+    ensure_development_started(&workspace, &id).map_err(|e| {
+        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+    })?;
+
+    let Some(employee) = pick_employee_for_role(&workspace, "engineering") else {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            i18n::msg(&headers, "requirement_no_employees"),
+        ));
+    };
+
+    let existing = list_development_work_tasks(&workspace, &id).unwrap_or_default();
+    let next_index = existing.len() + 1;
+    let messages = build_split_messages(&id, &detail.title, &detail.content, &existing, next_index);
+    let tools = state.tools.read().expect("tools lock poisoned").clone();
+    let workdir = requirement_dir(&workspace, &id);
+    let reconcile_id = id.clone();
+    spawn_requirement_agent_task(
+        &workspace,
+        &tools,
+        &employee.id,
+        AgentTaskSpec {
+            kind: TaskKind::RequirementAgent,
+            content: format!("Split development tasks for `{id}`"),
+            workdir,
+            messages,
+            context: serde_json::json!({ "requirement_id": id }),
+        },
+        move |ws| {
+            let _ = reconcile_development_work_tasks(ws, &reconcile_id);
+        },
+    );
+
+    Ok(Json(AgentDispatchWire::from_employee(&employee)))
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateTaskRequest {
     pub title: String,
@@ -1057,6 +1178,61 @@ pub async fn task_action(
     }
     let current = dev_status_of(&task);
     let employee_id = task.assignee.clone().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| "system".to_string());
+
+    // Agent-driven actions that do not transition the dev status: continue the
+    // implementation, or run a code review. These re-invoke the code agent off
+    // the request path and return the current state immediately.
+    if payload.action == "continue_development" || payload.action == "review_code" {
+        let is_review = payload.action == "review_code";
+        let valid = if is_review {
+            current == DevTaskStatus::DevComplete || current == DevTaskStatus::InReview
+        } else {
+            current == DevTaskStatus::InDevelopment
+        };
+        if !valid {
+            return Err((
+                axum::http::StatusCode::BAD_REQUEST,
+                i18n::msg(&headers, "task_action_invalid"),
+            ));
+        }
+        let tools = state.tools.read().expect("tools lock poisoned").clone();
+        let workspace_path = workspace.clone();
+        let run_task_id = task_id.clone();
+        let run_requirement_id = id.clone();
+        let run_employee_id = employee_id.clone();
+        tokio::spawn(async move {
+            let result = if is_review {
+                dev_task_executor::execute_dev_task_review_streaming(
+                    &workspace_path,
+                    &tools,
+                    &run_task_id,
+                    &run_requirement_id,
+                    &run_employee_id,
+                )
+                .await
+            } else {
+                dev_task_executor::execute_dev_task_streaming(
+                    &workspace_path,
+                    &tools,
+                    &run_task_id,
+                    &run_requirement_id,
+                    &run_employee_id,
+                )
+                .await
+            };
+            if let Err(err) = result {
+                tracing::warn!(error = %err, "dev task agent action failed");
+            }
+        });
+        dev_state.current_task_id = Some(task_id);
+        save_dev_state(&workspace, &id, &dev_state).map_err(|e| {
+            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+        })?;
+        return wire_state(&workspace, &dev_state).map(Json).map_err(|e| {
+            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+        });
+    }
+
     let next = match payload.action.as_str() {
         "start_development" => {
             if current != DevTaskStatus::BranchCreated {
