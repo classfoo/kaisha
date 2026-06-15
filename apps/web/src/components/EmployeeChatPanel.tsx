@@ -16,6 +16,7 @@ import {
   reconstructStreamingState,
 } from '../features/employee-chat/useEmployeeChatMessages'
 import { EmployeeDirectoryRecord } from './EmployeeList'
+import { ChatHistoryList, type ChatHistoryListHandle } from './ChatHistoryList'
 
 type StreamingExtras = {
   thinking: string
@@ -389,6 +390,175 @@ export const TaskResultPanel = React.memo(function TaskResultPanel({ result, t }
   )
 })
 
+function messageClass(message: DisplayMessage): string {
+  if (message.pending) return 'chat-message chat-message--employee chat-message--pending'
+  if (message.side === 'me') return 'chat-message chat-message--me'
+  if (message.side === 'system') return 'chat-message chat-message--system'
+  return 'chat-message chat-message--employee'
+}
+
+type ChatMessageItemProps = {
+  message: DisplayMessage
+  employeeName: string
+  employeeDepartment: string
+  employeeRole: string
+  defaultSenderName: string
+  systemLabel: string
+  avatarAlt: string
+  isProcessAlive: (taskId: string) => boolean
+  continuingTaskIds: Set<string>
+  onContinueTask: (taskId: string) => void
+  t: (key: string) => string
+}
+
+/** Renders a single chat row. Memoized so that, combined with virtualization,
+ *  only the small window of on-screen messages re-renders while streaming or
+ *  scrolling through a large history. */
+const ChatMessageItem = React.memo(function ChatMessageItem({
+  message,
+  employeeName,
+  employeeDepartment,
+  employeeRole,
+  defaultSenderName,
+  systemLabel,
+  avatarAlt,
+  isProcessAlive,
+  continuingTaskIds,
+  onContinueTask,
+  t,
+}: ChatMessageItemProps) {
+  const isMe = message.side === 'me'
+  const isSystem = message.side === 'system'
+  const userLabel = message.senderName?.trim() || defaultSenderName
+  const employeeLabel = employeeName
+  const peerSecondary = isSystem ? '' : `${employeeDepartment} / ${employeeRole}`
+
+  const bubble = (
+    <div className="chat-message__bubble">
+      <MessageCopyButton message={message} t={t} />
+      {message.streaming ? (
+        <>
+          {message.streaming.session ? (
+            <div className="stream-progress__session">
+              <span className="stream-progress__chip">{t('ui.chat.streaming.sessionStarted')}</span>
+              {message.streaming.session.model ? (
+                <span className="stream-progress__meta">{message.streaming.session.model}</span>
+              ) : null}
+              {message.streaming.session.tools.length > 0 ? (
+                <span className="stream-progress__meta">
+                  {t('ui.chat.streaming.tools')}: {message.streaming.session.tools.length}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="streaming-sections">
+            {message.streaming.blocks.map((block, blockIdx) => {
+              if (block.type === 'text') {
+                return (
+                  <div className="streaming-section streaming-section--text" key={`b-${blockIdx}`}>
+                    <div className="chat-message__content">{block.text}</div>
+                  </div>
+                )
+              }
+              if (block.type === 'thinking') {
+                return (
+                  <div className="streaming-section streaming-section--thinking" key={`b-${blockIdx}`}>
+                    <details open>
+                      <summary className="stream-progress__summary">{t('ui.chat.streaming.thinking')}</summary>
+                      <pre className="stream-progress__pre">{block.text}</pre>
+                    </details>
+                  </div>
+                )
+              }
+              if (block.type === 'tool_call') {
+                return <StreamingToolCallCard key={block.id} call={block} t={t} />
+              }
+              if (block.type === 'result') {
+                return (
+                  <div
+                    className={`stream-progress__result stream-progress__result--${block.isError ? 'error' : 'success'}`}
+                    key={`b-${blockIdx}`}
+                  >
+                    <span className="stream-progress__chip">
+                      {block.isError ? t('ui.chat.streaming.resultError') : t('ui.chat.streaming.resultSuccess')}
+                    </span>
+                    <span className="stream-progress__meta">
+                      {t('ui.chat.taskResult.tokens')}: {block.promptTokens.toLocaleString()} / {block.completionTokens.toLocaleString()}
+                    </span>
+                  </div>
+                )
+              }
+              return null
+            })}
+            {!message.streaming.blocks.length && !message.content ? (
+              <div className="chat-message__content chat-message__content--placeholder">
+                {t('ui.chat.awaitingReply')}
+              </div>
+            ) : null}
+          </div>
+        </>
+      ) : null}
+      {message.content && !message.streaming ? (
+        <div className="chat-message__content">{message.content}</div>
+      ) : null}
+      {message.streaming && !message.content && !message.streaming.blocks.length ? (
+        <div className="chat-message__content chat-message__content--placeholder">
+          {t('ui.chat.awaitingReply')}
+        </div>
+      ) : null}
+      {message.taskResult ? <TaskResultPanel result={message.taskResult} t={t} /> : null}
+      {message.pending && message.taskId && isProcessAlive(message.taskId) ? <TypingIndicator /> : null}
+      {message.side === 'employee' &&
+      message.taskStatus === 'failed' &&
+      message.taskResult === undefined &&
+      message.taskId ? (
+        <TaskCrashedPanel
+          taskId={message.taskId}
+          continuing={continuingTaskIds.has(message.taskId)}
+          onContinue={onContinueTask}
+          t={t}
+        />
+      ) : null}
+    </div>
+  )
+
+  const stamp = message.at.trim().length > 0 ? <div className="chat-message__stamp">{message.at}</div> : null
+
+  return (
+    <div className={messageClass(message)}>
+      {isMe ? (
+        <div className="chat-message__stack chat-message__stack--me">
+          <div className="chat-message__head chat-message__head--me">
+            <div className="chat-message__sender">
+              <div className="chat-message__sender-line1">{userLabel}</div>
+              <div className="chat-message__sender-line2">{t('ui.chat.userSenderCaption')}</div>
+            </div>
+            <ChatMessageAvatar imageUrl={message.senderAvatarUrl} label={userLabel} fallbackLetter={userLabel} altTemplate={avatarAlt} />
+          </div>
+          {bubble}
+          {stamp}
+        </div>
+      ) : (
+        <div className="chat-message__stack chat-message__stack--peer">
+          <div className="chat-message__head chat-message__head--peer">
+            <ChatMessageAvatar
+              label={isSystem ? systemLabel : employeeLabel}
+              fallbackLetter={isSystem ? '!' : employeeLabel}
+              altTemplate={avatarAlt}
+            />
+            <div className="chat-message__sender">
+              <div className="chat-message__sender-line1">{isSystem ? systemLabel : employeeLabel}</div>
+              {peerSecondary ? <div className="chat-message__sender-line2">{peerSecondary}</div> : null}
+            </div>
+          </div>
+          {bubble}
+          {stamp}
+        </div>
+      )}
+    </div>
+  )
+})
+
 export const EmployeeChatPanel = React.memo(function EmployeeChatPanel({
   apiBase,
   locale,
@@ -416,7 +586,7 @@ export const EmployeeChatPanel = React.memo(function EmployeeChatPanel({
     }
   }, [chatMessagesRefreshTick, refresh])
 
-  const historyRef = React.useRef<HTMLDivElement>(null)
+  const historyRef = React.useRef<ChatHistoryListHandle>(null)
 
   const displayMessages = React.useMemo((): DisplayMessage[] => {
     if (!selectedEmployee) return []
@@ -472,49 +642,14 @@ export const EmployeeChatPanel = React.memo(function EmployeeChatPanel({
     return base
   }, [chatSenderProfile, optimisticUser, selectedEmployee, sending, serverMessages, streamingAssistant, t])
 
-  // --- Virtualization state ---
-  const [scrollTop, setScrollTop] = React.useState(0)
-  const [containerHeight, setContainerHeight] = React.useState(0)
-  const VIRTUAL_MSG_HEIGHT = 120
-  const VIRTUAL_BUFFER = 5
-
-  const totalMessages = displayMessages.length
-  const totalContentHeight = totalMessages * VIRTUAL_MSG_HEIGHT
-  const startIndex = Math.max(0, Math.floor(scrollTop / VIRTUAL_MSG_HEIGHT) - VIRTUAL_BUFFER)
-  const visibleCount = containerHeight > 0 ? Math.ceil(containerHeight / VIRTUAL_MSG_HEIGHT) : 10
-  const endIndex = Math.min(totalMessages, startIndex + visibleCount + VIRTUAL_BUFFER * 2)
-
-  const handleScroll = React.useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    setScrollTop(e.currentTarget.scrollTop)
-    if (containerHeight === 0) {
-      setContainerHeight(e.currentTarget.clientHeight)
-    }
-  }, [containerHeight])
-
-  // Auto-scroll to bottom when new messages arrive (only when near bottom)
-  const wasNearBottom = React.useRef(false)
-  React.useEffect(() => {
-    const el = historyRef.current
-    if (!el) return
-    const threshold = 200
-    const currentBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    wasNearBottom.current = currentBottom < threshold
-  }, [displayMessages, sending, streamingAssistant])
-
-  React.useEffect(() => {
-    if (!wasNearBottom.current) return
-    const el = historyRef.current
-    if (!el) return
-    requestAnimationFrame(() => {
-      el.scrollTop = el.scrollHeight
-    })
-  }, [displayMessages, sending, streamingAssistant])
-
   const sendFromDraft = React.useCallback(async () => {
     if (!selectedEmployeeId || !selectedEmployee) return
     const text = messageDraft.trim()
     if (!text) return
     onMessageDraftChange('')
+    // Sending always returns focus to the latest message, even if the user had
+    // scrolled up to read older history.
+    requestAnimationFrame(() => historyRef.current?.scrollToBottom('smooth'))
     try {
       await sendMessage(text)
     } catch {
@@ -571,189 +706,48 @@ export const EmployeeChatPanel = React.memo(function EmployeeChatPanel({
     [sendFromDraft],
   )
 
-  const messageClass = (message: DisplayMessage) => {
-    if (message.pending) return 'chat-message chat-message--employee chat-message--pending'
-    if (message.side === 'me') return 'chat-message chat-message--me'
-    if (message.side === 'system') return 'chat-message chat-message--system'
-    return 'chat-message chat-message--employee'
-  }
-
   const defaultSenderName = t('ui.chat.senderDefaultName')
   const avatarAlt = t('ui.chat.avatarAlt')
+  const systemLabel = t('ui.chat.systemSenderLabel')
+
+  const historyHeader = loading || lastResult ? (
+    <>
+      {loading ? <div className="chat-history__status">{t('ui.chat.loadingHistory')}</div> : null}
+      {!loading && lastResult ? <TaskResultPanel result={lastResult} t={t} /> : null}
+    </>
+  ) : null
+
+  const renderMessage = React.useCallback(
+    (message: DisplayMessage) => (
+      <ChatMessageItem
+        message={message}
+        employeeName={selectedEmployee?.name ?? ''}
+        employeeDepartment={selectedEmployee?.department ?? ''}
+        employeeRole={selectedEmployee?.role ?? ''}
+        defaultSenderName={defaultSenderName}
+        systemLabel={systemLabel}
+        avatarAlt={avatarAlt}
+        isProcessAlive={isProcessAlive}
+        continuingTaskIds={continuingTaskIds}
+        onContinueTask={handleContinueTask}
+        t={t}
+      />
+    ),
+    [selectedEmployee?.name, selectedEmployee?.department, selectedEmployee?.role, defaultSenderName, systemLabel, avatarAlt, isProcessAlive, continuingTaskIds, handleContinueTask, t],
+  )
 
   return (
     <div className="chat-layout">
       {selectedEmployee ? (
         <>
-          <div className="chat-history" ref={historyRef} onScroll={handleScroll}>
-            {loading ? <div className="chat-history__status">{t('ui.chat.loadingHistory')}</div> : null}
-            {!loading && lastResult ? (
-              <TaskResultPanel result={lastResult} t={t} />
-            ) : null}
-            {/* Virtualization spacer for messages above the visible range */}
-            {startIndex > 0 ? (
-              <div style={{ height: startIndex * VIRTUAL_MSG_HEIGHT }} />
-            ) : null}
-            {displayMessages.slice(startIndex, endIndex).map((message, virtIdx) => {
-              const isMe = message.side === 'me'
-              const isSystem = message.side === 'system'
-              const userLabel = message.senderName?.trim() || defaultSenderName
-              const employeeLabel = selectedEmployee.name
-              const systemLabel = t('ui.chat.systemSenderLabel')
-              const peerSecondary = isSystem ? '' : `${selectedEmployee.department} / ${selectedEmployee.role}`
-
-              const bubble = (
-                <div className="chat-message__bubble">
-                  <MessageCopyButton message={message} t={t} />
-                  {message.streaming ? (
-                    <>
-                      {message.streaming.session ? (
-                        <div className="stream-progress__session">
-                          <span className="stream-progress__chip">
-                            {t('ui.chat.streaming.sessionStarted')}
-                          </span>
-                          {message.streaming.session.model ? (
-                            <span className="stream-progress__meta">{message.streaming.session.model}</span>
-                          ) : null}
-                          {message.streaming.session.tools.length > 0 ? (
-                            <span className="stream-progress__meta">
-                              {t('ui.chat.streaming.tools')}: {message.streaming.session.tools.length}
-                            </span>
-                          ) : null}
-                        </div>
-                      ) : null}
-                      <div className="streaming-sections">
-                        {message.streaming.blocks.map((block, blockIdx) => {
-                          if (block.type === 'text') {
-                            return (
-                              <div className="streaming-section streaming-section--text" key={`b-${blockIdx}`}>
-                                <div className="chat-message__content">{block.text}</div>
-                              </div>
-                            )
-                          }
-                          if (block.type === 'thinking') {
-                            return (
-                              <div className="streaming-section streaming-section--thinking" key={`b-${blockIdx}`}>
-                                <details open>
-                                  <summary className="stream-progress__summary">{t('ui.chat.streaming.thinking')}</summary>
-                                  <pre className="stream-progress__pre">{block.text}</pre>
-                                </details>
-                              </div>
-                            )
-                          }
-                          if (block.type === 'tool_call') {
-                            return <StreamingToolCallCard key={block.id} call={block} t={t} />
-                          }
-                          if (block.type === 'result') {
-                            return (
-                              <div
-                                className={`stream-progress__result stream-progress__result--${block.isError ? 'error' : 'success'}`}
-                                key={`b-${blockIdx}`}
-                              >
-                                <span className="stream-progress__chip">
-                                  {block.isError
-                                    ? t('ui.chat.streaming.resultError')
-                                    : t('ui.chat.streaming.resultSuccess')}
-                                </span>
-                                <span className="stream-progress__meta">
-                                  {t('ui.chat.taskResult.tokens')}: {block.promptTokens.toLocaleString()} / {block.completionTokens.toLocaleString()}
-                                </span>
-                              </div>
-                            )
-                          }
-                          return null
-                        })}
-                        {!message.streaming.blocks.length && !message.content ? (
-                          <div className="chat-message__content chat-message__content--placeholder">
-                            {t('ui.chat.awaitingReply')}
-                          </div>
-                        ) : null}
-                      </div>
-                    </>
-                  ) : null}
-                  {message.content && !message.streaming ? (
-                    <div className="chat-message__content">{message.content}</div>
-                  ) : null}
-                  {message.streaming && !message.content && !message.streaming.blocks.length ? (
-                    <div className="chat-message__content chat-message__content--placeholder">
-                      {t('ui.chat.awaitingReply')}
-                    </div>
-                  ) : null}
-                  {message.taskResult ? (
-                    <TaskResultPanel result={message.taskResult} t={t} />
-                  ) : null}
-                  {/* Typing indicator for running tasks that are still alive */}
-                  {message.pending && message.taskId && isProcessAlive(message.taskId) ? (
-                    <TypingIndicator />
-                  ) : null}
-                  {/* Crashed task panel for tasks that failed without result */}
-                  {message.side === 'employee' &&
-                   message.taskStatus === 'failed' &&
-                   message.taskResult === undefined &&
-                   message.taskId ? (
-                    <TaskCrashedPanel
-                      taskId={message.taskId}
-                      continuing={continuingTaskIds.has(message.taskId)}
-                      onContinue={handleContinueTask}
-                      t={t}
-                    />
-                  ) : null}
-                </div>
-              )
-
-              const stamp =
-                message.at.trim().length > 0 ? (
-                  <div className="chat-message__stamp">{message.at}</div>
-                ) : null
-
-              return (
-                <div key={message.id} className={messageClass(message)}>
-                  {isMe ? (
-                    <div className="chat-message__stack chat-message__stack--me">
-                      <div className="chat-message__head chat-message__head--me">
-                        <div className="chat-message__sender">
-                          <div className="chat-message__sender-line1">{userLabel}</div>
-                          <div className="chat-message__sender-line2">{t('ui.chat.userSenderCaption')}</div>
-                        </div>
-                        <ChatMessageAvatar
-                          imageUrl={message.senderAvatarUrl}
-                          label={userLabel}
-                          fallbackLetter={userLabel}
-                          altTemplate={avatarAlt}
-                        />
-                      </div>
-                      {bubble}
-                      {stamp}
-                    </div>
-                  ) : (
-                    <div className="chat-message__stack chat-message__stack--peer">
-                      <div className="chat-message__head chat-message__head--peer">
-                        <ChatMessageAvatar
-                          label={isSystem ? systemLabel : employeeLabel}
-                          fallbackLetter={isSystem ? '!' : employeeLabel}
-                          altTemplate={avatarAlt}
-                        />
-                        <div className="chat-message__sender">
-                          <div className="chat-message__sender-line1">
-                            {isSystem ? systemLabel : employeeLabel}
-                          </div>
-                          {peerSecondary ? (
-                            <div className="chat-message__sender-line2">{peerSecondary}</div>
-                          ) : null}
-                        </div>
-                      </div>
-                      {bubble}
-                      {stamp}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-            {/* Virtualization spacer for messages below the visible range */}
-            {endIndex < totalMessages ? (
-              <div style={{ height: (totalMessages - endIndex) * VIRTUAL_MSG_HEIGHT }} />
-            ) : null}
-          </div>
+          <ChatHistoryList<DisplayMessage>
+            ref={historyRef}
+            items={displayMessages}
+            getKey={(m) => m.id}
+            renderItem={renderMessage}
+            header={historyHeader}
+            scrollDownLabel={t('ui.chat.scrollToLatest')}
+          />
           {!loading && error ? (
             <div className="chat-inline-status chat-inline-status--error">
               {error}

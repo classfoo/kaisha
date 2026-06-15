@@ -1238,7 +1238,6 @@ select,
   border-radius: 0;
   background: transparent;
   padding: 0 12px;
-  gap: 4px;
 }
 
 .work-area__content--flush .chat-input-wrap {
@@ -1290,16 +1289,36 @@ select,
   min-height: 0;
 }
 
+.chat-history-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
 .chat-history {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  /* We run our own scroll anchoring in the virtualizer; disable the browser's
+     built-in anchoring so the two don't fight and cause jitter. */
+  overflow-anchor: none;
+  position: relative;
   border: 1px solid #2b3446;
   border-radius: 10px;
   background: #131a26;
   padding: 8px;
-  display: grid;
-  gap: 8px;
+}
+
+.chat-history__viewport {
+  width: 100%;
+}
+
+/* Each virtual row is absolutely positioned by the virtualizer; it lays out its
+   single message and handles left/right alignment via the message modifiers. */
+.chat-history__row {
+  display: flex;
+  flex-direction: column;
 }
 
 .chat-message {
@@ -1307,16 +1326,42 @@ select,
 }
 
 .chat-message--employee {
-  justify-self: start;
+  align-self: flex-start;
 }
 
 .chat-message--me {
-  justify-self: end;
+  align-self: flex-end;
 }
 
 .chat-message--system {
-  justify-self: start;
+  align-self: flex-start;
   max-width: min(92%, 780px);
+}
+
+.chat-scroll-down {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid #39608d;
+  background: #244163;
+  color: #dbe6f5;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  opacity: 0.9;
+  transition: opacity 120ms ease, transform 120ms ease;
+  z-index: 2;
+}
+
+.chat-scroll-down:hover {
+  opacity: 1;
+  transform: translateY(-1px);
 }
 
 .chat-message__stack {

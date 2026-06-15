@@ -145,6 +145,7 @@
       "placeholder": "Write a message to {name}...",
       "loadingHistory": "Loading conversation…",
       "awaitingReply": "Waiting for a reply…",
+      "scrollToLatest": "Jump to latest",
       "toolExitWarning": "Tool exited with code {code}",
       "toolbar": {
         "attach": "Attach",
