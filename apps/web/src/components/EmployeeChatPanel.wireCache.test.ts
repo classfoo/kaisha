@@ -30,6 +30,29 @@ describe('wireToDisplay caching for live task_process messages', () => {
     expect(third.content).toBe('hello world!')
   })
 
+  it('reflects growing assistant text when event count is unchanged (regression: partial text)', () => {
+    const id = 'msg_task_process_partial'
+    const first = wireToDisplay({
+      id,
+      role: 'task_process',
+      content: '',
+      created_at_ms: 0,
+      task_status: 'running',
+      stream_events: [{ type: 'assistant_text', text: 'hello' }],
+    })
+    expect(first.content).toBe('hello')
+
+    const second = wireToDisplay({
+      id,
+      role: 'task_process',
+      content: '',
+      created_at_ms: 0,
+      task_status: 'running',
+      stream_events: [{ type: 'assistant_text', text: 'hello world' }],
+    })
+    expect(second.content).toBe('hello world')
+  })
+
   it('reflects status transition from running to completed for the same id', () => {
     const id = 'msg_task_process_finalize'
 

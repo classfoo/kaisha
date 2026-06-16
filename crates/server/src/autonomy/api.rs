@@ -1,4 +1,7 @@
-use crate::employee_chat::{conversation_path, load_conversation, save_conversation, new_message_id, ConversationFile, StoredMessage};
+use crate::employee_chat::{
+    conversation_path, forward_sse_events_with_persistence, load_conversation,
+    new_message_id, save_conversation, ConversationFile, StoredMessage,
+};
 use crate::tools::manager::ToolManager;
 use crate::AppState;
 use axum::{
@@ -10,7 +13,6 @@ use axum::{
 use serde::Serialize;
 use std::{
     convert::Infallible,
-    path::PathBuf,
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -524,73 +526,4 @@ pub async fn run_employee_autonomy_run_stream_handler(
     Sse::new(ReceiverStream::new(rx)).keep_alive(
         axum::response::sse::KeepAlive::new().interval(Duration::from_secs(20)),
     )
-}
-
-async fn forward_sse_events_with_persistence(
-    mut event_rx: tokio::sync::mpsc::Receiver<crate::tools::driver::ChatStreamEvent>,
-    tx: tokio::sync::mpsc::Sender<Result<Event, Infallible>>,
-    conv_path: PathBuf,
-    mut conv: ConversationFile,
-    task_process_msg_idx: usize,
-    save_interval: usize,
-) {
-    use crate::tools::driver::ChatStreamEvent;
-    let mut collected_events: Vec<serde_json::Value> = Vec::new();
-    let mut events_since_save = 0;
-
-    while let Some(event) = event_rx.recv().await {
-        // Serialize event as JSON value for storage
-        let event_value = serde_json::to_value(&event).ok();
-
-        // Pick a stable SSE event name per variant
-        let event_name = match &event {
-            ChatStreamEvent::Start { .. } => "start",
-            ChatStreamEvent::AssistantText { .. } => "delta",
-            ChatStreamEvent::Thinking { .. } => "thinking",
-            ChatStreamEvent::ToolUse { .. } => "tool_use",
-            ChatStreamEvent::ToolResult { .. } => "tool_result",
-            ChatStreamEvent::Result { .. } => "result",
-            ChatStreamEvent::Raw { .. } => "delta",
-        };
-        let payload = match &event {
-            ChatStreamEvent::AssistantText { text } | ChatStreamEvent::Raw { text } => {
-                serde_json::to_string(&serde_json::json!({ "text": text }))
-            }
-            _ => serde_json::to_string(&event),
-        };
-        let Ok(data) = payload else { continue };
-
-        // Forward to SSE client
-        if tx
-            .send(Ok(Event::default().event(event_name).data(data)))
-            .await
-            .is_err()
-        {
-            break;
-        }
-
-        // Store event for persistence
-        if let Some(val) = event_value {
-            collected_events.push(val);
-            events_since_save += 1;
-
-            // Update the task_process message with collected events
-            if task_process_msg_idx < conv.messages.len() {
-                conv.messages[task_process_msg_idx].stream_events = Some(collected_events.clone());
-            }
-
-            // Periodic save
-            if events_since_save >= save_interval {
-                if let Err(e) = save_conversation(&conv_path, &conv) {
-                    tracing::warn!(error = %e, "failed to save conversation during streaming");
-                }
-                events_since_save = 0;
-            }
-        }
-    }
-
-    // Final save
-    if let Err(e) = save_conversation(&conv_path, &conv) {
-        tracing::warn!(error = %e, "failed to save conversation at end of streaming");
-    }
 }

@@ -19,7 +19,7 @@ use std::{
 use tokio_stream::wrappers::ReceiverStream;
 
 /// How often the watch loop polls the conversation file for changes.
-const POLL_INTERVAL: Duration = Duration::from_millis(300);
+const POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 /// Result of diffing a conversation snapshot against the previously seen state.
 pub(crate) struct ConversationDiff {

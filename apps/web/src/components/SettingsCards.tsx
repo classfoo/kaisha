@@ -14,7 +14,7 @@ type ToolKind =
 type ToolFieldSchema = {
   key: string
   label: string
-  field_type: 'text' | 'number' | 'boolean' | 'select' | 'password'
+  field_type: 'text' | 'number' | 'boolean' | 'select' | 'combobox' | 'password'
   required: boolean
   options: string[]
   placeholder?: string
@@ -249,6 +249,23 @@ export const SettingsCards = React.memo(function SettingsCards(props: SettingsCa
                         </option>
                       ))}
                     </select>
+                  ) : field.field_type === 'combobox' ? (
+                    <>
+                      <input
+                        className="settings-input"
+                        list={`settings-combobox-${field.key}`}
+                        value={String(toolConfigDraft[field.key] ?? '')}
+                        placeholder={field.placeholder ?? field.label}
+                        onChange={(event) =>
+                          onToolConfigDraftChange({ ...toolConfigDraft, [field.key]: event.target.value })
+                        }
+                      />
+                      <datalist id={`settings-combobox-${field.key}`}>
+                        {field.options.map((opt) => (
+                          <option key={opt} value={opt} />
+                        ))}
+                      </datalist>
+                    </>
                   ) : (
                     <input
                       className="settings-input"

@@ -182,7 +182,10 @@
         "toolStatusError": "失败",
         "resultSuccess": "已完成",
         "resultError": "失败",
-        "unknownTool": "工具"
+        "unknownTool": "工具",
+        "hasInput": "含输入",
+        "hasOutput": "含输出",
+        "todoItemCount": "{count} 项"
       },
       "copy": {
         "title": "复制消息",
@@ -192,7 +195,11 @@
       },
       "processCrashed": "进程意外终止",
       "continueExecution": "继续执行",
-      "continuing": "继续中..."
+      "continuing": "继续中...",
+      "text": {
+        "expand": "展开全文（还有 {count} 字）",
+        "collapse": "收起"
+      }
     },
     "leftPanel": {
       "home": {

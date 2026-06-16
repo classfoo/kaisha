@@ -13,13 +13,14 @@ pub enum ToolKind {
     Codex,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum FieldType {
     Text,
     Number,
     Boolean,
     Select,
+    Combobox,
     Password,
 }
 

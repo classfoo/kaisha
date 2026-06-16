@@ -416,6 +416,10 @@ export function useEmployeeChatMessages(
   const [optimisticUser, setOptimisticUser] = React.useState<ChatWireMessage | null>(null)
   const [streamingAssistant, setStreamingAssistant] =
     React.useState<StreamingAssistantState>(EMPTY_STREAM)
+  const streamingAssistantRef = React.useRef(streamingAssistant)
+  React.useEffect(() => {
+    streamingAssistantRef.current = streamingAssistant
+  }, [streamingAssistant])
   const [loading, setLoading] = React.useState(false)
   const [sending, setSending] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -613,6 +617,7 @@ export function useEmployeeChatMessages(
         const dec = new TextDecoder()
         let buf = ''
         const applyEvents = (events: { event: string; data: string }[]) => {
+          let nextAssistant: StreamingAssistantState | null = null
           for (const ev of events) {
             if (ev.event === 'done') {
               const data = JSON.parse(ev.data) as PostMessageResponse
@@ -622,6 +627,7 @@ export function useEmployeeChatMessages(
               setOptimisticUser(null)
               setHasMoreMessages(false)
               onStreamDone?.()
+              nextAssistant = null
             } else if (ev.event === 'error') {
               let msg = ev.data
               try {
@@ -632,8 +638,12 @@ export function useEmployeeChatMessages(
               }
               throw new Error(msg)
             } else {
-              setStreamingAssistant((prev) => applyStreamingEvent(prev, ev))
+              const base = nextAssistant ?? streamingAssistantRef.current
+              nextAssistant = applyStreamingEvent(base, ev)
             }
+          }
+          if (nextAssistant) {
+            setStreamingAssistant(nextAssistant)
           }
         }
 

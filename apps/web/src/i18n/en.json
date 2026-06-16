@@ -182,7 +182,10 @@
         "toolStatusError": "Failed",
         "resultSuccess": "Completed",
         "resultError": "Failed",
-        "unknownTool": "Tool"
+        "unknownTool": "Tool",
+        "hasInput": "Has input",
+        "hasOutput": "Has output",
+        "todoItemCount": "{count} items"
       },
       "copy": {
         "title": "Copy message",
@@ -192,7 +195,11 @@
       },
       "processCrashed": "Process ended unexpectedly",
       "continueExecution": "Continue Execution",
-      "continuing": "Continuing..."
+      "continuing": "Continuing...",
+      "text": {
+        "expand": "Show more ({count} more characters)",
+        "collapse": "Show less"
+      }
     },
     "leftPanel": {
       "home": {

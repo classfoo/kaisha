@@ -47,7 +47,7 @@ type ToolKind =
 type ToolCatalogItem = {
   kind: ToolKind
   display_name: string
-  schema: { title: string; fields: { key: string; label: string; field_type: 'text' | 'number' | 'boolean' | 'select' | 'password'; required: boolean; options: string[]; placeholder?: string }[] }
+  schema: { title: string; fields: { key: string; label: string; field_type: 'text' | 'number' | 'boolean' | 'select' | 'combobox' | 'password'; required: boolean; options: string[]; placeholder?: string }[] }
 }
 type ToolInstance = {
   id: string

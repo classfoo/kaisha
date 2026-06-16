@@ -1550,6 +1550,34 @@ select,
   line-height: 1.45;
 }
 
+.chat-text-fold__ellipsis {
+  color: #8b99b0;
+}
+
+.chat-text-fold__toggle {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 12px;
+  line-height: 1.3;
+  color: #7eb6ff;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.chat-text-fold__toggle:hover {
+  color: #a8d0ff;
+}
+
+.chat-text-fold__toggle:focus-visible {
+  outline: 2px solid rgba(126, 182, 255, 0.45);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 .chat-message__stamp {
   font-size: 11px;
   color: #9fb0cb;
@@ -3367,15 +3395,35 @@ select,
 }
 
 .stream-tool-call__details {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  padding-top: 4px;
+  border-top: none;
+  padding-top: 0;
 }
 
 .stream-tool-call__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 11px;
   cursor: pointer;
   color: #9fb0cb;
   user-select: none;
+  list-style: none;
+}
+
+.stream-tool-call__summary::-webkit-details-marker {
+  display: none;
+}
+
+.stream-tool-call__hint {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: #7f91ad;
+}
+
+.stream-tool-call__summary .stream-tool-call__header {
+  flex: 1;
+  min-width: 0;
 }
 
 .stream-tool-call__pre {
@@ -3393,10 +3441,11 @@ select,
   color: #cfd8e6;
 }
 
-/* Inline sections for Read, Glob, etc. (no collapse) */
+/* Inline sections inside expanded tool details */
 .stream-tool-call__inline-section {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   padding-top: 4px;
+  margin-top: 4px;
 }
 
 .stream-tool-call__label {
@@ -3411,6 +3460,7 @@ select,
 .stream-tool-call__todo-list {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   padding-top: 6px;
+  margin-top: 4px;
   display: flex;
   flex-direction: column;
   gap: 3px;

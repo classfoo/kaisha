@@ -29,9 +29,8 @@ use std::{
 use tokio_stream::wrappers::ReceiverStream;
 
 /// Number of streamed events to buffer before flushing the conversation file.
-/// Kept at 1 so the file reflects code-agent output incrementally, which the
-/// conversation watch endpoint relays to the frontend in real time.
-pub(crate) const STREAM_PERSIST_INTERVAL: usize = 1;
+/// Live chat uses the POST SSE stream; this file snapshot is for reload/watch.
+pub(crate) const STREAM_PERSIST_INTERVAL: usize = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ConversationFile {
@@ -184,6 +183,16 @@ pub(crate) fn save_conversation(path: &Path, file: &ConversationFile) -> anyhow:
     }
     fs::write(path, serde_json::to_string_pretty(file)?)?;
     Ok(())
+}
+
+/// Persists the conversation on a blocking thread so streaming SSE forwarding is
+/// not stalled by synchronous disk I/O.
+pub(crate) fn schedule_conversation_save(path: PathBuf, file: ConversationFile) {
+    tokio::task::spawn_blocking(move || {
+        if let Err(e) = save_conversation(&path, &file) {
+            tracing::warn!(error = %e, "failed to save conversation during streaming");
+        }
+    });
 }
 
 pub(crate) fn new_message_id(prefix: &str) -> String {
@@ -791,7 +800,7 @@ async fn forward_sse_events(
 /// Variant of forward_sse_events that also collects events into the conversation file.
 /// Events are appended to the task_process message's stream_events array.
 /// Conversation is saved periodically (every N events) and at the end.
-async fn forward_sse_events_with_persistence(
+pub(crate) async fn forward_sse_events_with_persistence(
     mut event_rx: tokio::sync::mpsc::Receiver<crate::tools::driver::ChatStreamEvent>,
     tx: tokio::sync::mpsc::Sender<Result<Event, Infallible>>,
     conv_path: PathBuf,
@@ -802,12 +811,6 @@ async fn forward_sse_events_with_persistence(
     use crate::tools::driver::ChatStreamEvent;
     let mut collected_events: Vec<serde_json::Value> = Vec::new();
     let mut events_since_save = 0;
-
-    let save_conv = |conv: &ConversationFile| {
-        if let Err(e) = save_conversation(&conv_path, conv) {
-            tracing::warn!(error = %e, "failed to save conversation during streaming");
-        }
-    };
 
     while let Some(event) = event_rx.recv().await {
         // Serialize event as JSON value for storage
@@ -863,16 +866,15 @@ async fn forward_sse_events_with_persistence(
                 conv.messages[task_process_msg_idx].stream_events = Some(collected_events.clone());
             }
 
-            // Periodic save
+            // Periodic save (non-blocking so SSE forwarding keeps up with the agent)
             if events_since_save >= save_interval {
-                save_conv(&conv);
+                schedule_conversation_save(conv_path.clone(), conv.clone());
                 events_since_save = 0;
             }
         }
     }
 
-    // Final save
-    save_conv(&conv);
+    schedule_conversation_save(conv_path, conv);
     collected_events
 }
 
@@ -1113,7 +1115,7 @@ pub async fn post_message_stream(
     let sender_name = normalize_optional_text(sender_name);
     let sender_avatar_url = normalize_optional_text(sender_avatar_url);
 
-    let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Infallible>>(32);
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Infallible>>(256);
 
     let err_tool_missing = i18n::msg(&headers, "chat_tool_missing");
     let err_prompt_empty = i18n::msg(&headers, "chat_prompt_empty");

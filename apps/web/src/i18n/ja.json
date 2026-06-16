@@ -182,7 +182,10 @@
         "toolStatusError": "失敗",
         "resultSuccess": "完了",
         "resultError": "失敗",
-        "unknownTool": "ツール"
+        "unknownTool": "ツール",
+        "hasInput": "入力あり",
+        "hasOutput": "出力あり",
+        "todoItemCount": "{count} 件"
       },
       "copy": {
         "title": "メッセージをコピー",
@@ -192,7 +195,11 @@
       },
       "processCrashed": "プロセスが予期せず終了しました",
       "continueExecution": "続行して実行",
-      "continuing": "続行中..."
+      "continuing": "続行中...",
+      "text": {
+        "expand": "全文を表示（残り {count} 文字）",
+        "collapse": "折りたたむ"
+      }
     },
     "leftPanel": {
       "home": {

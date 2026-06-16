@@ -26,27 +26,49 @@ fn shell_quote(arg: &str) -> String {
     }
 }
 
+fn normalize_cursor_model(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return "auto".to_string();
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    match lower.as_str() {
+        "auto" => "auto".to_string(),
+        "cursor-agent" | "cursor_agent" => "auto".to_string(),
+        _ => trimmed.to_string(),
+    }
+}
+
 fn cursor_chat_cli_args(config: &Value) -> Vec<String> {
     let mut args = vec!["-p".to_string()];
     if auto_accept_permissions_enabled(config) {
         args.push("--trust".to_string());
         args.push("--force".to_string());
+        args.push("--approve-mcps".to_string());
     }
     if let Some(model) = config.get("model").and_then(Value::as_str) {
-        let model = model.trim();
+        let model = normalize_cursor_model(model);
         if !model.is_empty() {
             args.push("--model".to_string());
-            args.push(model.to_string());
-        }
-    }
-    if let Some(profile) = config.get("profile").and_then(Value::as_str) {
-        let profile = profile.trim();
-        if !profile.is_empty() {
-            args.push("--profile".to_string());
-            args.push(profile.to_string());
+            args.push(model);
         }
     }
     args
+}
+
+fn cursor_api_key_env(config: &Value) -> Vec<(String, String)> {
+    let env_name = config
+        .get("api_key_env")
+        .and_then(Value::as_str)
+        .unwrap_or("CURSOR_API_KEY")
+        .trim();
+    if env_name.is_empty() {
+        return vec![];
+    }
+    match std::env::var(env_name) {
+        Ok(key) if !key.trim().is_empty() => vec![("CURSOR_API_KEY".to_string(), key)],
+        _ => vec![],
+    }
 }
 
 fn cursor_stream_cli_args() -> Vec<String> {
@@ -327,13 +349,15 @@ fn build_cursor_spec(
         } else {
             format!("{command} agent {cli_prefix}")
         };
+        let mut env = cursor_api_key_env(config);
+        env.push(("PROMPT".to_string(), prompt));
         Ok(ChatSubprocessSpec {
             program: "sh".to_string(),
             args: vec![
                 "-c".to_string(),
                 format!("printf %s \"$PROMPT\" | {command_with_flags} -"),
             ],
-            env: vec![("PROMPT".to_string(), prompt)],
+            env,
         })
     } else {
         let mut args = vec!["agent".to_string()];
@@ -342,12 +366,21 @@ fn build_cursor_spec(
         Ok(ChatSubprocessSpec {
             program: command.to_string(),
             args,
-            env: vec![],
+            env: cursor_api_key_env(config),
         })
     }
 }
 
 pub struct CursorCliDriver;
+
+const CURSOR_MODEL_OPTIONS: &[&str] = &[
+    "auto",
+    "composer-2.5",
+    "composer-2.5-fast",
+    "grok-build-0.1",
+    "grok-4.3",
+    "kimi-k2.5",
+];
 
 impl CodingToolDriver for CursorCliDriver {
     fn kind(&self) -> ToolKind {
@@ -371,18 +404,13 @@ impl CodingToolDriver for CursorCliDriver {
                 ToolFieldSchema {
                     key: "model".to_string(),
                     label: "Model".to_string(),
-                    field_type: FieldType::Text,
+                    field_type: FieldType::Combobox,
                     required: false,
-                    options: vec![],
-                    placeholder: Some("Auto".to_string()),
-                },
-                ToolFieldSchema {
-                    key: "profile".to_string(),
-                    label: "Profile".to_string(),
-                    field_type: FieldType::Text,
-                    required: false,
-                    options: vec![],
-                    placeholder: Some("default".to_string()),
+                    options: CURSOR_MODEL_OPTIONS
+                        .iter()
+                        .map(|item| (*item).to_string())
+                        .collect(),
+                    placeholder: Some("auto".to_string()),
                 },
                 ToolFieldSchema {
                     key: "auto_accept_permissions".to_string(),
@@ -398,8 +426,8 @@ impl CodingToolDriver for CursorCliDriver {
     fn default_config(&self) -> Value {
         json!({
             "command":"cursor",
-            "profile":"default",
-            "model":"Auto",
+            "model":"auto",
+            "api_key_env":"CURSOR_API_KEY",
             "prompt_mode":"arg",
             "auto_accept_permissions": true
         })
@@ -445,6 +473,12 @@ impl CodingToolDriver for CursorCliDriver {
             for (k, v) in src {
                 dst.insert(k.clone(), v.clone());
             }
+        }
+        if let Some(model) = merged.get("model").and_then(Value::as_str) {
+            merged["model"] = json!(normalize_cursor_model(model));
+        }
+        if let Some(obj) = merged.as_object_mut() {
+            obj.remove("profile");
         }
         Ok(merged)
     }
@@ -533,7 +567,7 @@ impl CodingToolDriver for CursorCliDriver {
             model: config
                 .get("model")
                 .and_then(Value::as_str)
-                .unwrap_or("Auto")
+                .unwrap_or("auto")
                 .to_string(),
             prompt_tokens,
             completion_tokens,
@@ -555,6 +589,50 @@ mod tests {
     }
 
     #[test]
+    fn model_field_uses_combobox_with_known_options() {
+        let driver = CursorCliDriver;
+        let model_field = driver
+            .schema()
+            .fields
+            .into_iter()
+            .find(|field| field.key == "model")
+            .expect("model field");
+        assert_eq!(model_field.field_type, FieldType::Combobox);
+        assert!(model_field.options.contains(&"auto".to_string()));
+        assert!(model_field.options.contains(&"composer-2.5".to_string()));
+    }
+
+    #[test]
+    fn configure_tool_strips_legacy_profile_and_normalizes_model() {
+        let driver = CursorCliDriver;
+        let config = json!({
+            "command": "cursor",
+            "model": "cursor-agent",
+            "profile": "default",
+            "prompt_mode": "arg"
+        });
+        let merged = driver.configure_tool(&config).expect("configure");
+        assert_eq!(merged.get("model").and_then(Value::as_str), Some("auto"));
+        assert!(merged.get("profile").is_none());
+    }
+
+    #[test]
+    fn legacy_cursor_agent_model_is_normalized_to_auto() {
+        let driver = CursorCliDriver;
+        let mut config = driver.default_config();
+        config["model"] = json!("cursor-agent");
+        let spec = driver
+            .chat_subprocess_spec(&config, &sample_messages())
+            .expect("spec");
+        let model_idx = spec
+            .args
+            .iter()
+            .position(|a| a == "--model")
+            .expect("--model flag");
+        assert_eq!(spec.args.get(model_idx + 1).map(String::as_str), Some("auto"));
+    }
+
+    #[test]
     fn default_chat_spec_uses_print_mode_with_trust_and_force() {
         let driver = CursorCliDriver;
         let config = driver.default_config();
@@ -566,6 +644,39 @@ mod tests {
         assert!(spec.args.contains(&"-p".to_string()));
         assert!(spec.args.contains(&"--trust".to_string()));
         assert!(spec.args.contains(&"--force".to_string()));
+        assert!(spec.args.contains(&"--approve-mcps".to_string()));
+        assert!(!spec.args.iter().any(|a| a == "--profile"));
+    }
+
+    #[test]
+    fn auto_accept_disabled_omits_headless_permission_flags() {
+        let driver = CursorCliDriver;
+        let mut config = driver.default_config();
+        config["auto_accept_permissions"] = json!(false);
+        let spec = driver
+            .chat_subprocess_spec(&config, &sample_messages())
+            .expect("spec");
+        assert!(spec.args.contains(&"-p".to_string()));
+        assert!(!spec.args.iter().any(|a| a == "--trust"));
+        assert!(!spec.args.iter().any(|a| a == "--force"));
+        assert!(!spec.args.iter().any(|a| a == "--approve-mcps"));
+    }
+
+    #[test]
+    fn stdin_mode_pipes_prompt_to_agent_dash() {
+        let driver = CursorCliDriver;
+        let mut config = driver.default_config();
+        config["prompt_mode"] = json!("stdin");
+        let spec = driver
+            .chat_subprocess_spec_stream(&config, &sample_messages())
+            .expect("spec");
+        assert_eq!(spec.program, "sh");
+        let shell_cmd = spec.args.get(1).expect("shell command");
+        assert!(shell_cmd.contains("| cursor agent"));
+        assert!(shell_cmd.ends_with(" -"));
+        assert!(shell_cmd.contains("--output-format stream-json"));
+        assert!(shell_cmd.contains("--stream-partial-output"));
+        assert!(spec.env.iter().any(|(k, _)| k == "PROMPT"));
     }
 
     #[test]

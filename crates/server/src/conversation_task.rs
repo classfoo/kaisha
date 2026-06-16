@@ -1,6 +1,6 @@
 use crate::employee_chat::{
-    conversation_path, load_conversation, new_message_id, save_conversation, ConversationFile,
-    StoredMessage, STREAM_PERSIST_INTERVAL,
+    conversation_path, load_conversation, new_message_id, save_conversation, schedule_conversation_save,
+    ConversationFile, StoredMessage, STREAM_PERSIST_INTERVAL,
 };
 use crate::tasks::AgentTaskRecord;
 use crate::tools::driver::ChatStreamEvent;
@@ -83,17 +83,13 @@ where
                 }
 
                 if events_since_save >= save_interval {
-                    if let Err(e) = save_conversation(&conv_path_clone, &conv) {
-                        tracing::warn!(error = %e, "failed to save conversation during streaming task");
-                    }
+                    schedule_conversation_save(conv_path_clone.clone(), conv.clone());
                     events_since_save = 0;
                 }
             }
         }
 
-        if let Err(e) = save_conversation(&conv_path_clone, &conv) {
-            tracing::warn!(error = %e, "failed to save conversation at end of streaming task");
-        }
+        schedule_conversation_save(conv_path_clone, conv);
     });
 
     let task_result = run(event_tx).await;

@@ -17,6 +17,7 @@ import {
 } from '../features/employee-chat/useEmployeeChatMessages'
 import { EmployeeDirectoryRecord } from './EmployeeList'
 import { ChatHistoryList, type ChatHistoryListHandle } from './ChatHistoryList'
+import { CollapsibleMessageText } from './CollapsibleMessageText'
 
 type StreamingExtras = {
   thinking: string
@@ -215,9 +216,20 @@ const _wireCache = new Map<string, { signature: string; result: DisplayMessage }
  * append-only on the backend, so their length tracks incremental growth;
  * `task_status`/`content`/`result_meta` change when a run finalizes.
  */
+function streamEventsTextLen(m: ChatWireMessage): number {
+  if (!m.stream_events?.length) return 0
+  let len = 0
+  for (const ev of m.stream_events) {
+    if (ev && typeof ev === 'object' && 'text' in ev && typeof ev.text === 'string') {
+      len += ev.text.length
+    }
+  }
+  return len
+}
+
 function _wireSignature(m: ChatWireMessage): string {
   const events = m.stream_events?.length ?? 0
-  return `${events}|${m.task_status ?? ''}|${m.content?.length ?? 0}|${m.result_meta ? 1 : 0}`
+  return `${events}|${streamEventsTextLen(m)}|${m.task_status ?? ''}|${m.content?.length ?? 0}|${m.result_meta ? 1 : 0}`
 }
 
 function _wireToDisplayImpl(m: ChatWireMessage): DisplayMessage {
@@ -273,6 +285,7 @@ export const StreamingToolCallCard = React.memo(function StreamingToolCallCard({
   call: StreamingToolCall
   t: (key: string) => string
 }) {
+  const [expanded, setExpanded] = React.useState(false)
   const statusKey =
     call.status === 'running'
       ? 'ui.chat.streaming.toolStatusRunning'
@@ -282,16 +295,49 @@ export const StreamingToolCallCard = React.memo(function StreamingToolCallCard({
 
   const toolName = call.name || t('ui.chat.streaming.unknownTool')
   const toolNameLower = toolName.toLowerCase()
+  const todoItems = toolNameLower === 'todowrite' ? parseTodoItems(call.inputSummary) : []
+  const summaryHint =
+    todoItems.length > 0
+      ? t('ui.chat.streaming.todoItemCount').replace('{count}', String(todoItems.length))
+      : call.outputPreview
+        ? t('ui.chat.streaming.hasOutput')
+        : call.inputSummary
+          ? t('ui.chat.streaming.hasInput')
+          : null
 
-  // TodoWrite tool: parse JSON and show as checkbox list
+  return (
+    <div className={`stream-tool-call stream-tool-call--${call.status}${toolNameLower === 'todowrite' ? ' stream-tool-call--todowrite' : ''}`}>
+      <details
+        className="stream-tool-call__details"
+        onToggle={(event) => setExpanded(event.currentTarget.open)}
+      >
+        <summary className="stream-tool-call__summary">
+          <span className="stream-tool-call__header">
+            <span className="stream-tool-call__name">{toolName}</span>
+            <span className="stream-tool-call__status">{t(statusKey)}</span>
+          </span>
+          {summaryHint ? <span className="stream-tool-call__hint">{summaryHint}</span> : null}
+        </summary>
+        {expanded ? <StreamingToolCallBody call={call} todoItems={todoItems} t={t} /> : null}
+      </details>
+    </div>
+  )
+})
+
+const StreamingToolCallBody = React.memo(function StreamingToolCallBody({
+  call,
+  todoItems,
+  t,
+}: {
+  call: StreamingToolCall
+  todoItems: TodoItem[]
+  t: (key: string) => string
+}) {
+  const toolNameLower = (call.name || '').toLowerCase()
+
   if (toolNameLower === 'todowrite') {
-    const todoItems = parseTodoItems(call.inputSummary)
     return (
-      <div className={`stream-tool-call stream-tool-call--${call.status} stream-tool-call--todowrite`}>
-        <div className="stream-tool-call__header">
-          <span className="stream-tool-call__name">{toolName}</span>
-          <span className="stream-tool-call__status">{t(statusKey)}</span>
-        </div>
+      <>
         {todoItems.length > 0 ? (
           <div className="stream-tool-call__todo-list">
             {todoItems.map((todo, idx) => (
@@ -302,38 +348,33 @@ export const StreamingToolCallCard = React.memo(function StreamingToolCallCard({
             ))}
           </div>
         ) : call.inputSummary ? (
-          <pre className="stream-tool-call__pre">{call.inputSummary}</pre>
+          <CollapsibleMessageText className="stream-tool-call__pre" text={call.inputSummary} t={t} />
         ) : null}
         {call.outputPreview ? (
           <div className="stream-tool-call__inline-section">
             <span className="stream-tool-call__label">{t('ui.chat.streaming.output')}</span>
-            <pre className="stream-tool-call__pre">{call.outputPreview}</pre>
+            <CollapsibleMessageText className="stream-tool-call__pre" text={call.outputPreview} t={t} />
           </div>
         ) : null}
-      </div>
+      </>
     )
   }
 
-  // All other tools: show input/output inline without collapsing
   return (
-    <div className={`stream-tool-call stream-tool-call--${call.status}`}>
-      <div className="stream-tool-call__header">
-        <span className="stream-tool-call__name">{toolName}</span>
-        <span className="stream-tool-call__status">{t(statusKey)}</span>
-      </div>
+    <>
       {call.inputSummary ? (
         <div className="stream-tool-call__inline-section">
           <span className="stream-tool-call__label">{t('ui.chat.streaming.input')}</span>
-          <pre className="stream-tool-call__pre">{call.inputSummary}</pre>
+          <CollapsibleMessageText className="stream-tool-call__pre" text={call.inputSummary} t={t} />
         </div>
       ) : null}
       {call.outputPreview ? (
         <div className="stream-tool-call__inline-section">
           <span className="stream-tool-call__label">{t('ui.chat.streaming.output')}</span>
-          <pre className="stream-tool-call__pre">{call.outputPreview}</pre>
+          <CollapsibleMessageText className="stream-tool-call__pre" text={call.outputPreview} t={t} />
         </div>
       ) : null}
-    </div>
+    </>
   )
 })
 
@@ -395,7 +436,11 @@ export const TaskResultPanel = React.memo(function TaskResultPanel({ result, t }
       {result.output_preview && (
         <details className="task-result-panel__details">
           <summary className="task-result-panel__summary">{t('ui.chat.taskResult.outputPreview')}</summary>
-          <pre className="task-result-panel__output">{result.output_preview}</pre>
+          <CollapsibleMessageText
+            className="task-result-panel__output"
+            text={result.output_preview}
+            t={t}
+          />
         </details>
       )}
     </div>
@@ -468,7 +513,12 @@ const ChatMessageItem = React.memo(function ChatMessageItem({
               if (block.type === 'text') {
                 return (
                   <div className="streaming-section streaming-section--text" key={`b-${blockIdx}`}>
-                    <div className="chat-message__content">{block.text}</div>
+                    <CollapsibleMessageText
+                      className="chat-message__content"
+                      text={block.text}
+                      live={Boolean(message.pending)}
+                      t={t}
+                    />
                   </div>
                 )
               }
@@ -477,7 +527,12 @@ const ChatMessageItem = React.memo(function ChatMessageItem({
                   <div className="streaming-section streaming-section--thinking" key={`b-${blockIdx}`}>
                     <details open>
                       <summary className="stream-progress__summary">{t('ui.chat.streaming.thinking')}</summary>
-                      <pre className="stream-progress__pre">{block.text}</pre>
+                      <CollapsibleMessageText
+                        className="stream-progress__pre"
+                        text={block.text}
+                        live={Boolean(message.pending)}
+                        t={t}
+                      />
                     </details>
                   </div>
                 )
@@ -511,7 +566,7 @@ const ChatMessageItem = React.memo(function ChatMessageItem({
         </>
       ) : null}
       {message.content && !message.streaming ? (
-        <div className="chat-message__content">{message.content}</div>
+        <CollapsibleMessageText className="chat-message__content" text={message.content} t={t} />
       ) : null}
       {message.streaming && !message.content && !message.streaming.blocks.length ? (
         <div className="chat-message__content chat-message__content--placeholder">
