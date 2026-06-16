@@ -129,13 +129,35 @@ export default function App() {
     { id: 'settings', labelKey: 'ui.actions.settings' },
   ]
   const git = useGitWorkspace(API_BASE, locale, Boolean(workspace?.configured), refreshTick)
+  // Ref to track active polling timer for agent dispatch
+  const agentDispatchPollTimerRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
+
   const handleAgentDispatch = React.useCallback((dispatch: AgentDispatch) => {
+    // Clear any existing poll timer from a previous dispatch
+    if (agentDispatchPollTimerRef.current) {
+      clearInterval(agentDispatchPollTimerRef.current)
+    }
+
     // Switch to the assigned employee
     setSelectedEmployeeId(dispatch.employee_id)
     // Switch to chat view so user sees the task progress
     setActiveNav('chat')
     // Refresh chat messages to show the new task_process message
     setChatMessagesRefreshTick((t) => t + 1)
+
+    // The backend spawns the agent task asynchronously, so the task_process
+    // message may not be written to conversation.json yet when this callback
+    // fires. Poll a few times to ensure the message eventually appears.
+    let attempt = 0
+    const pollTimer = setInterval(() => {
+      attempt += 1
+      setChatMessagesRefreshTick((t) => t + 1)
+      if (attempt >= 4) {
+        agentDispatchPollTimerRef.current = null
+        clearInterval(pollTimer)
+      }
+    }, 500)
+    agentDispatchPollTimerRef.current = pollTimer
   }, [])
 
   const requirements = useRequirementsWorkspace(API_BASE, locale, Boolean(workspace?.configured), refreshTick, handleAgentDispatch)
@@ -747,14 +769,19 @@ export default function App() {
   const handleNavMenuClick = React.useCallback((menu: NavMenu) => {
     setActiveNav(menu)
     setSettingsOpen(false)
-    setWorkspace(null)
-    setStatus('checking...')
-    setWorkspaceError('')
-    setEmployeeCreateError('')
-    setEmployeeDirectory([])
-    setSelectedEmployeeId(null)
-    setMessageDraft('')
-    setRefreshTick((prev) => prev + 1)
+    // Only reset workspace and employee state when navigating to home.
+    // For functional tabs (chat, requirements, git), preserve the current
+    // context so users don't lose their selected employee or active task view.
+    if (menu === 'home') {
+      setWorkspace(null)
+      setStatus('checking...')
+      setWorkspaceError('')
+      setEmployeeCreateError('')
+      setEmployeeDirectory([])
+      setSelectedEmployeeId(null)
+      setMessageDraft('')
+      setRefreshTick((prev) => prev + 1)
+    }
   }, [])
 
   const startResizePanel = React.useCallback((event: React.MouseEvent<HTMLDivElement>) => {
