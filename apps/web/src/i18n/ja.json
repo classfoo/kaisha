@@ -221,7 +221,8 @@
         "loadError": "ツール一覧の読み込みに失敗しました",
         "saveError": "ツールの保存に失敗しました",
         "on": "オン",
-        "off": "オフ"
+        "off": "オフ",
+        "toggleEnabled": "ツールの有効状態を切り替え"
       },
       "departments": {
         "setup": "部門設定",

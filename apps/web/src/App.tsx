@@ -81,6 +81,7 @@ export default function App() {
   const [toolEnabledDraft, setToolEnabledDraft] = React.useState(true)
   const [toolConfigDraft, setToolConfigDraft] = React.useState<Record<string, unknown>>({})
   const [toolSaving, setToolSaving] = React.useState(false)
+  const [togglingToolIds, setTogglingToolIds] = React.useState<ReadonlySet<string>>(() => new Set())
   const [toolError, setToolError] = React.useState('')
   const [departmentForm, setDepartmentForm] = React.useState({ name: '', lead: '' })
   const [roleForm, setRoleForm] = React.useState<RoleItem['level']>('mid')
@@ -493,6 +494,44 @@ export default function App() {
       setToolSaving(false)
     }
   }, [activeToolId, locale, toolNameDraft, toolEnabledDraft, toolConfigDraft, tt])
+
+  const toggleToolEnabled = React.useCallback(async (id: string, enabled: boolean) => {
+    setToolError('')
+    setTogglingToolIds((prev) => new Set(prev).add(id))
+    setToolInstances((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, enabled } : item)),
+    )
+    if (activeToolId === id) {
+      setToolEnabledDraft(enabled)
+    }
+    try {
+      const response = await fetch(`${API_BASE}/api/tools/instances/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-lang': locale },
+        body: JSON.stringify({ enabled }),
+      })
+      if (!response.ok) throw new Error(await response.text())
+      const updated: ToolInstance = await response.json()
+      setToolInstances((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
+      if (activeToolId === updated.id) {
+        setToolEnabledDraft(updated.enabled)
+      }
+    } catch (err) {
+      setToolInstances((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, enabled: !enabled } : item)),
+      )
+      if (activeToolId === id) {
+        setToolEnabledDraft(!enabled)
+      }
+      setToolError(err instanceof Error ? err.message : tt('ui.settings.tools.saveError'))
+    } finally {
+      setTogglingToolIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    }
+  }, [activeToolId, locale, tt])
 
   const addDepartment = React.useCallback(() => {
     if (!departmentForm.name.trim() || !departmentForm.lead.trim()) return
@@ -939,8 +978,10 @@ export default function App() {
             toolConfigDraft={toolConfigDraft}
             toolError={toolError}
             toolSaving={toolSaving}
+            togglingToolIds={togglingToolIds}
             onCreateTool={createTool}
             onSaveTool={saveActiveTool}
+            onToggleToolEnabled={(id, enabled) => void toggleToolEnabled(id, enabled)}
             onSelectToolInstance={(id, name, enabled, config) => {
               setActiveToolId(id)
               setToolNameDraft(name)

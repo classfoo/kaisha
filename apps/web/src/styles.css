@@ -2936,11 +2936,71 @@ select,
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   border: 1px solid #2f3950;
   border-radius: 8px;
   padding: 10px 12px;
   background: #121926;
   cursor: pointer;
+}
+
+.settings-list__row-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.settings-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-toggle__input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.settings-toggle__track {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: #3a455c;
+  transition: background 0.15s ease;
+}
+
+.settings-toggle__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #d8e0ef;
+  transition: transform 0.15s ease;
+}
+
+.settings-toggle__input:checked + .settings-toggle__track {
+  background: #3d6b3d;
+}
+
+.settings-toggle__input:checked + .settings-toggle__track .settings-toggle__thumb {
+  transform: translateX(16px);
+}
+
+.settings-toggle__input:disabled + .settings-toggle__track {
+  opacity: 0.55;
+}
+
+.settings-toggle__label {
+  min-width: 2.5em;
+  color: #aeb9cf;
+  font-size: 12px;
 }
 
 .settings-list__row--active {

@@ -102,6 +102,22 @@ impl ToolManager {
         Ok(updated)
     }
 
+    pub fn set_enabled(&mut self, id: &str, enabled: bool) -> anyhow::Result<ToolInstance> {
+        let existing = self
+            .instances
+            .get(id)
+            .ok_or_else(|| anyhow::anyhow!("tool not found"))?
+            .clone();
+        let updated = ToolInstance {
+            enabled,
+            version: existing.version + 1,
+            ..existing
+        };
+        self.instances.insert(id.to_string(), updated.clone());
+        self.store.save(&self.instances)?;
+        Ok(updated)
+    }
+
     /// Picks the first enabled tool instance, preferring Claude Code, then other registered kinds.
     pub fn pick_enabled_chat_driver(&self) -> Option<(ToolInstance, Arc<dyn CodingToolDriver>)> {
         let priority = [

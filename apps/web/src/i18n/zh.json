@@ -221,7 +221,8 @@
         "loadError": "加载工具列表失败",
         "saveError": "保存工具失败",
         "on": "开",
-        "off": "关"
+        "off": "关",
+        "toggleEnabled": "切换工具启用状态"
       },
       "departments": {
         "setup": "部门配置",

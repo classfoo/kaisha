@@ -49,7 +49,7 @@ use std::{
 use tower_http::cors::{Any, CorsLayer};
 use tools::{
     manager::ToolManager,
-    model::{CreateToolInstanceRequest, ToolCatalogItem, ToolInstance, UpdateToolInstanceRequest},
+    model::{CreateToolInstanceRequest, PatchToolInstanceEnabledRequest, ToolCatalogItem, ToolInstance, UpdateToolInstanceRequest},
 };
 
 const SETTINGS_MENUS: [&str; 4] = ["tools", "departments", "roles", "employees"];
@@ -346,6 +346,18 @@ async fn update_tool_instance(
     let mut tools = state.tools.write().expect("tools lock poisoned");
     tools
         .update(&id, req)
+        .map(Json)
+        .map_err(|err| (axum::http::StatusCode::BAD_REQUEST, err.to_string()))
+}
+
+async fn patch_tool_instance_enabled(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Json(req): Json<PatchToolInstanceEnabledRequest>,
+) -> Result<Json<ToolInstance>, (axum::http::StatusCode, String)> {
+    let mut tools = state.tools.write().expect("tools lock poisoned");
+    tools
+        .set_enabled(&id, req.enabled)
         .map(Json)
         .map_err(|err| (axum::http::StatusCode::BAD_REQUEST, err.to_string()))
 }
@@ -651,7 +663,7 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
         )
         .route("/api/tools/catalog", get(get_tool_catalog))
         .route("/api/tools/instances", get(list_tool_instances).post(create_tool_instance))
-        .route("/api/tools/instances/:id", get(get_tool_instance).put(update_tool_instance))
+        .route("/api/tools/instances/:id", get(get_tool_instance).put(update_tool_instance).patch(patch_tool_instance_enabled))
         .route("/api/git/repos", get(git::list_git_repos).post(git::create_git_repo))
         .route("/api/git/repos/:id", get(git::get_git_repo))
         .route("/api/git/repos/:id/op", axum::routing::post(git::run_git_operation))

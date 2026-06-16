@@ -53,8 +53,10 @@ type SettingsCardsProps = {
   toolConfigDraft: Record<string, unknown>
   toolError: string
   toolSaving: boolean
+  togglingToolIds: ReadonlySet<string>
   onCreateTool: () => void
   onSaveTool: () => void
+  onToggleToolEnabled: (id: string, enabled: boolean) => void
   onSelectToolInstance: (id: string, name: string, enabled: boolean, config: Record<string, unknown>) => void
   onToolKindDraftChange: (kind: ToolKind) => void
   onToolNameDraftChange: (name: string) => void
@@ -99,8 +101,10 @@ export const SettingsCards = React.memo(function SettingsCards(props: SettingsCa
     toolConfigDraft,
     toolError,
     toolSaving,
+    togglingToolIds,
     onCreateTool,
     onSaveTool,
+    onToggleToolEnabled,
     onSelectToolInstance,
     onToolKindDraftChange,
     onToolNameDraftChange,
@@ -160,19 +164,42 @@ export const SettingsCards = React.memo(function SettingsCards(props: SettingsCa
           <h3 className="settings-card__title">{tt('ui.settings.tools.list')}</h3>
           {toolInstances.length === 0 ? <p className="settings-empty">{tt('ui.settings.tools.empty')}</p> : (
             <div className="settings-list">
-              {toolInstances.map((item) => (
+              {toolInstances.map((item) => {
+                const catalogItem = toolCatalog.find((tool) => tool.kind === item.kind)
+                const displayKind = catalogItem?.display_name ?? item.kind
+                const toggling = togglingToolIds.has(item.id)
+                return (
                 <div
                   key={item.id}
                   className={`settings-list__row ${item.id === activeToolId ? 'settings-list__row--active' : ''}`}
                   onClick={() => onSelectToolInstance(item.id, item.name, item.enabled, item.config ?? {})}
                 >
-                  <div>
+                  <div className="settings-list__row-main">
                     <div>{item.name}</div>
-                    <div className="settings-subtext">{item.kind}</div>
+                    <div className="settings-subtext">{displayKind}</div>
                   </div>
-                  <span>{item.enabled ? tt('ui.settings.tools.on') : tt('ui.settings.tools.off')}</span>
+                  <label
+                    className="settings-toggle"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      className="settings-toggle__input"
+                      checked={item.enabled}
+                      disabled={toggling}
+                      aria-label={tt('ui.settings.tools.toggleEnabled')}
+                      onChange={(event) => onToggleToolEnabled(item.id, event.target.checked)}
+                    />
+                    <span className="settings-toggle__track" aria-hidden="true">
+                      <span className="settings-toggle__thumb" />
+                    </span>
+                    <span className="settings-toggle__label">
+                      {item.enabled ? tt('ui.settings.tools.on') : tt('ui.settings.tools.off')}
+                    </span>
+                  </label>
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </section>

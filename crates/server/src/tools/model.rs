@@ -73,3 +73,8 @@ pub struct UpdateToolInstanceRequest {
     pub enabled: bool,
     pub config: Value,
 }
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PatchToolInstanceEnabledRequest {
+    pub enabled: bool,
+}

@@ -221,7 +221,8 @@
         "loadError": "Failed to load tools",
         "saveError": "Failed to save tool",
         "on": "On",
-        "off": "Off"
+        "off": "Off",
+        "toggleEnabled": "Toggle tool enabled"
       },
       "departments": {
         "setup": "Department setup",
