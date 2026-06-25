@@ -62,4 +62,44 @@ describe('wireToDisplay caching for live task_process messages', () => {
     const completed = wireToDisplay(taskProcess(id, ['done'], 'completed'))
     expect(completed.pending).toBe(false)
   })
+
+  it('shows failed explore error when no stream events were emitted', () => {
+    const display = wireToDisplay({
+      id: 'msg_task_process_failed',
+      role: 'task_process',
+      content: 'no_enabled_coding_tool',
+      created_at_ms: 0,
+      task_status: 'failed',
+      task_id: 'task_failed_1',
+      stream_events: [
+        {
+          type: 'result',
+          summary: 'no_enabled_coding_tool',
+          is_error: true,
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+        },
+      ],
+    })
+
+    expect(display.taskStatus).toBe('failed')
+    expect(display.content).toBe('no_enabled_coding_tool')
+    expect(display.streaming?.blocks.some((block) => block.type === 'result' && block.isError)).toBe(true)
+  })
+
+  it('shows failed explore error when stream events are absent', () => {
+    const display = wireToDisplay({
+      id: 'msg_task_process_failed_empty',
+      role: 'task_process',
+      content: 'no_enabled_coding_tool',
+      created_at_ms: 0,
+      task_status: 'failed',
+      task_id: 'task_failed_1',
+    })
+
+    expect(display.taskStatus).toBe('failed')
+    expect(display.content).toBe('no_enabled_coding_tool')
+    expect(display.streaming).toBeUndefined()
+  })
 })

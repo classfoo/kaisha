@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=dev_common.sh
+source "$(dirname "$0")/dev_common.sh"
+
 WEB_HOST="${KAISHA_WEB_HOST:-0.0.0.0}"
 WEB_PORT="1420"
 API_HOST="${KAISHA_HOST:-0.0.0.0}"

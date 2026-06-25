@@ -1,6 +1,6 @@
 use crate::autonomy_trigger::{is_employee_busy, is_employee_busy_excluding, mark_employee_for_autonomy};
 use super::{
-    model::{AgentTaskRecord, CodeAgentTaskParams, TaskKind, TaskStatus},
+    model::{AgentTaskRecord, CodeAgentTaskParams, StreamingExecutionFailure, TaskKind, TaskStatus},
     runtime::task_runtime_handle,
     store::{new_task_id, now_ms, TaskStore},
 };
@@ -11,6 +11,27 @@ use crate::tools::{
 };
 use serde_json::json;
 use std::path::Path;
+
+async fn emit_streaming_failure(event_tx: &tokio::sync::mpsc::Sender<ChatStreamEvent>, message: &str) {
+    let _ = event_tx
+        .send(ChatStreamEvent::Result {
+            summary: Some(message.to_string()),
+            model: None,
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0,
+            is_error: true,
+        })
+        .await;
+}
+
+fn streaming_failure(task_id: &str, message: String) -> anyhow::Error {
+    StreamingExecutionFailure {
+        task_id: task_id.to_string(),
+        message,
+    }
+    .into()
+}
 
 pub struct TaskRunner {
     store: TaskStore,
@@ -391,10 +412,11 @@ impl TaskRunner {
         if self.shop_is_closed() {
             let created = now_ms();
             let id = new_task_id();
-            let mut task = AgentTaskRecord::new(&params, id, created);
+            let mut task = AgentTaskRecord::new(&params, id.clone(), created);
             task.status = TaskStatus::Pending;
             self.store.save(&task)?;
-            return Err(anyhow::anyhow!("shop_is_closed"));
+            emit_streaming_failure(&event_tx, "shop_is_closed").await;
+            return Err(streaming_failure(&id, "shop_is_closed".to_string()));
         }
 
         let created = now_ms();
@@ -454,8 +476,9 @@ impl TaskRunner {
             .as_ref()
             .map(|e| e.to_string())
             .unwrap_or_else(|| "execute_failed".to_string());
-        self.finalize_streaming_error(&params.kind, &mut task, err_msg)?;
-        Err(last_err.unwrap_or_else(|| anyhow::anyhow!("execute_failed")))
+        self.finalize_streaming_error(&params.kind, &mut task, err_msg.clone())?;
+        emit_streaming_failure(&event_tx, &err_msg).await;
+        Err(streaming_failure(&task.id, err_msg))
     }
 
     /// Resets an existing task so it can be rerun, returning the now-running
@@ -504,7 +527,7 @@ impl TaskRunner {
             crate::agent_locale::ensure_language_system_message(params.messages.clone(), lang);
 
         let result = tools
-            .execute_code_chat_streaming_events(&params.workdir, &messages, event_tx)
+            .execute_code_chat_streaming_events(&params.workdir, &messages, event_tx.clone())
             .await;
         task_runtime_handle().unregister(&task.id);
         match result {
@@ -513,8 +536,10 @@ impl TaskRunner {
                 Ok(task)
             }
             Err(err) => {
-                self.finalize_streaming_error(&params.kind, &mut task, err.to_string())?;
-                Err(err)
+                let err_msg = err.to_string();
+                self.finalize_streaming_error(&params.kind, &mut task, err_msg.clone())?;
+                emit_streaming_failure(&event_tx, &err_msg).await;
+                Err(streaming_failure(&task.id, err_msg))
             }
         }
     }

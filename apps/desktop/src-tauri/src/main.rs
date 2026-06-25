@@ -7,7 +7,7 @@ use tauri::{
 };
 
 fn main() {
-    tracing_subscriber::fmt::init();
+    server::logging::init();
 
     tauri::Builder::default()
         .setup(|app| {

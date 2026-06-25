@@ -358,10 +358,7 @@ pub async fn run_employee_autonomy_explore_stream_handler(
                 }
             }
             Err(e) => {
-                if task_process_idx < conv.messages.len() {
-                    conv.messages[task_process_idx].task_status = Some("failed".to_string());
-                    conv.messages[task_process_idx].content = e.to_string();
-                }
+                crate::conversation_task::finalize_failed_task_process(&mut conv, task_process_idx, &e);
             }
         }
         let _ = save_conversation(&conv_path, &conv);
@@ -494,10 +491,7 @@ pub async fn run_employee_autonomy_run_stream_handler(
                 }
             }
             Err(e) => {
-                if task_process_idx < conv.messages.len() {
-                    conv.messages[task_process_idx].task_status = Some("failed".to_string());
-                    conv.messages[task_process_idx].content = e.to_string();
-                }
+                crate::conversation_task::finalize_failed_task_process(&mut conv, task_process_idx, &e);
             }
         }
         let _ = save_conversation(&conv_path, &conv);

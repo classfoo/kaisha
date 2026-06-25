@@ -198,6 +198,23 @@ impl AgentTaskRecord {
 
 pub const OUTPUT_PREVIEW_MAX: usize = 2000;
 
+/// Returned when a streaming code-agent run fails after creating a task record.
+/// Carries the persisted task id so conversation bookkeeping can link the
+/// `task_process` message even when the agent exits before success.
+#[derive(Debug, Clone)]
+pub struct StreamingExecutionFailure {
+    pub task_id: String,
+    pub message: String,
+}
+
+impl std::fmt::Display for StreamingExecutionFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for StreamingExecutionFailure {}
+
 pub fn truncate_preview(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
         return text.to_string();

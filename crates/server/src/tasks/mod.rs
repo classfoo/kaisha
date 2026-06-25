@@ -7,7 +7,7 @@ pub(crate) mod store;
 pub use detail::{build_task_detail, AgentTaskDetail};
 
 pub use model::{
-    AgentTaskRecord, CodeAgentTaskParams, TaskKind, TaskStatus,
+    AgentTaskRecord, CodeAgentTaskParams, StreamingExecutionFailure, TaskKind, TaskStatus,
 };
 pub use runner::{
     build_rerun_params, can_rerun_task, hire_task_content, review_context, review_opinion_content,

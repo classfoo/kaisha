@@ -255,23 +255,35 @@ function _computeWireToDisplay(m: ChatWireMessage): DisplayMessage {
     taskId: m.task_id ?? undefined,
   }
 
-  // Handle task_process messages: reconstruct streaming state from saved events
-  if (m.role === 'task_process' && m.stream_events && m.stream_events.length > 0) {
-    const streamingState = reconstructStreamingState(m.stream_events)
-    const streamingExtras: StreamingExtras = {
-      thinking: streamingState.thinking,
-      toolCalls: streamingState.toolCalls,
-      session: streamingState.session,
-      result: streamingState.result,
-      blocks: streamingState.blocks,
+  if (m.role === 'task_process') {
+    const taskStatus = m.task_status ?? undefined
+
+    if (m.stream_events && m.stream_events.length > 0) {
+      const streamingState = reconstructStreamingState(m.stream_events)
+      const streamingExtras: StreamingExtras = {
+        thinking: streamingState.thinking,
+        toolCalls: streamingState.toolCalls,
+        session: streamingState.session,
+        result: streamingState.result,
+        blocks: streamingState.blocks,
+      }
+      const hasStreamingContent =
+        streamingState.blocks.length > 0 || streamingState.text.length > 0
+      return {
+        ...base,
+        content: m.content || streamingState.text,
+        pending: taskStatus === 'running',
+        streaming: hasStreamingContent ? streamingExtras : undefined,
+        taskResult: m.result_meta ?? undefined,
+        taskStatus,
+      }
     }
+
     return {
       ...base,
-      content: m.content || streamingState.text,
-      pending: m.task_status === 'running',
-      streaming: streamingState.blocks.length > 0 || streamingState.text.length > 0 ? streamingExtras : undefined,
-      taskResult: m.result_meta ?? undefined,
-      taskStatus: m.task_status ?? undefined,
+      content: m.content,
+      pending: taskStatus === 'running',
+      taskStatus,
     }
   }
 
@@ -490,6 +502,12 @@ const ChatMessageItem = React.memo(function ChatMessageItem({
   const employeeLabel = employeeName
   const peerSecondary = isSystem ? '' : `${employeeDepartment} / ${employeeRole}`
 
+  const showsErrorInBlocks = Boolean(
+    message.streaming?.blocks.some(
+      (block) => block.type === 'result' && block.isError && Boolean(block.summary),
+    ),
+  )
+
   const bubble = (
     <div className="chat-message__bubble">
       <MessageCopyButton message={message} t={t} />
@@ -549,6 +567,13 @@ const ChatMessageItem = React.memo(function ChatMessageItem({
                     <span className="stream-progress__chip">
                       {block.isError ? t('ui.chat.streaming.resultError') : t('ui.chat.streaming.resultSuccess')}
                     </span>
+                    {block.summary ? (
+                      <CollapsibleMessageText
+                        className="stream-progress__error-detail"
+                        text={block.summary}
+                        t={t}
+                      />
+                    ) : null}
                     <span className="stream-progress__meta">
                       {t('ui.chat.taskResult.tokens')}: {block.promptTokens.toLocaleString()} / {block.completionTokens.toLocaleString()}
                     </span>
@@ -567,6 +592,13 @@ const ChatMessageItem = React.memo(function ChatMessageItem({
       ) : null}
       {message.content && !message.streaming ? (
         <CollapsibleMessageText className="chat-message__content" text={message.content} t={t} />
+      ) : null}
+      {message.taskStatus === 'failed' && message.content && !showsErrorInBlocks ? (
+        <CollapsibleMessageText
+          className="stream-progress__result stream-progress__result--error stream-progress__error-detail"
+          text={message.content}
+          t={t}
+        />
       ) : null}
       {message.streaming && !message.content && !message.streaming.blocks.length ? (
         <div className="chat-message__content chat-message__content--placeholder">

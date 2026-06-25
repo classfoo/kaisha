@@ -2,11 +2,56 @@ use crate::employee_chat::{
     conversation_path, load_conversation, new_message_id, save_conversation, schedule_conversation_save,
     ConversationFile, StoredMessage, STREAM_PERSIST_INTERVAL,
 };
-use crate::tasks::AgentTaskRecord;
+use crate::tasks::{AgentTaskRecord, StreamingExecutionFailure};
 use crate::tools::driver::ChatStreamEvent;
 use std::future::Future;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+fn failure_stream_event(message: &str) -> serde_json::Value {
+    serde_json::json!({
+        "type": "result",
+        "summary": message,
+        "is_error": true,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+    })
+}
+
+fn stream_events_contain_error(events: &[serde_json::Value]) -> bool {
+    events.iter().any(|ev| {
+        ev.get("type").and_then(|t| t.as_str()) == Some("result")
+            && ev.get("is_error").and_then(|e| e.as_bool()) == Some(true)
+    })
+}
+
+pub(crate) fn finalize_failed_task_process(
+    conv: &mut ConversationFile,
+    task_process_idx: usize,
+    err: &anyhow::Error,
+) {
+    let (task_id, error_message) = err
+        .downcast_ref::<StreamingExecutionFailure>()
+        .map(|failure| (Some(failure.task_id.clone()), failure.message.clone()))
+        .unwrap_or_else(|| (None, err.to_string()));
+
+    if task_process_idx >= conv.messages.len() {
+        return;
+    }
+
+    let msg = &mut conv.messages[task_process_idx];
+    msg.task_status = Some("failed".to_string());
+    msg.content = error_message.clone();
+    if let Some(id) = task_id {
+        msg.task_id = Some(id);
+    }
+
+    let events = msg.stream_events.get_or_insert_with(Vec::new);
+    if !stream_events_contain_error(events) {
+        events.push(failure_stream_event(&error_message));
+    }
+}
 
 /// Runs a streaming code-agent task while mirroring its live output into the
 /// employee's conversation file so the chat panel shows the real-time process.
@@ -112,10 +157,7 @@ where
             }
         }
         Err(e) => {
-            if task_process_idx < conv.messages.len() {
-                conv.messages[task_process_idx].task_status = Some("failed".to_string());
-                conv.messages[task_process_idx].content = e.to_string();
-            }
+            finalize_failed_task_process(&mut conv, task_process_idx, &e);
         }
     }
     let _ = save_conversation(&conv_path, &conv);
@@ -126,7 +168,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tasks::{CodeAgentTaskParams, TaskKind};
+    use crate::tasks::{CodeAgentTaskParams, StreamingExecutionFailure, TaskKind};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_workspace() -> std::path::PathBuf {
@@ -193,9 +235,12 @@ mod tests {
         let workspace = temp_workspace();
         std::fs::create_dir_all(&workspace).unwrap();
 
-        let result = run_with_conversation(&workspace, "bob", |tx| async move {
-            drop(tx);
-            Err(anyhow::anyhow!("no_enabled_coding_tool"))
+        let result = run_with_conversation(&workspace, "bob", |_tx| async move {
+            Err(StreamingExecutionFailure {
+                task_id: "task_failed_1".into(),
+                message: "no_enabled_coding_tool".into(),
+            }
+            .into())
         })
         .await;
 
@@ -207,6 +252,19 @@ mod tests {
         assert_eq!(msg.role, "task_process");
         assert_eq!(msg.task_status.as_deref(), Some("failed"));
         assert_eq!(msg.content, "no_enabled_coding_tool");
+        assert_eq!(msg.task_id.as_deref(), Some("task_failed_1"));
+
+        let events = msg.stream_events.as_ref().expect("stream events persisted");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].get("type").and_then(|v| v.as_str()), Some("result"));
+        assert_eq!(
+            events[0].get("is_error").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            events[0].get("summary").and_then(|v| v.as_str()),
+            Some("no_enabled_coding_tool")
+        );
 
         let _ = std::fs::remove_dir_all(&workspace);
     }

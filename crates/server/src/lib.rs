@@ -1,3 +1,4 @@
+pub mod logging;
 mod employee;
 mod employee_chat;
 mod employee_conversation_stream;
@@ -806,6 +807,7 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
         .route("/api/shop/status", get(get_shop_status))
         .route("/api/shop/toggle", post(toggle_shop_status))
         .layer(cors)
+        .layer(logging::http_trace_layer())
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             sync_workspace_locale_middleware,

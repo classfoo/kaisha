@@ -6,7 +6,7 @@
   ],
   "scripts": {
     "dev:web": "npm --workspace @kaisha/web run dev",
-    "dev:server": "cargo +${RUST_TOOLCHAIN:-stable} run -p server --bin kaisha-server",
+    "dev:server": "bash ./scripts/dev_server.sh",
     "dev:desktop": "cargo +${RUST_TOOLCHAIN:-stable} tauri dev -- --manifest-path \"$(pwd)/apps/desktop/src-tauri/Cargo.toml\"",
     "dev:browser": "concurrently -n WEB,API \"npm run dev:web\" \"npm run dev:server\"",
     "build:web": "npm --workspace @kaisha/web run build",
