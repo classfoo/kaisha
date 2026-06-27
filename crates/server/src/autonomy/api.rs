@@ -19,6 +19,12 @@ use std::{
 use tokio_stream::wrappers::ReceiverStream;
 
 #[derive(Debug, Clone, Serialize)]
+pub struct ExploreAcceptedResponse {
+    pub accepted: bool,
+    pub employee_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct AutonomyStatusWire {
     pub enabled: bool,
     pub worker_count: usize,
@@ -117,8 +123,8 @@ pub async fn run_employee_autonomy_explore_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
     AxumPath(employee_id): AxumPath<String>,
-) -> Result<Json<crate::employee_todo::EmployeeTodoFile>, (axum::http::StatusCode, String)> {
-    let Some(runtime) = &state.autonomy else {
+) -> Result<(axum::http::StatusCode, Json<ExploreAcceptedResponse>), (axum::http::StatusCode, String)> {
+    let Some(runtime) = state.autonomy.clone() else {
         return Err((
             axum::http::StatusCode::SERVICE_UNAVAILABLE,
             crate::i18n::msg(&headers, "autonomy_not_enabled"),
@@ -136,20 +142,33 @@ pub async fn run_employee_autonomy_explore_handler(
     let employee_id_clone = employee_id.clone();
     let headers_clone = headers.clone();
 
-    // Create a task_process message and run explore with streaming events,
-    // then persist events to conversation.json
-    let result = run_autonomy_task_with_conversation(
-        &workspace_clone,
-        &employee_id_clone,
-        &headers_clone,
-        tools_arc,
-        AutonomyTaskKind::Explore,
-    )
-    .await?;
+    tokio::spawn(async move {
+        let result = run_autonomy_task_with_conversation(
+            &workspace_clone,
+            &employee_id_clone,
+            &headers_clone,
+            tools_arc,
+            AutonomyTaskKind::Explore,
+        )
+        .await;
+        runtime.notify();
+        if let Err((status, message)) = result {
+            tracing::warn!(
+                status = %status,
+                error = %message,
+                employee_id = %employee_id_clone,
+                "background autonomy explore failed"
+            );
+        }
+    });
 
-    runtime.notify();
-
-    Ok(Json(result))
+    Ok((
+        axum::http::StatusCode::ACCEPTED,
+        Json(ExploreAcceptedResponse {
+            accepted: true,
+            employee_id,
+        }),
+    ))
 }
 
 pub async fn list_tasks_handler(

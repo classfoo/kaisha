@@ -76,6 +76,7 @@
       "noSelection": "请选择员工以查看任务",
       "empty": "{name} 暂无任务",
       "loading": "加载任务中…",
+      "listError": "加载任务列表失败",
       "kind": {
         "employee_hire": "雇佣员工",
         "requirement_agent": "需求代理",
@@ -107,6 +108,15 @@
       "stop": "停止",
       "stopping": "停止中…",
       "stopError": "停止任务失败",
+      "stopAll": "全部停止",
+      "stoppingAll": "正在全部停止…",
+      "stopAllError": "停止全部任务失败",
+      "pagination": {
+        "label": "任务列表分页",
+        "prev": "上一页",
+        "next": "下一页",
+        "page": "第 {page} / {totalPages} 页"
+      },
       "detail": {
         "title": "任务详情",
         "close": "关闭",

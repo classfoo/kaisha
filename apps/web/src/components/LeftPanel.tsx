@@ -62,12 +62,19 @@ type LeftPanelProps = {
   reinstatingRequirementId: string | null
   hardDeletingRequirementId: string | null
   employeeTasks: AgentTaskRecord[]
+  employeeTasksTotal: number
+  employeeTasksPage: number
+  employeeTasksPageSize: number
+  employeeTasksStoppableCount: number
+  onEmployeeTasksPageChange: (page: number) => void
   employeeTasksLoading: boolean
   employeeTasksError: string | null
   employeeTasksExploring: boolean
   onEmployeeTasksExplore: () => void
   employeeTasksRefreshing: boolean
   onEmployeeTasksRefresh: () => void
+  stoppingAllEmployeeTasks: boolean
+  onStopAllEmployeeTasks: () => void
   rerunningTaskId: string | null
   onRerunEmployeeTask: (taskId: string) => void
   stoppingTaskId: string | null
@@ -130,12 +137,19 @@ export const LeftPanel = React.memo(function LeftPanel({
   reinstatingRequirementId,
   hardDeletingRequirementId,
   employeeTasks,
+  employeeTasksTotal,
+  employeeTasksPage,
+  employeeTasksPageSize,
+  employeeTasksStoppableCount,
+  onEmployeeTasksPageChange,
   employeeTasksLoading,
   employeeTasksError,
   employeeTasksExploring,
   onEmployeeTasksExplore,
   employeeTasksRefreshing,
   onEmployeeTasksRefresh,
+  stoppingAllEmployeeTasks,
+  onStopAllEmployeeTasks,
   rerunningTaskId,
   onRerunEmployeeTask,
   stoppingTaskId,
@@ -199,6 +213,11 @@ export const LeftPanel = React.memo(function LeftPanel({
             <section className="side-panel__employee-tasks" aria-label={t('ui.employeeTasks.listTitle')}>
               <EmployeeTaskList
                 tasks={employeeTasks}
+                total={employeeTasksTotal}
+                page={employeeTasksPage}
+                pageSize={employeeTasksPageSize}
+                stoppableCount={employeeTasksStoppableCount}
+                onPageChange={onEmployeeTasksPageChange}
                 loading={employeeTasksLoading}
                 error={employeeTasksError}
                 selectedEmployeeId={selectedEmployeeId}
@@ -208,6 +227,8 @@ export const LeftPanel = React.memo(function LeftPanel({
                 onExplore={onEmployeeTasksExplore}
                 refreshing={employeeTasksRefreshing}
                 onRefresh={onEmployeeTasksRefresh}
+                stoppingAll={stoppingAllEmployeeTasks}
+                onStopAll={onStopAllEmployeeTasks}
                 rerunningTaskId={rerunningTaskId}
                 onRerunTask={onRerunEmployeeTask}
                 stoppingTaskId={stoppingTaskId}

@@ -76,6 +76,7 @@
       "noSelection": "タスクを表示するには従業員を選択してください",
       "empty": "{name} のタスクはまだありません",
       "loading": "タスクを読み込み中…",
+      "listError": "タスク一覧の読み込みに失敗しました",
       "kind": {
         "employee_hire": "従業員雇用",
         "requirement_agent": "要件エージェント",
@@ -107,6 +108,15 @@
       "stop": "停止",
       "stopping": "停止中…",
       "stopError": "タスクの停止に失敗しました",
+      "stopAll": "すべて停止",
+      "stoppingAll": "すべて停止中…",
+      "stopAllError": "すべてのタスクの停止に失敗しました",
+      "pagination": {
+        "label": "タスク一覧のページ送り",
+        "prev": "前へ",
+        "next": "次へ",
+        "page": "{page} / {totalPages} ページ"
+      },
       "detail": {
         "title": "タスク詳細",
         "close": "閉じる",

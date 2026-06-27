@@ -168,6 +168,7 @@ export default function App() {
   const [rerunningTaskId, setRerunningTaskId] = React.useState<string | null>(null)
   const [employeeTaskRerunError, setEmployeeTaskRerunError] = React.useState<string | null>(null)
   const [stoppingTaskId, setStoppingTaskId] = React.useState<string | null>(null)
+  const [stoppingAllEmployeeTasks, setStoppingAllEmployeeTasks] = React.useState(false)
   const [employeeTaskStopError, setEmployeeTaskStopError] = React.useState<string | null>(null)
   const employeeTasks = useEmployeeTasks(
     API_BASE,
@@ -175,7 +176,7 @@ export default function App() {
     Boolean(workspace?.configured),
     selectedEmployeeId,
     refreshTick,
-    employeeTasksExploring || rerunningTaskId != null || stoppingTaskId != null,
+    employeeTasksExploring || rerunningTaskId != null || stoppingTaskId != null || stoppingAllEmployeeTasks,
   )
   const employeeTasksApi = React.useMemo(
     () => createEmployeeTasksApi(API_BASE, locale),
@@ -188,13 +189,30 @@ export default function App() {
     setEmployeeTaskStopError(null)
   }, [selectedEmployeeId])
 
+  const formatEmployeeTasksListError = React.useCallback(
+    (raw: string | null) => {
+      if (!raw) return null
+      const lower = raw.toLowerCase()
+      if (
+        lower.includes('load failed') ||
+        lower.includes('failed to fetch') ||
+        lower.includes('networkerror') ||
+        lower.includes('network')
+      ) {
+        return tt('ui.employeeTasks.listError')
+      }
+      return raw
+    },
+    [tt],
+  )
+
   const runEmployeeExplore = React.useCallback(async () => {
     if (!workspace?.configured || !selectedEmployeeId || employeeTasksExploring) return
     setEmployeeTasksExploring(true)
     setEmployeeTasksExploreError(null)
     try {
       await employeeTasksApi.triggerExplore(selectedEmployeeId)
-      void employeeTasks.refresh()
+      void employeeTasks.refresh({ silent: true })
       // Signal chat panel to refresh since the explore task writes to conversation.json
       setChatMessagesRefreshTick((t) => t + 1)
     } catch (err) {
@@ -232,7 +250,7 @@ export default function App() {
   }, [workspace?.configured, rerunningTaskId, employeeTasksApi, employeeTasks.refresh, tt])
 
   const stopEmployeeTask = React.useCallback(async (taskId: string) => {
-    if (!workspace?.configured || stoppingTaskId) return
+    if (!workspace?.configured || stoppingTaskId || stoppingAllEmployeeTasks) return
     setStoppingTaskId(taskId)
     setEmployeeTaskStopError(null)
     try {
@@ -245,7 +263,31 @@ export default function App() {
     } finally {
       setStoppingTaskId(null)
     }
-  }, [workspace?.configured, stoppingTaskId, employeeTasksApi, employeeTasks.refresh, tt])
+  }, [workspace?.configured, stoppingTaskId, stoppingAllEmployeeTasks, employeeTasksApi, employeeTasks.refresh, tt])
+
+  const stopAllEmployeeTasks = React.useCallback(async () => {
+    if (!workspace?.configured || !selectedEmployeeId || stoppingAllEmployeeTasks || stoppingTaskId) return
+    setStoppingAllEmployeeTasks(true)
+    setEmployeeTaskStopError(null)
+    try {
+      await employeeTasksApi.stopAll(selectedEmployeeId)
+      void employeeTasks.refresh()
+    } catch (err) {
+      setEmployeeTaskStopError(
+        err instanceof Error && err.message ? err.message : tt('ui.employeeTasks.stopAllError'),
+      )
+    } finally {
+      setStoppingAllEmployeeTasks(false)
+    }
+  }, [
+    workspace?.configured,
+    selectedEmployeeId,
+    stoppingAllEmployeeTasks,
+    stoppingTaskId,
+    employeeTasksApi,
+    employeeTasks.refresh,
+    tt,
+  ])
 
   const fetchEmployeeTaskDetail = React.useCallback(
     (taskId: string) => employeeTasksApi.getDetail(taskId),
@@ -843,8 +885,11 @@ export default function App() {
   }, [newRequirementTitle, requirements.createRequirement])
   const refreshEmployeeTasks = React.useCallback(() => {
     setEmployeeTasksRefreshing(true)
-    void employeeTasks.refresh().finally(() => setEmployeeTasksRefreshing(false))
-  }, [employeeTasks.refresh])
+    const silent = employeeTasks.tasks.some(
+      (task) => task.status === 'pending' || task.status === 'running' || task.status === 'queued_rerun',
+    )
+    void employeeTasks.refresh({ silent }).finally(() => setEmployeeTasksRefreshing(false))
+  }, [employeeTasks.refresh, employeeTasks.tasks])
   const openSettings = React.useCallback(() => setSettingsOpen(true), [])
   const closeSettings = React.useCallback(() => setSettingsOpen(false), [])
 
@@ -924,12 +969,19 @@ export default function App() {
             reinstatingRequirementId={requirements.reinstatingId}
             hardDeletingRequirementId={requirements.hardDeletingId}
             employeeTasks={employeeTasks.tasks}
+            employeeTasksTotal={employeeTasks.total}
+            employeeTasksPage={employeeTasks.page}
+            employeeTasksPageSize={employeeTasks.pageSize}
+            employeeTasksStoppableCount={employeeTasks.stoppableCount}
+            onEmployeeTasksPageChange={employeeTasks.setPage}
             employeeTasksLoading={employeeTasks.loading}
-            employeeTasksError={employeeTasksExploreError ?? employeeTaskRerunError ?? employeeTaskStopError ?? employeeTasks.error}
+            employeeTasksError={employeeTasksExploreError ?? employeeTaskRerunError ?? employeeTaskStopError ?? formatEmployeeTasksListError(employeeTasks.error)}
             employeeTasksExploring={employeeTasksExploring}
             onEmployeeTasksExplore={runEmployeeExplore}
             employeeTasksRefreshing={employeeTasksRefreshing}
             onEmployeeTasksRefresh={refreshEmployeeTasks}
+            stoppingAllEmployeeTasks={stoppingAllEmployeeTasks}
+            onStopAllEmployeeTasks={stopAllEmployeeTasks}
             rerunningTaskId={rerunningTaskId}
             onRerunEmployeeTask={rerunEmployeeTask}
             stoppingTaskId={stoppingTaskId}

@@ -47,7 +47,9 @@ impl TaskStore {
         let root = tasks_root(&self.workspace);
         fs::create_dir_all(&root)?;
         let path = task_path(&self.workspace, &task.id);
-        fs::write(path, serde_json::to_string_pretty(task)?)?;
+        let tmp_path = path.with_extension("json.tmp");
+        fs::write(&tmp_path, serde_json::to_string_pretty(task)?)?;
+        fs::rename(&tmp_path, &path)?;
         Ok(())
     }
 
@@ -115,10 +117,30 @@ pub struct TaskListFilter {
     pub status: Option<TaskStatus>,
     pub kind: Option<TaskKind>,
     pub parent_task_id: Option<String>,
+    pub offset: Option<usize>,
     pub limit: Option<usize>,
 }
 
-pub fn filter_tasks(tasks: Vec<AgentTaskRecord>, filter: &TaskListFilter) -> Vec<AgentTaskRecord> {
+#[derive(Debug, Clone)]
+pub struct FilteredTaskList {
+    pub items: Vec<AgentTaskRecord>,
+    pub total: usize,
+    pub active_count: usize,
+    pub stoppable_count: usize,
+}
+
+fn is_active_task_status(status: TaskStatus) -> bool {
+    matches!(
+        status,
+        TaskStatus::Pending | TaskStatus::Running | TaskStatus::QueuedRerun
+    )
+}
+
+fn is_stoppable_task_status(status: TaskStatus) -> bool {
+    matches!(status, TaskStatus::Pending | TaskStatus::Running)
+}
+
+pub fn filter_tasks(tasks: Vec<AgentTaskRecord>, filter: &TaskListFilter) -> FilteredTaskList {
     let mut items: Vec<AgentTaskRecord> = tasks
         .into_iter()
         .filter(|t| {
@@ -146,16 +168,37 @@ pub fn filter_tasks(tasks: Vec<AgentTaskRecord>, filter: &TaskListFilter) -> Vec
         })
         .collect();
     items.sort_by(|a, b| b.created_at_ms.cmp(&a.created_at_ms));
+    let active_count = items
+        .iter()
+        .filter(|t| is_active_task_status(t.status))
+        .count();
+    let stoppable_count = items
+        .iter()
+        .filter(|t| is_stoppable_task_status(t.status))
+        .count();
+    let total = items.len();
+    if let Some(offset) = filter.offset {
+        if offset >= items.len() {
+            items.clear();
+        } else {
+            items = items.into_iter().skip(offset).collect();
+        }
+    }
     if let Some(limit) = filter.limit {
         items.truncate(limit);
     }
-    items
+    FilteredTaskList {
+        items,
+        total,
+        active_count,
+        stoppable_count,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tasks::model::{AgentTaskRecord, CodeAgentTaskParams, TaskKind};
+    use crate::tasks::model::{AgentTaskRecord, CodeAgentTaskParams, TaskKind, TaskStatus};
     use std::{
         fs,
         time::{SystemTime, UNIX_EPOCH},
@@ -248,8 +291,9 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].parent_task_id.as_deref(), Some(parent));
+        assert_eq!(filtered.items.len(), 1);
+        assert_eq!(filtered.total, 2);
+        assert_eq!(filtered.items[0].parent_task_id.as_deref(), Some(parent));
     }
 
     #[test]
@@ -265,7 +309,31 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].id, "h1");
+        assert_eq!(filtered.items.len(), 1);
+        assert_eq!(filtered.items[0].id, "h1");
+    }
+
+    #[test]
+    fn filter_tasks_applies_offset_limit_and_active_count() {
+        let mut pending = sample_task("p1", Some("alice"), None);
+        pending.status = TaskStatus::Pending;
+        let mut running = sample_task("r1", Some("alice"), None);
+        running.status = TaskStatus::Running;
+        let mut done = sample_task("d1", Some("alice"), None);
+        done.status = TaskStatus::Completed;
+        let filtered = filter_tasks(
+            vec![pending, running, done],
+            &TaskListFilter {
+                executor_id: Some("alice".into()),
+                offset: Some(1),
+                limit: Some(1),
+                ..Default::default()
+            },
+        );
+        assert_eq!(filtered.total, 3);
+        assert_eq!(filtered.active_count, 2);
+        assert_eq!(filtered.stoppable_count, 2);
+        assert_eq!(filtered.items.len(), 1);
+        assert_eq!(filtered.items[0].id, "r1");
     }
 }

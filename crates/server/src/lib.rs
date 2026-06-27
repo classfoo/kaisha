@@ -774,6 +774,7 @@ pub async fn run_http(addr: SocketAddr, workspace_init: WorkspaceInit) -> anyhow
             get(work_task::get_work_task_handler),
         )
         .route("/api/tasks", get(tasks::list_tasks))
+        .route("/api/tasks/stop-all", post(tasks::stop_all_tasks))
         .route("/api/tasks/:id/detail", get(tasks::get_task_detail))
         .route("/api/tasks/:id", get(tasks::get_task))
         .route("/api/tasks/:id/rerun", post(tasks::rerun_task))

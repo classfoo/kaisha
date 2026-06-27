@@ -54,6 +54,23 @@ export type AgentTaskExecutionInfo = {
   duration_ms: number | null
 }
 
+export type AgentTaskListResponse = {
+  items: AgentTaskRecord[]
+  total: number
+  active_count: number
+  stoppable_count: number
+}
+
+export type AgentTaskListQuery = {
+  limit?: number
+  offset?: number
+}
+
+export type StopAllTasksResponse = {
+  stopped: AgentTaskRecord[]
+  count: number
+}
+
 export type AgentTaskDetail = {
   task: AgentTaskRecord
   output: string | null
@@ -69,11 +86,13 @@ export function createEmployeeTasksApi(apiBase: string, locale: string) {
   const headers = { 'x-lang': locale }
 
   return {
-    async listByExecutor(executorId: string, limit = 50): Promise<AgentTaskRecord[]> {
-      const params = new URLSearchParams({
-        executor_id: executorId,
-        limit: String(limit),
-      })
+    async listByExecutor(
+      executorId: string,
+      query: AgentTaskListQuery = {},
+    ): Promise<AgentTaskListResponse> {
+      const params = new URLSearchParams({ executor_id: executorId })
+      if (query.limit != null) params.set('limit', String(query.limit))
+      if (query.offset != null) params.set('offset', String(query.offset))
       const res = await fetch(`${apiBase}/api/tasks?${params}`, { headers })
       if (!res.ok) throw new Error(await readError(res))
       return res.json()
@@ -90,7 +109,7 @@ export function createEmployeeTasksApi(apiBase: string, locale: string) {
         method: 'POST',
         headers,
       })
-      if (!res.ok) throw new Error(await readError(res))
+      if (!res.ok && res.status !== 202) throw new Error(await readError(res))
     },
 
     async rerun(taskId: string): Promise<AgentTaskRecord> {
@@ -104,6 +123,16 @@ export function createEmployeeTasksApi(apiBase: string, locale: string) {
 
     async stop(taskId: string): Promise<AgentTaskRecord> {
       const res = await fetch(`${apiBase}/api/tasks/${encodeURIComponent(taskId)}/stop`, {
+        method: 'POST',
+        headers,
+      })
+      if (!res.ok) throw new Error(await readError(res))
+      return res.json()
+    },
+
+    async stopAll(executorId: string): Promise<StopAllTasksResponse> {
+      const params = new URLSearchParams({ executor_id: executorId })
+      const res = await fetch(`${apiBase}/api/tasks/stop-all?${params}`, {
         method: 'POST',
         headers,
       })

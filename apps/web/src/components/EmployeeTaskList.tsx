@@ -4,6 +4,11 @@ import { EmployeeTaskDetailDialog } from './EmployeeTaskDetailDialog'
 
 type EmployeeTaskListProps = {
   tasks: AgentTaskRecord[]
+  total: number
+  page: number
+  pageSize: number
+  stoppableCount: number
+  onPageChange: (page: number) => void
   loading: boolean
   error: string | null
   selectedEmployeeId: string | null
@@ -13,6 +18,8 @@ type EmployeeTaskListProps = {
   onExplore: () => void
   refreshing: boolean
   onRefresh: () => void
+  stoppingAll: boolean
+  onStopAll: () => void
   rerunningTaskId: string | null
   onRerunTask: (taskId: string) => void
   stoppingTaskId: string | null
@@ -73,8 +80,17 @@ function isTaskOutputPending(status: AgentTaskStatus): boolean {
   return status === 'pending' || status === 'running' || status === 'queued_rerun'
 }
 
+function canStopAllTasks(stoppableCount: number, stoppingAll: boolean, stoppingTaskId: string | null): boolean {
+  return stoppableCount > 0 && !stoppingAll && stoppingTaskId == null
+}
+
 export const EmployeeTaskList = React.memo(function EmployeeTaskList({
   tasks,
+  total,
+  page,
+  pageSize,
+  stoppableCount,
+  onPageChange,
   loading,
   error,
   selectedEmployeeId,
@@ -84,6 +100,8 @@ export const EmployeeTaskList = React.memo(function EmployeeTaskList({
   onExplore,
   refreshing,
   onRefresh,
+  stoppingAll,
+  onStopAll,
   rerunningTaskId,
   onRerunTask,
   stoppingTaskId,
@@ -97,6 +115,9 @@ export const EmployeeTaskList = React.memo(function EmployeeTaskList({
   const [detailLoading, setDetailLoading] = React.useState(false)
   const [detailError, setDetailError] = React.useState<string | null>(null)
   const exploreDisabled = false
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const showPagination = total > pageSize
+  const stopAllEnabled = canStopAllTasks(stoppableCount, stoppingAll, stoppingTaskId)
 
   const closeDetail = React.useCallback(() => {
     setDetailTaskId(null)
@@ -146,7 +167,20 @@ export const EmployeeTaskList = React.memo(function EmployeeTaskList({
     <div className="employee-task-list__toolbar">
       <h4 className="employee-task-list__title">{t('ui.employeeTasks.title')}</h4>
       {selectedEmployeeId ? (
-        <>
+        <div className="employee-task-list__toolbar-actions">
+          {stoppableCount > 0 ? (
+            <button
+              type="button"
+              className="employee-task-list__tool-btn employee-task-list__tool-btn--danger"
+              title={t('ui.employeeTasks.stopAll')}
+              aria-label={t('ui.employeeTasks.stopAll')}
+              onClick={onStopAll}
+              disabled={!stopAllEnabled}
+            >
+              <i className={`iconfont ${stoppingAll ? 'icon-loading' : 'icon-filmetopause'}`} aria-hidden="true" />
+              <span>{stoppingAll ? t('ui.employeeTasks.stoppingAll') : t('ui.employeeTasks.stopAll')}</span>
+            </button>
+          ) : null}
           <button
             type="button"
             className="employee-task-list__tool-btn"
@@ -169,10 +203,38 @@ export const EmployeeTaskList = React.memo(function EmployeeTaskList({
             <i className="iconfont icon-filmetotaosuo" aria-hidden="true" />
             <span>{exploring ? t('ui.employeeTasks.exploring') : t('ui.employeeTasks.explore')}</span>
           </button>
-        </>
+        </div>
       ) : null}
     </div>
   )
+
+  const pagination = showPagination ? (
+    <div className="employee-task-list__pagination" aria-label={t('ui.employeeTasks.pagination.label')}>
+      <button
+        type="button"
+        className="employee-task-list__page-btn"
+        onClick={() => onPageChange(page - 1)}
+        disabled={page <= 1 || loading}
+        aria-label={t('ui.employeeTasks.pagination.prev')}
+      >
+        {t('ui.employeeTasks.pagination.prev')}
+      </button>
+      <span className="employee-task-list__page-info">
+        {t('ui.employeeTasks.pagination.page')
+          .replace('{page}', String(page))
+          .replace('{totalPages}', String(totalPages))}
+      </span>
+      <button
+        type="button"
+        className="employee-task-list__page-btn"
+        onClick={() => onPageChange(page + 1)}
+        disabled={page >= totalPages || loading}
+        aria-label={t('ui.employeeTasks.pagination.next')}
+      >
+        {t('ui.employeeTasks.pagination.next')}
+      </button>
+    </div>
+  ) : null
 
   if (!selectedEmployeeId) {
     return (
@@ -286,6 +348,7 @@ export const EmployeeTaskList = React.memo(function EmployeeTaskList({
           })
         )}
       </div>
+      {pagination}
       <EmployeeTaskDetailDialog
         open={detailTaskId != null}
         loading={detailLoading}

@@ -1,6 +1,8 @@
 import * as React from 'react'
 import { AgentTaskRecord, createEmployeeTasksApi } from './employeeTasksApi'
+import { isTransientTaskListError } from './isTransientTaskListError'
 
+export const EMPLOYEE_TASKS_PAGE_SIZE = 10
 const TASK_POLL_INTERVAL_MS = 2500
 const RETRY_ATTEMPTS = 3
 const RETRY_DELAY_MS = 500
@@ -8,23 +10,6 @@ const RETRY_DELAY_MS = 500
 export function hasActiveEmployeeTasks(tasks: AgentTaskRecord[]): boolean {
   return tasks.some(
     (task) => task.status === 'pending' || task.status === 'running' || task.status === 'queued_rerun',
-  )
-}
-
-/** Determines if an error is transient (worth retrying silently). */
-function isTransientError(error: Error): boolean {
-  const msg = error.message.toLowerCase()
-  // Network errors, server errors, and temporary states
-  return (
-    msg.includes('fetch') ||
-    msg.includes('network') ||
-    msg.includes('internal server error') ||
-    msg.includes('500') ||
-    msg.includes('502') ||
-    msg.includes('503') ||
-    msg.includes('504') ||
-    msg.includes('task_load_failed') ||
-    msg.includes('skipping')
   )
 }
 
@@ -53,23 +38,47 @@ export function useEmployeeTasks(
 ) {
   const api = React.useMemo(() => createEmployeeTasksApi(apiBase, locale), [apiBase, locale])
   const [tasks, setTasks] = React.useState<AgentTaskRecord[]>([])
+  const [total, setTotal] = React.useState(0)
+  const [activeCount, setActiveCount] = React.useState(0)
+  const [stoppableCount, setStoppableCount] = React.useState(0)
+  const [page, setPage] = React.useState(1)
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
-  // Track consecutive failures to enable retry without clearing cached data
-  const failureCountRef = React.useRef(0)
+  const tasksRef = React.useRef<AgentTaskRecord[]>([])
+  tasksRef.current = tasks
+
+  const pollWhileBusyRef = React.useRef(pollWhileBusy)
+  pollWhileBusyRef.current = pollWhileBusy
 
   const selectedEmployeeIdRef = React.useRef(selectedEmployeeId)
   selectedEmployeeIdRef.current = selectedEmployeeId
 
+  const pageRef = React.useRef(page)
+  pageRef.current = page
+
+  React.useEffect(() => {
+    setPage(1)
+  }, [selectedEmployeeId])
+
+  React.useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(total / EMPLOYEE_TASKS_PAGE_SIZE))
+    if (page > totalPages) {
+      setPage(totalPages)
+    }
+  }, [total, page])
+
   const refresh = React.useCallback(
-    async (options?: { silent?: boolean }) => {
+    async (options?: { silent?: boolean; page?: number }) => {
       const silent = options?.silent ?? false
       const employeeId = selectedEmployeeIdRef.current
+      const currentPage = options?.page ?? pageRef.current
       if (!workspaceConfigured || !employeeId) {
         setTasks([])
+        setTotal(0)
+        setActiveCount(0)
+        setStoppableCount(0)
         setError(null)
         if (!silent) setLoading(false)
-        failureCountRef.current = 0
         return
       }
       if (!silent) {
@@ -77,27 +86,40 @@ export function useEmployeeTasks(
         setError(null)
       }
       try {
-        const items = await fetchWithRetry(
-          () => api.listByExecutor(employeeId),
+        const response = await fetchWithRetry(
+          () =>
+            api.listByExecutor(employeeId, {
+              limit: EMPLOYEE_TASKS_PAGE_SIZE,
+              offset: (currentPage - 1) * EMPLOYEE_TASKS_PAGE_SIZE,
+            }),
           silent ? RETRY_ATTEMPTS : 1,
           RETRY_DELAY_MS,
         )
         if (selectedEmployeeIdRef.current !== employeeId) return
-        setTasks(items)
+        setTasks(response.items)
+        setTotal(response.total)
+        setActiveCount(response.active_count)
+        setStoppableCount(response.stoppable_count)
         setError(null)
-        failureCountRef.current = 0
       } catch (e) {
         if (selectedEmployeeIdRef.current !== employeeId) return
-        failureCountRef.current += 1
-        const isTransient = e instanceof Error && isTransientError(e)
-        // For silent (background) refreshes with transient errors, keep showing cached data
+        const isTransient = e instanceof Error && isTransientTaskListError(e)
+        const keepCachedTasks =
+          tasksRef.current.length > 0 &&
+          (pollWhileBusyRef.current || hasActiveEmployeeTasks(tasksRef.current))
         if (silent && isTransient) {
-          // Don't clear tasks on transient background errors - keep showing last known good state
           return
         }
         if (!silent) {
-          // Only show error to user after persistent failures
-          setTasks([])
+          if (keepCachedTasks && isTransient) {
+            return
+          }
+          if (!keepCachedTasks) {
+            setTasks([])
+            setTotal(0)
+            setActiveCount(0)
+            setStoppableCount(0)
+          }
           setError(e instanceof Error ? e.message : String(e))
         }
       } finally {
@@ -111,12 +133,12 @@ export function useEmployeeTasks(
 
   React.useEffect(() => {
     void refresh()
-  }, [refresh, selectedEmployeeId, refreshTick])
+  }, [refresh, selectedEmployeeId, refreshTick, page])
 
   const shouldPoll =
     workspaceConfigured &&
     Boolean(selectedEmployeeId) &&
-    (pollWhileBusy || hasActiveEmployeeTasks(tasks))
+    (pollWhileBusy || activeCount > 0 || hasActiveEmployeeTasks(tasks))
 
   React.useEffect(() => {
     if (!shouldPoll) return
@@ -127,5 +149,20 @@ export function useEmployeeTasks(
     return () => window.clearInterval(timer)
   }, [shouldPoll, refresh])
 
-  return { tasks, loading, error, refresh }
+  const setPageAndRefresh = React.useCallback((nextPage: number) => {
+    setPage(nextPage)
+  }, [])
+
+  return {
+    tasks,
+    total,
+    activeCount,
+    stoppableCount,
+    page,
+    pageSize: EMPLOYEE_TASKS_PAGE_SIZE,
+    setPage: setPageAndRefresh,
+    loading,
+    error,
+    refresh,
+  }
 }

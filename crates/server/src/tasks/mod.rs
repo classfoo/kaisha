@@ -33,7 +33,16 @@ pub struct ListTasksQuery {
     pub status: Option<TaskStatus>,
     pub kind: Option<TaskKind>,
     pub parent_task_id: Option<String>,
+    pub offset: Option<usize>,
     pub limit: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ListTasksResponse {
+    pub items: Vec<AgentTaskRecord>,
+    pub total: usize,
+    pub active_count: usize,
+    pub stoppable_count: usize,
 }
 
 fn workspace_root(state: &AppState) -> Option<PathBuf> {
@@ -49,7 +58,7 @@ pub async fn list_tasks(
     headers: HeaderMap,
     State(state): State<AppState>,
     Query(query): Query<ListTasksQuery>,
-) -> Result<Json<Vec<AgentTaskRecord>>, (axum::http::StatusCode, String)> {
+) -> Result<Json<ListTasksResponse>, (axum::http::StatusCode, String)> {
     let Some(workspace) = workspace_root(&state) else {
         return Err((
             axum::http::StatusCode::CONFLICT,
@@ -68,9 +77,16 @@ pub async fn list_tasks(
         status: query.status,
         kind: query.kind,
         parent_task_id: query.parent_task_id,
+        offset: query.offset,
         limit: query.limit,
     };
-    Ok(Json(filter_tasks(tasks, &filter)))
+    let filtered = filter_tasks(tasks, &filter);
+    Ok(Json(ListTasksResponse {
+        items: filtered.items,
+        total: filtered.total,
+        active_count: filtered.active_count,
+        stoppable_count: filtered.stoppable_count,
+    }))
 }
 
 pub async fn get_task(
@@ -276,6 +292,45 @@ pub async fn stop_task(
     Ok(Json(task))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct StopAllTasksQuery {
+    pub executor_id: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct StopAllTasksResponse {
+    pub stopped: Vec<AgentTaskRecord>,
+    pub count: usize,
+}
+
+pub async fn stop_all_tasks(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(query): Query<StopAllTasksQuery>,
+) -> Result<Json<StopAllTasksResponse>, (axum::http::StatusCode, String)> {
+    let Some(workspace) = workspace_root(&state) else {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            i18n::msg(&headers, "workspace_not_configured"),
+        ));
+    };
+    let runner = TaskRunner::new(&workspace);
+    let stopped = runner
+        .stop_all_tasks_for_executor(&query.executor_id)
+        .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    if !stopped.is_empty() {
+        let tools = state.tools.read().expect("tools lock poisoned").clone();
+        if let Err(err) = runner.try_drain_queued_reruns(&tools, &query.executor_id) {
+            return Err((
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                err.to_string(),
+            ));
+        }
+    }
+    let count = stopped.len();
+    Ok(Json(StopAllTasksResponse { stopped, count }))
+}
+
 #[derive(Debug, Serialize)]
 pub struct TaskAliveStatus {
     pub alive: bool,
@@ -404,7 +459,7 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert_eq!(alice.len(), 2);
+        assert_eq!(alice.items.len(), 2);
         let failed = filter_tasks(
             all,
             &TaskListFilter {
@@ -412,8 +467,8 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert_eq!(failed.len(), 1);
-        assert_eq!(failed[0].id, "t3");
+        assert_eq!(failed.items.len(), 1);
+        assert_eq!(failed.items[0].id, "t3");
 
         let _ = fs::remove_dir_all(&workspace);
     }

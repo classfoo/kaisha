@@ -76,6 +76,7 @@
       "noSelection": "Select an employee to view tasks",
       "empty": "No tasks for {name} yet",
       "loading": "Loading tasks…",
+      "listError": "Failed to load task list",
       "kind": {
         "employee_hire": "Hire employee",
         "requirement_agent": "Requirement agent",
@@ -107,6 +108,15 @@
       "stop": "Stop",
       "stopping": "Stopping…",
       "stopError": "Failed to stop task",
+      "stopAll": "Stop all",
+      "stoppingAll": "Stopping all…",
+      "stopAllError": "Failed to stop all tasks",
+      "pagination": {
+        "label": "Task list pagination",
+        "prev": "Previous",
+        "next": "Next",
+        "page": "Page {page} / {totalPages}"
+      },
       "detail": {
         "title": "Task detail",
         "close": "Close",

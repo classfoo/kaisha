@@ -482,6 +482,63 @@ select,
   flex-shrink: 0;
 }
 
+.employee-task-list__toolbar-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.employee-task-list__tool-btn--danger {
+  border-color: #5c3038;
+  color: #e08a96;
+}
+
+.employee-task-list__tool-btn--danger:hover:not(:disabled) {
+  border-color: #8a4450;
+  color: #f0aab4;
+  background: #2a1f24;
+}
+
+.employee-task-list__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 2px 2px;
+  flex-shrink: 0;
+}
+
+.employee-task-list__page-btn {
+  border: 1px solid #2a3243;
+  background: #1a2230;
+  color: #9ba7be;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.employee-task-list__page-btn:hover:not(:disabled) {
+  border-color: #3d4d66;
+  color: #c5d0e4;
+  background: #1f2a3d;
+}
+
+.employee-task-list__page-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.employee-task-list__page-info {
+  font-size: 11px;
+  color: #9ba7be;
+  min-width: 72px;
+  text-align: center;
+}
+
 .employee-task-list__title {
   margin: 0;
   font-size: 12px;

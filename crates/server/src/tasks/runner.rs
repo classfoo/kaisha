@@ -98,6 +98,21 @@ impl TaskRunner {
         Ok(task)
     }
 
+    pub fn stop_all_tasks_for_executor(&self, executor_id: &str) -> anyhow::Result<Vec<AgentTaskRecord>> {
+        let tasks = self.store.list()?;
+        let stoppable_ids: Vec<String> = tasks
+            .into_iter()
+            .filter(|t| t.executor_id.as_deref() == Some(executor_id))
+            .filter(|t| can_stop_task(t))
+            .map(|t| t.id)
+            .collect();
+        let mut stopped = Vec::new();
+        for task_id in stoppable_ids {
+            stopped.push(self.stop_task(&task_id)?);
+        }
+        Ok(stopped)
+    }
+
     /// Checks shop status and returns `true` if the shop is closed,
     /// signaling that the task should be queued rather than failed.
     fn shop_is_closed(&self) -> bool {
@@ -911,6 +926,52 @@ mod tests {
 
         let err = runner.stop_task("task_stop_1").unwrap_err().to_string();
         assert_eq!(err, "task_cannot_stop");
+        let _ = fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn stop_all_tasks_for_executor_stops_only_stoppable_tasks() {
+        let workspace = temp_workspace();
+        fs::create_dir_all(&workspace).unwrap();
+        let runner = TaskRunner::new(&workspace);
+        let store = TaskStore::new(&workspace);
+        let params = |id: &str, status: TaskStatus| {
+            let mut task = AgentTaskRecord::new(
+                &CodeAgentTaskParams {
+                    kind: TaskKind::RequirementAgent,
+                    content: id.into(),
+                    workdir: workspace.clone(),
+                    messages: vec![],
+                    executor_id: Some("emp-1".into()),
+                    parent_task_id: None,
+                    context: serde_json::json!({}),
+                },
+                id.into(),
+                100,
+            );
+            task.status = status;
+            task
+        };
+        store.save(&params("pending-1", TaskStatus::Pending)).unwrap();
+        store.save(&params("running-1", TaskStatus::Running)).unwrap();
+        store.save(&params("done-1", TaskStatus::Completed)).unwrap();
+        store
+            .save(&{
+                let mut other = params("other-pending", TaskStatus::Pending);
+                other.executor_id = Some("emp-2".into());
+                other
+            })
+            .unwrap();
+
+        let stopped = runner.stop_all_tasks_for_executor("emp-1").unwrap();
+        assert_eq!(stopped.len(), 2);
+        assert!(stopped.iter().all(|t| t.status == TaskStatus::Cancelled));
+
+        let all = store.list().unwrap();
+        let done = all.iter().find(|t| t.id == "done-1").unwrap();
+        assert_eq!(done.status, TaskStatus::Completed);
+        let other = all.iter().find(|t| t.id == "other-pending").unwrap();
+        assert_eq!(other.status, TaskStatus::Pending);
         let _ = fs::remove_dir_all(&workspace);
     }
 
