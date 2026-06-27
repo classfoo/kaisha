@@ -32,6 +32,8 @@ pub struct AgentDispatchWire {
     pub employee_id: String,
     pub employee_name: String,
     pub role: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
 }
 
 impl AgentDispatchWire {
@@ -40,6 +42,16 @@ impl AgentDispatchWire {
             employee_id: employee.id.clone(),
             employee_name: employee.name.clone(),
             role: employee.role.clone(),
+            task_id: None,
+        }
+    }
+
+    pub fn from_employee_task(employee: &EmployeeRecord, task: &AgentTaskRecord) -> Self {
+        Self {
+            employee_id: employee.id.clone(),
+            employee_name: employee.name.clone(),
+            role: employee.role.clone(),
+            task_id: Some(task.id.clone()),
         }
     }
 }
@@ -81,11 +93,19 @@ pub fn pick_employee_for_role(workspace: &Path, role_key: &str) -> Option<Employ
 async fn run_agent_streaming(
     workspace: &Path,
     tools: &ToolManager,
-    employee_id: &str,
-    spec: AgentTaskSpec,
+    task_id: &str,
+    params: CodeAgentTaskParams,
     event_tx: tokio::sync::mpsc::Sender<crate::tools::driver::ChatStreamEvent>,
 ) -> anyhow::Result<AgentTaskRecord> {
-    let params = CodeAgentTaskParams {
+    let runner = TaskRunner::new(workspace);
+    let (task, _, _, _) = runner
+        .execute_prepared_streaming_code_chat(tools, task_id, params, event_tx)
+        .await?;
+    Ok(task)
+}
+
+fn build_agent_task_params(employee_id: &str, spec: AgentTaskSpec) -> CodeAgentTaskParams {
+    CodeAgentTaskParams {
         kind: spec.kind,
         content: spec.content,
         workdir: spec.workdir,
@@ -93,12 +113,7 @@ async fn run_agent_streaming(
         executor_id: Some(employee_id.to_string()),
         parent_task_id: None,
         context: spec.context,
-    };
-    let runner = TaskRunner::new(workspace);
-    let (task, _instance, _result, _events) = runner
-        .run_code_chat_streaming_events(tools, params, event_tx)
-        .await?;
-    Ok(task)
+    }
 }
 
 /// Spawns a background streaming code-agent run for `employee_id`, mirrored into
@@ -114,17 +129,23 @@ pub fn spawn_requirement_agent_task<F>(
     employee_id: &str,
     spec: AgentTaskSpec,
     on_complete: F,
-) where
+) -> anyhow::Result<AgentTaskRecord>
+where
     F: FnOnce(&Path) + Send + 'static,
 {
+    let params = build_agent_task_params(employee_id, spec);
+    let runner = TaskRunner::new(workspace);
+    let prepared = runner.prepare_streaming_code_chat(&params)?;
+    let task_id = prepared.id.clone();
+
     let ws = workspace.to_path_buf();
     let tools = tools.clone();
     let employee_id = employee_id.to_string();
     tokio::spawn(async move {
         let ws_inner = ws.clone();
-        let emp_inner = employee_id.clone();
+        let task_id_inner = task_id.clone();
         let res = run_with_conversation(&ws, &employee_id, move |tx| async move {
-            run_agent_streaming(&ws_inner, &tools, &emp_inner, spec, tx).await
+            run_agent_streaming(&ws_inner, &tools, &task_id_inner, params, tx).await
         })
         .await;
         match res {
@@ -134,6 +155,8 @@ pub fn spawn_requirement_agent_task<F>(
             }
         }
     });
+
+    Ok(prepared)
 }
 
 #[cfg(test)]
@@ -184,6 +207,30 @@ mod tests {
         write_employee(&workspace, "ann", "Designer");
         let picked = pick_employee_for_role(&workspace, "testing").unwrap();
         assert_eq!(picked.id, "ann");
+        let _ = fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn prepare_streaming_code_chat_persists_task_record() {
+        let workspace = temp_workspace();
+        fs::create_dir_all(&workspace).unwrap();
+        write_employee(&workspace, "ops-1", "Operations");
+        let runner = TaskRunner::new(&workspace);
+        let params = CodeAgentTaskParams {
+            kind: TaskKind::WorkTaskExecute,
+            content: "Start application for release `demo`".into(),
+            workdir: workspace.clone(),
+            messages: vec![],
+            executor_id: Some("ops-1".into()),
+            parent_task_id: None,
+            context: serde_json::json!({ "requirement_id": "demo" }),
+        };
+        let prepared = runner.prepare_streaming_code_chat(&params).unwrap();
+        assert_eq!(prepared.executor_id.as_deref(), Some("ops-1"));
+        let loaded = crate::tasks::TaskStore::new(&workspace)
+            .load(&prepared.id)
+            .unwrap();
+        assert_eq!(loaded.id, prepared.id);
         let _ = fs::remove_dir_all(&workspace);
     }
 

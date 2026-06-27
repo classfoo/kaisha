@@ -86,6 +86,7 @@ export type AgentDispatch = {
   employee_id: string
   employee_name: string
   role: string
+  task_id?: string
 }
 
 export type TestTaskStatus = 'pending' | 'running' | 'completed' | 'failed'

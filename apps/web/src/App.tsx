@@ -139,8 +139,10 @@ export default function App() {
       clearInterval(agentDispatchPollTimerRef.current)
     }
 
-    // Switch to the assigned employee
+    // Switch to the assigned employee and refresh their task list immediately.
+    // The backend now creates the agent task synchronously before responding.
     setSelectedEmployeeId(dispatch.employee_id)
+    setRefreshTick((t) => t + 1)
     // Switch to chat view so user sees the task progress
     setActiveNav('chat')
     // Refresh chat messages to show the new task_process message

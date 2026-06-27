@@ -423,43 +423,55 @@ impl TaskRunner {
         event_tx: tokio::sync::mpsc::Sender<ChatStreamEvent>,
     ) -> anyhow::Result<(AgentTaskRecord, ToolInstance, ToolExecutionResult, Vec<ChatStreamEvent>)>
     {
-        // If shop is closed, create task as pending instead of failing immediately.
+        let task = self.prepare_streaming_code_chat(&params)?;
         if self.shop_is_closed() {
-            let created = now_ms();
-            let id = new_task_id();
-            let mut task = AgentTaskRecord::new(&params, id.clone(), created);
-            task.status = TaskStatus::Pending;
-            self.store.save(&task)?;
             emit_streaming_failure(&event_tx, "shop_is_closed").await;
-            return Err(streaming_failure(&id, "shop_is_closed".to_string()));
+            return Err(streaming_failure(&task.id, "shop_is_closed".to_string()));
         }
+        self.execute_prepared_streaming_code_chat(tools, &task.id, params, event_tx)
+            .await
+    }
 
+    /// Creates and persists a streaming code-agent task before execution starts so
+    /// callers can surface it in the UI immediately.
+    pub fn prepare_streaming_code_chat(
+        &self,
+        params: &CodeAgentTaskParams,
+    ) -> anyhow::Result<AgentTaskRecord> {
         let created = now_ms();
         let id = new_task_id();
-        let mut task = AgentTaskRecord::new(&params, id, created);
-        self.store.save(&task)?;
-
-        // Create associated WorkTask for autonomy tasks to make them visible
-        if matches!(params.kind, TaskKind::AutonomyExplore | TaskKind::AutonomyExecute | TaskKind::WorkTaskExecute) {
-            if let Some(emp_id) = &params.executor_id {
-                let _ = crate::autonomy_task::create_work_task_for_autonomy(
-                    self.store.workspace(),
-                    emp_id,
-                    &params.kind,
-                    &task.id,
-                );
-            }
+        let mut task = AgentTaskRecord::new(params, id, created);
+        if self.shop_is_closed() {
+            task.status = TaskStatus::Pending;
+            self.store.save(&task)?;
+            return Ok(task);
         }
 
-        let started = now_ms();
-        task.mark_running(started);
         self.store.save(&task)?;
+        self.attach_work_task_for_streaming(params, &task.id)?;
+        task.mark_running(now_ms());
+        self.store.save(&task)?;
+        Ok(task)
+    }
+
+    /// Executes a task previously created by [`Self::prepare_streaming_code_chat`].
+    pub async fn execute_prepared_streaming_code_chat(
+        &self,
+        tools: &ToolManager,
+        task_id: &str,
+        params: CodeAgentTaskParams,
+        event_tx: tokio::sync::mpsc::Sender<ChatStreamEvent>,
+    ) -> anyhow::Result<(AgentTaskRecord, ToolInstance, ToolExecutionResult, Vec<ChatStreamEvent>)> {
+        let mut task = self.store.load(task_id)?;
+        if self.shop_is_closed() {
+            emit_streaming_failure(&event_tx, "shop_is_closed").await;
+            return Err(streaming_failure(task_id, "shop_is_closed".to_string()));
+        }
 
         let lang = crate::agent_locale::resolve_lang_for_workspace(self.store.workspace());
         let messages =
             crate::agent_locale::ensure_language_system_message(params.messages.clone(), lang);
 
-        // Retry on transient errors like no_enabled_coding_tool
         const MAX_RETRIES: u32 = 2;
         const RETRY_DELAY_MS: u64 = 500;
         let mut last_err = None;
@@ -494,6 +506,27 @@ impl TaskRunner {
         self.finalize_streaming_error(&params.kind, &mut task, err_msg.clone())?;
         emit_streaming_failure(&event_tx, &err_msg).await;
         Err(streaming_failure(&task.id, err_msg))
+    }
+
+    fn attach_work_task_for_streaming(
+        &self,
+        params: &CodeAgentTaskParams,
+        task_id: &str,
+    ) -> anyhow::Result<()> {
+        if matches!(
+            params.kind,
+            TaskKind::AutonomyExplore | TaskKind::AutonomyExecute | TaskKind::WorkTaskExecute
+        ) {
+            if let Some(emp_id) = &params.executor_id {
+                let _ = crate::autonomy_task::create_work_task_for_autonomy(
+                    self.store.workspace(),
+                    emp_id,
+                    &params.kind,
+                    task_id,
+                );
+            }
+        }
+        Ok(())
     }
 
     /// Resets an existing task so it can be rerun, returning the now-running
@@ -852,6 +885,30 @@ mod tests {
         assert_eq!(tasks[0].id, "task_rerun_1");
         assert_eq!(tasks[0].status, TaskStatus::Failed);
         assert!(tasks[0].started_at_ms.is_some());
+        let _ = fs::remove_dir_all(&workspace);
+    }
+
+    #[test]
+    fn prepare_streaming_code_chat_persists_running_task() {
+        let workspace = temp_workspace();
+        fs::create_dir_all(&workspace).unwrap();
+        let runner = TaskRunner::new(&workspace);
+        let params = CodeAgentTaskParams {
+            kind: TaskKind::WorkTaskExecute,
+            content: "Start application".into(),
+            workdir: workspace.clone(),
+            messages: vec![],
+            executor_id: Some("emp-ops".into()),
+            parent_task_id: None,
+            context: serde_json::json!({ "requirement_id": "demo" }),
+        };
+
+        let prepared = runner.prepare_streaming_code_chat(&params).unwrap();
+        assert_eq!(prepared.status, TaskStatus::Running);
+        assert_eq!(prepared.executor_id.as_deref(), Some("emp-ops"));
+
+        let loaded = TaskStore::new(&workspace).load(&prepared.id).unwrap();
+        assert_eq!(loaded.status, TaskStatus::Running);
         let _ = fs::remove_dir_all(&workspace);
     }
 

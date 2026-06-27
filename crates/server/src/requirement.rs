@@ -701,7 +701,7 @@ pub async fn optimize_requirement(
     let tools = state.tools.read().expect("tools lock poisoned").clone();
     let workdir = requirement_dir(&workspace, &id);
     let complete_task_id = task_id.clone();
-    spawn_requirement_agent_task(
+    let task = spawn_requirement_agent_task(
         &workspace,
         &tools,
         &employee.id,
@@ -719,9 +719,10 @@ pub async fn optimize_requirement(
                 Ok(())
             });
         },
-    );
+    )
+    .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
-    Ok(Json(AgentDispatchWire::from_employee(&employee)))
+    Ok(Json(AgentDispatchWire::from_employee_task(&employee, &task)))
 }
 
 fn map_requirement_err(

@@ -198,7 +198,7 @@ async fn dispatch_release_agent(
     let messages = messages_builder(&workspace, &id);
     let tools = state.tools.read().expect("tools lock poisoned").clone();
     let workdir = dev_task_workdir(&workspace);
-    spawn_requirement_agent_task(
+    let task = spawn_requirement_agent_task(
         &workspace,
         &tools,
         &employee.id,
@@ -210,9 +210,10 @@ async fn dispatch_release_agent(
             context: serde_json::json!({ "requirement_id": id }),
         },
         |_ws| {},
-    );
+    )
+    .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
-    Ok(Json(AgentDispatchWire::from_employee(&employee)))
+    Ok(Json(AgentDispatchWire::from_employee_task(&employee, &task)))
 }
 
 pub async fn package_release(

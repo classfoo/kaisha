@@ -274,7 +274,7 @@ pub async fn split_test_tasks(
     let tools = state.tools.read().expect("tools lock poisoned").clone();
     let workdir = requirement_dir(&workspace, &id);
     let reconcile_id = id.clone();
-    spawn_requirement_agent_task(
+    let task = spawn_requirement_agent_task(
         &workspace,
         &tools,
         &employee.id,
@@ -288,9 +288,10 @@ pub async fn split_test_tasks(
         move |ws| {
             let _ = reconcile_test_work_tasks(ws, &reconcile_id);
         },
-    );
+    )
+    .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
-    Ok(Json(AgentDispatchWire::from_employee(&employee)))
+    Ok(Json(AgentDispatchWire::from_employee_task(&employee, &task)))
 }
 
 fn build_execute_test_messages(task: &WorkTask, requirement_id: &str) -> Vec<ToolChatMessage> {
@@ -395,7 +396,7 @@ pub async fn test_task_action(
     let tools = state.tools.read().expect("tools lock poisoned").clone();
     let workdir = dev_task_workdir(&workspace);
     let complete_task_id = task_id.clone();
-    spawn_requirement_agent_task(
+    let task = spawn_requirement_agent_task(
         &workspace,
         &tools,
         &employee_id,
@@ -414,7 +415,10 @@ pub async fn test_task_action(
                 Ok(())
             });
         },
-    );
+    )
+    .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+
+    let _task = task;
 
     let tasks = list_test_work_tasks(&workspace, &id)
         .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e))?;
