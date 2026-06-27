@@ -37,15 +37,6 @@ pub struct AgentDispatchWire {
 }
 
 impl AgentDispatchWire {
-    pub fn from_employee(employee: &EmployeeRecord) -> Self {
-        Self {
-            employee_id: employee.id.clone(),
-            employee_name: employee.name.clone(),
-            role: employee.role.clone(),
-            task_id: None,
-        }
-    }
-
     pub fn from_employee_task(employee: &EmployeeRecord, task: &AgentTaskRecord) -> Self {
         Self {
             employee_id: employee.id.clone(),

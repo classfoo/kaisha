@@ -396,7 +396,7 @@ pub async fn test_task_action(
     let tools = state.tools.read().expect("tools lock poisoned").clone();
     let workdir = dev_task_workdir(&workspace);
     let complete_task_id = task_id.clone();
-    let task = spawn_requirement_agent_task(
+    spawn_requirement_agent_task(
         &workspace,
         &tools,
         &employee_id,
@@ -417,8 +417,6 @@ pub async fn test_task_action(
         },
     )
     .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
-
-    let _task = task;
 
     let tasks = list_test_work_tasks(&workspace, &id)
         .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e))?;
